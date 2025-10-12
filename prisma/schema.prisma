@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Add to settings.json to format on save
+//  "[prisma]": {
+//    "editor.defaultFormatter": "Prisma.prisma",
+//    "editor.formatOnSave": true
+//  }
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  friendGroups  FriendGroup[]
+  borrowedDebts Debt[]          @relation("BorrowedDebts")
+  lentDebts     Debt[]          @relation("LentDebts")
+  leaderGoals   Goal[]          @relation("LeaderGoals")
+  goalProgress  GoalPerPerson[] @relation("UserGoalProgress")
+}
+
+model FriendGroup {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members User[]
+  debts   Debt[]
+  goals   Goal[]
+}
+
+// User and FriendGroup have a many-to-many relationship 
+//so prisma will create a join table automatically
+
+enum DebtStatus {
+  PENDING
+  PAID
+  OVERDUE
+  FORGIVEN
+}
+
+model Debt {
+  id          Int        @id @default(autoincrement())
+  amount      Float
+  description String
+  status      DebtStatus @default(PENDING)
+  receiptUrl  String? //do we need this?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  friendGroupId Int
+  friendGroup   FriendGroup @relation(fields: [friendGroupId], references: [id])
+
+  borrowerId Int
+  borrower   User @relation("BorrowedDebts", fields: [borrowerId], references: [id])
+
+  lenderId Int
+  lender   User @relation("LentDebts", fields: [lenderId], references: [id])
+}
+
+model Goal {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String
+  target      Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leaderId Int
+  leader   User @relation("LeaderGoals", fields: [leaderId], references: [id])
+
+  friendGroupId Int
+  friendGroup   FriendGroup @relation(fields: [friendGroupId], references: [id])
+
+  progress GoalPerPerson[]
+}
+
+model GoalPerPerson {
+  id          Int      @id @default(autoincrement())
+  amountSoFar Float    @default(0)
+  target      Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  goalId Int
+  goal   Goal @relation(fields: [goalId], references: [id])
+
+  userId Int
+  user   User @relation("UserGoalProgress", fields: [userId], references: [id])
+
+  @@unique([goalId, userId])
+}
