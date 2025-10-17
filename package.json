@@ -21,9 +21,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@clerk/express": "^1.7.37",
     "@prisma/client": "^6.17.1",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "http-errors": "^2.0.0",
