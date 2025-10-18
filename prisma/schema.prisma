@@ -6,8 +6,9 @@
 //    "editor.formatOnSave": true
 //  }
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
 }
 
 datasource db {
@@ -31,7 +32,7 @@ model User {
 }
 
 model FriendGroup {
-  id        Int      @id @default(autoincrement())
+id        Int      @id @default(autoincrement())
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

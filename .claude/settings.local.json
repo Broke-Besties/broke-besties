@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\Users\\danie\\BrokeBesities\\backend\" /B)",
+      "Bash(find \"C:\\Users\\danie\\BrokeBesities\\backend\" -maxdepth 2 -type f ( -name \"*.ts\" -o -name \"*.md\" ) ! -path \"*/node_modules/*\" ! -path \"*/generated/*\")",
+      "Bash(cat \"C:\\Users\\danie\\BrokeBesities\\backend\\prisma\\migrations\\migration_lock.toml\")",
+      "Bash(test -f .env)",
+      "Bash(cat src/index.ts)",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(cat tsconfig.json)",
+      "Bash(cat package.json)",
+      "Bash(cat prisma/schema.prisma)",
+      "Bash(cat .env)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
