@@ -24,25 +24,25 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  friendGroups  FriendGroup[]
+  Groups  Group[]
   borrowedDebts Debt[]          @relation("BorrowedDebts")
   lentDebts     Debt[]          @relation("LentDebts")
   leaderGoals   Goal[]          @relation("LeaderGoals")
-  goalProgress  GoalPerPerson[] @relation("UserGoalProgress")
+  goalProgress  GoalProgress[] @relation("UserGoalProgress")
 }
 
-model FriendGroup {
-id        Int      @id @default(autoincrement())
+model Group {
+  id        Int      @id @default(autoincrement())
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members User[]
+  users User[]
   debts   Debt[]
   goals   Goal[]
 }
 
-// User and FriendGroup have a many-to-many relationship 
+// User and Group have a many-to-many relationship 
 //so prisma will create a join table automatically
 
 enum DebtStatus {
@@ -61,8 +61,8 @@ model Debt {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  friendGroupId Int
-  friendGroup   FriendGroup @relation(fields: [friendGroupId], references: [id])
+  GroupId Int
+  Group   Group @relation(fields: [GroupId], references: [id])
 
   borrowerId Int
   borrower   User @relation("BorrowedDebts", fields: [borrowerId], references: [id])
@@ -82,15 +82,15 @@ model Goal {
   leaderId Int
   leader   User @relation("LeaderGoals", fields: [leaderId], references: [id])
 
-  friendGroupId Int
-  friendGroup   FriendGroup @relation(fields: [friendGroupId], references: [id])
+  GroupId Int
+  Group   Group @relation(fields: [GroupId], references: [id])
 
-  progress GoalPerPerson[]
+  progress GoalProgress[]
 }
 
-model GoalPerPerson {
+model GoalProgress {
   id          Int      @id @default(autoincrement())
-  amountSoFar Float    @default(0)
+  amount      Float    @default(0)
   target      Float
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
