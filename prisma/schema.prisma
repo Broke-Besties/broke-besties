@@ -16,6 +16,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "./prisma/ERD.svg" // png/pdf also supported
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   clerkId   String   @unique

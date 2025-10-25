@@ -11,7 +11,10 @@
       "Bash(cat tsconfig.json)",
       "Bash(cat package.json)",
       "Bash(cat prisma/schema.prisma)",
-      "Bash(cat .env)"
+      "Bash(cat .env)",
+      "Bash(tree \"C:\\Users\\danie\\BrokeBesities\\backend\\src\" -L 3)",
+      "Bash(find \"C:\\Users\\danie\\BrokeBesities\\backend\" -maxdepth 1 -type f ( -name \"*.json\" -o -name \"*.md\" -o -name \".env*\" -o -name \"*.config.*\" ))",
+      "Bash(find \"C:\\Users\\danie\\BrokeBesities\\backend\" -maxdepth 1 -type f ( -name \"eslint*\" -o -name \"prettier*\" -o -name \".prettierrc*\" -o -name \".eslintrc*\" ))"
     ],
     "deny": [],
     "ask": []
