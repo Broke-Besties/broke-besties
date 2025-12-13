@@ -13,6 +13,11 @@ datasource db {
 }
         
 
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "./prisma/ERD.svg" // png/pdf also supported
+}
+
 model User {
   id             String        @id @default(cuid())
   email          String        @unique
