@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
 type Invite = {
   id: number
   group: {
@@ -84,81 +88,72 @@ export default function InvitesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-sm text-muted-foreground">Loading…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-8 px-4">
-        <div className="mb-6">
-          <button
-            onClick={() => router.push('/groups')}
-            className="text-blue-600 hover:text-blue-700 mb-4"
-          >
-            ← Back to Groups
-          </button>
-          <h1 className="text-3xl font-bold">Pending Invitations</h1>
-          <p className="text-gray-600 mt-2">
-            You have {invites.length} pending {invites.length === 1 ? 'invitation' : 'invitations'}
+    <div className="space-y-8">
+      <div className="flex flex-col gap-3">
+        <Button variant="ghost" className="w-fit px-0" onClick={() => router.push('/groups')}>
+          ← Back to groups
+        </Button>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight">Invitations</h1>
+          <p className="text-sm text-muted-foreground">
+            You have {invites.length} pending {invites.length === 1 ? 'invitation' : 'invitations'}.
           </p>
         </div>
-
-        {error && (
-          <div className="bg-red-50 text-red-500 p-3 rounded mb-4">
-            {error}
-          </div>
-        )}
-
-        {invites.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-600">You don't have any pending invitations.</p>
-            <button
-              onClick={() => router.push('/groups')}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              View My Groups
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {invites.map((invite) => (
-              <div
-                key={invite.id}
-                className="bg-white rounded-lg shadow p-6"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold mb-2">
-                      {invite.group.name}
-                    </h3>
-                    <p className="text-gray-600 mb-2">
-                      Invited by <span className="font-medium">{invite.sender.email}</span>
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {invite.group.members.length} {invite.group.members.length === 1 ? 'member' : 'members'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Invited {new Date(invite.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="ml-4">
-                    <button
-                      onClick={() => handleAccept(invite.id)}
-                      disabled={processingId === invite.id}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-                    >
-                      {processingId === invite.id ? 'Accepting...' : 'Accept Invite'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
+
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {invites.length === 0 ? (
+        <Card className="border-dashed">
+          <CardHeader>
+            <CardTitle>No pending invites</CardTitle>
+            <CardDescription>When someone invites you to a group, it will show up here.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => router.push('/groups')}>View my groups</Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {invites.map((invite) => (
+            <Card key={invite.id}>
+              <CardHeader className="flex-row items-start justify-between space-y-0">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg">{invite.group.name}</CardTitle>
+                  <CardDescription>
+                    Invited by <span className="font-medium text-foreground">{invite.sender.email}</span>
+                  </CardDescription>
+                </div>
+                <Badge variant="secondary">
+                  {invite.group.members.length} {invite.group.members.length === 1 ? 'member' : 'members'}
+                </Badge>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Invited {new Date(invite.createdAt).toLocaleDateString()}
+                </div>
+                <Button
+                  onClick={() => handleAccept(invite.id)}
+                  disabled={processingId === invite.id}
+                >
+                  {processingId === invite.id ? 'Accepting…' : 'Accept invite'}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

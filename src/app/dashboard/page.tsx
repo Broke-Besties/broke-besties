@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+
 type Debt = {
   id: number
   amount: number
@@ -160,186 +169,202 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-sm text-muted-foreground">Loading…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-8 px-4">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-gray-600 mt-2">Manage your debts and loans</p>
-          </div>
-          <div className="space-x-4">
-            <button
-              onClick={() => router.push('/groups')}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-            >
-              View Groups
-            </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Create Debt
-            </button>
-          </div>
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Manage your debts and loans.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => router.push('/groups')}>
+            View groups
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>Create debt</Button>
+        </div>
+      </div>
 
-        {error && (
-          <div className="bg-red-50 text-red-500 p-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">You are Lending</h2>
-              <span className="text-2xl font-bold text-green-600">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex-row items-start justify-between space-y-0">
+            <div className="space-y-1">
+              <CardTitle>You are lending</CardTitle>
+              <CardDescription>Money owed to you</CardDescription>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-semibold tracking-tight text-foreground">
                 ${calculateTotal(lendingDebts).toFixed(2)}
-              </span>
+              </div>
+              <Badge className="mt-2" variant="secondary">
+                {lendingDebts.length} item{lendingDebts.length === 1 ? '' : 's'}
+              </Badge>
             </div>
-            <p className="text-sm text-gray-600 mb-4">Money owed to you</p>
-            <div className="space-y-3">
-              {lendingDebts.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No lending records</p>
-              ) : (
-                lendingDebts.map((debt) => (
-                  <div
-                    key={debt.id}
-                    className="p-4 bg-gray-50 rounded border-l-4 border-green-500"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium">{debt.borrower.email}</p>
-                        {debt.description && (
-                          <p className="text-sm text-gray-600">{debt.description}</p>
-                        )}
-                        {debt.group && (
-                          <p className="text-xs text-blue-600 mt-1">
-                            Group: {debt.group.name}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-lg font-bold text-green-600">
-                        ${debt.amount.toFixed(2)}
-                      </span>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {lendingDebts.length === 0 ? (
+              <div className="rounded-md border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+                No lending records.
+              </div>
+            ) : (
+              lendingDebts.map((debt) => (
+                <div
+                  key={debt.id}
+                  className="rounded-lg border bg-background p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">{debt.borrower.email}</div>
+                      {debt.description && <div className="mt-0.5 text-sm text-muted-foreground">{debt.description}</div>}
+                      {debt.group && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Group: <span className="font-medium text-foreground">{debt.group.name}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500">{new Date(debt.createdAt).toLocaleDateString()}</span>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={debt.status}
-                          onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
-                          className={`px-2 py-1 rounded text-xs border cursor-pointer ${
-                            debt.status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                              : debt.status === 'paid'
-                              ? 'bg-green-100 text-green-800 border-green-300'
-                              : 'bg-red-100 text-red-800 border-red-300'
-                          }`}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="paid">Paid</option>
-                          <option value="not_paying">Not Paying</option>
-                        </select>
+                    <div className="shrink-0 text-right">
+                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {new Date(debt.createdAt).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">You are Borrowing</h2>
-              <span className="text-2xl font-bold text-red-600">
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                      )}
+                    >
+                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                    </Badge>
+
+                    <select
+                      value={debt.status}
+                      onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="not_paying">Not Paying</option>
+                    </select>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between space-y-0">
+            <div className="space-y-1">
+              <CardTitle>You are borrowing</CardTitle>
+              <CardDescription>Money you owe</CardDescription>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-semibold tracking-tight text-foreground">
                 ${calculateTotal(borrowingDebts).toFixed(2)}
-              </span>
+              </div>
+              <Badge className="mt-2" variant="secondary">
+                {borrowingDebts.length} item{borrowingDebts.length === 1 ? '' : 's'}
+              </Badge>
             </div>
-            <p className="text-sm text-gray-600 mb-4">Money you owe</p>
-            <div className="space-y-3">
-              {borrowingDebts.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No borrowing records</p>
-              ) : (
-                borrowingDebts.map((debt) => (
-                  <div
-                    key={debt.id}
-                    className="p-4 bg-gray-50 rounded border-l-4 border-red-500"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium">{debt.lender.email}</p>
-                        {debt.description && (
-                          <p className="text-sm text-gray-600">{debt.description}</p>
-                        )}
-                        {debt.group && (
-                          <p className="text-xs text-blue-600 mt-1">
-                            Group: {debt.group.name}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-lg font-bold text-red-600">
-                        ${debt.amount.toFixed(2)}
-                      </span>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {borrowingDebts.length === 0 ? (
+              <div className="rounded-md border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+                No borrowing records.
+              </div>
+            ) : (
+              borrowingDebts.map((debt) => (
+                <div
+                  key={debt.id}
+                  className="rounded-lg border bg-background p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">{debt.lender.email}</div>
+                      {debt.description && <div className="mt-0.5 text-sm text-muted-foreground">{debt.description}</div>}
+                      {debt.group && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Group: <span className="font-medium text-foreground">{debt.group.name}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500">{new Date(debt.createdAt).toLocaleDateString()}</span>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={debt.status}
-                          onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
-                          className={`px-2 py-1 rounded text-xs border cursor-pointer ${
-                            debt.status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                              : debt.status === 'paid'
-                              ? 'bg-green-100 text-green-800 border-green-300'
-                              : 'bg-red-100 text-red-800 border-red-300'
-                          }`}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="paid">Paid</option>
-                          <option value="not_paying">Not Paying</option>
-                        </select>
+                    <div className="shrink-0 text-right">
+                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {new Date(debt.createdAt).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
 
-        {showCreateModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h2 className="text-2xl font-bold mb-4">Create New Debt</h2>
-              <form onSubmit={handleCreateDebt}>
-                <div className="mb-4">
-                  <label htmlFor="borrowerEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                    Borrower Email
-                  </label>
-                  <input
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                      )}
+                    >
+                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                    </Badge>
+
+                    <select
+                      value={debt.status}
+                      onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="not_paying">Not Paying</option>
+                    </select>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50">
+          <DialogOverlay />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create new debt</DialogTitle>
+            </DialogHeader>
+            <div className="px-6 pb-6">
+              <form onSubmit={handleCreateDebt} className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="borrowerEmail">Borrower email</Label>
+                  <Input
                     id="borrowerEmail"
                     type="email"
                     required
                     value={formData.borrowerEmail}
                     onChange={(e) => setFormData({ ...formData, borrowerEmail: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="borrower@example.com"
                   />
                 </div>
-                <div className="mb-4">
-                  <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
-                    Amount ($)
-                  </label>
-                  <input
+                <div className="grid gap-2">
+                  <Label htmlFor="amount">Amount ($)</Label>
+                  <Input
                     id="amount"
                     type="number"
                     step="0.01"
@@ -347,48 +372,40 @@ export default function DashboardPage() {
                     required
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0.00"
                   />
                 </div>
-                <div className="mb-4">
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Description (optional)
-                  </label>
-                  <textarea
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description (optional)</Label>
+                  <Textarea
                     id="description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     rows={3}
                     placeholder="What is this debt for?"
                   />
                 </div>
-                <div className="flex justify-end space-x-3">
-                  <button
+                <DialogFooter>
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => {
                       setShowCreateModal(false)
                       setFormData({ amount: '', description: '', borrowerEmail: '' })
                       setError('')
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creating}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-                  >
-                    {creating ? 'Creating...' : 'Create Debt'}
-                  </button>
-                </div>
+                  </Button>
+                  <Button type="submit" disabled={creating}>
+                    {creating ? 'Creating…' : 'Create debt'}
+                  </Button>
+                </DialogFooter>
               </form>
             </div>
-          </div>
-        )}
-      </div>
+          </DialogContent>
+        </div>
+      )}
     </div>
   )
 }

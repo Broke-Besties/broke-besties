@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+
 type Member = {
   id: number
   user: {
@@ -230,243 +239,240 @@ export default function GroupDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-sm text-muted-foreground">Loading…</div>
       </div>
     )
   }
 
   if (!group) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-red-600">Group not found</div>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-sm text-destructive">Group not found</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-8 px-4">
-        <div className="mb-6">
-          <button
-            onClick={() => router.push('/groups')}
-            className="text-blue-600 hover:text-blue-700 mb-4"
-          >
-            ← Back to Groups
-          </button>
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">{group.name}</h1>
-              <p className="text-gray-600 mt-2">
-                Created {new Date(group.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-            <div className="space-x-3">
-              <button
-                onClick={() => setShowDebtModal(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-              >
-                Create Debt
-              </button>
-              <button
-                onClick={() => setShowInviteModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Invite Member
-              </button>
-            </div>
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4">
+        <Button variant="ghost" className="w-fit px-0" onClick={() => router.push('/groups')}>
+          ← Back to groups
+        </Button>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight">{group.name}</h1>
+            <p className="text-sm text-muted-foreground">
+              Created {new Date(group.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setShowDebtModal(true)}>
+              Create debt
+            </Button>
+            <Button onClick={() => setShowInviteModal(true)}>
+              Invite member
+            </Button>
           </div>
         </div>
+      </div>
 
-        {error && (
-          <div className="bg-red-50 text-red-500 p-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              Members ({group.members.length})
-            </h2>
-            <div className="space-y-3">
-              {group.members.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded"
-                >
-                  <div>
-                    <p className="font-medium">{member.user.email}</p>
-                    <p className="text-sm text-gray-500">Member</p>
-                  </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex-row items-start justify-between space-y-0">
+            <div className="space-y-1">
+              <CardTitle>Members</CardTitle>
+              <CardDescription>{group.members.length} total</CardDescription>
+            </div>
+            <Badge variant="secondary">{group.members.length}</Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {group.members.map((member) => (
+              <div key={member.id} className="flex items-center justify-between rounded-md border bg-background p-3">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{member.user.email}</div>
+                  <div className="text-xs text-muted-foreground">Member</div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              Pending Invites ({group.invites.length})
-            </h2>
-            {group.invites.length === 0 ? (
-              <p className="text-gray-500">No pending invites</p>
-            ) : (
-              <div className="space-y-3">
-                {group.invites.map((invite) => (
-                  <div
-                    key={invite.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded"
-                  >
-                    <div>
-                      <p className="font-medium">{invite.invitedEmail}</p>
-                      <p className="text-sm text-gray-500">
-                        Invited by {invite.sender.email}
-                      </p>
-                    </div>
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">
-                      Pending
-                    </span>
-                  </div>
-                ))}
               </div>
-            )}
-          </div>
-        </div>
+            ))}
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Group Debts ({debts.length})
-          </h2>
-          {debts.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No debts in this group yet</p>
-          ) : (
-            <div className="space-y-3">
-              {debts.map((debt) => {
-                const isLender = currentUser?.id === debt.lender.id
-                return (
-                  <div
-                    key={debt.id}
-                    className={`p-4 bg-gray-50 rounded border-l-4 ${
-                      isLender ? 'border-green-500' : 'border-red-500'
-                    }`}
+        <Card>
+          <CardHeader className="flex-row items-start justify-between space-y-0">
+            <div className="space-y-1">
+              <CardTitle>Pending invites</CardTitle>
+              <CardDescription>{group.invites.length} outstanding</CardDescription>
+            </div>
+            <Badge variant="secondary">{group.invites.length}</Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {group.invites.length === 0 ? (
+              <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
+                No pending invites.
+              </div>
+            ) : (
+              group.invites.map((invite) => (
+                <div key={invite.id} className="flex items-center justify-between rounded-md border bg-background p-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{invite.invitedEmail}</div>
+                    <div className="text-xs text-muted-foreground">Invited by {invite.sender.email}</div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium">
-                          {isLender ? (
-                            <span>
-                              <span className="text-green-600">You lent to</span> {debt.borrower.email}
-                            </span>
-                          ) : (
-                            <span>
-                              <span className="text-red-600">You borrowed from</span> {debt.lender.email}
-                            </span>
-                          )}
-                        </p>
-                        {debt.description && (
-                          <p className="text-sm text-gray-600 mt-1">{debt.description}</p>
+                    Pending
+                  </Badge>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between space-y-0">
+          <div className="space-y-1">
+            <CardTitle>Group debts</CardTitle>
+            <CardDescription>{debts.length} total</CardDescription>
+          </div>
+          <Badge variant="secondary">{debts.length}</Badge>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {debts.length === 0 ? (
+            <div className="rounded-md border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
+              No debts in this group yet.
+            </div>
+          ) : (
+            debts.map((debt) => {
+              const isLender = currentUser?.id === debt.lender.id
+              return (
+                <div key={debt.id} className="rounded-lg border bg-background p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="font-medium">
+                        {isLender ? (
+                          <span>
+                            <span className="text-emerald-600 dark:text-emerald-400">You lent to</span> {debt.borrower.email}
+                          </span>
+                        ) : (
+                          <span>
+                            <span className="text-rose-600 dark:text-rose-400">You borrowed from</span> {debt.lender.email}
+                          </span>
                         )}
                       </div>
-                      <span className={`text-lg font-bold ${
-                        isLender ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        ${debt.amount.toFixed(2)}
-                      </span>
+                      {debt.description && <div className="text-sm text-muted-foreground">{debt.description}</div>}
                     </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500">{new Date(debt.createdAt).toLocaleDateString()}</span>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={debt.status}
-                          onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
-                          className={`px-2 py-1 rounded text-xs border cursor-pointer ${
-                            debt.status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                              : debt.status === 'paid'
-                              ? 'bg-green-100 text-green-800 border-green-300'
-                              : 'bg-red-100 text-red-800 border-red-300'
-                          }`}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="paid">Paid</option>
-                          <option value="not_paying">Not Paying</option>
-                        </select>
+
+                    <div className="shrink-0 text-right">
+                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {new Date(debt.createdAt).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
 
-        {showInviteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h2 className="text-2xl font-bold mb-4">Invite Member</h2>
-              <form onSubmit={handleInvite}>
-                <div className="mb-4">
-                  <label htmlFor="inviteEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address
-                  </label>
-                  <input
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                      )}
+                    >
+                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                    </Badge>
+
+                    <select
+                      value={debt.status}
+                      onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="not_paying">Not Paying</option>
+                    </select>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50">
+          <DialogOverlay />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Invite member</DialogTitle>
+            </DialogHeader>
+            <div className="px-6 pb-6">
+              <form onSubmit={handleInvite} className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="inviteEmail">Email address</Label>
+                  <Input
                     id="inviteEmail"
                     type="email"
                     required
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="member@example.com"
                   />
                 </div>
-                <div className="flex justify-end space-x-3">
-                  <button
+                <DialogFooter>
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => {
                       setShowInviteModal(false)
                       setInviteEmail('')
                       setError('')
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={inviting}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-                  >
-                    {inviting ? 'Sending...' : 'Send Invite'}
-                  </button>
-                </div>
+                  </Button>
+                  <Button type="submit" disabled={inviting}>
+                    {inviting ? 'Sending…' : 'Send invite'}
+                  </Button>
+                </DialogFooter>
               </form>
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </div>
+      )}
 
-        {showDebtModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h2 className="text-2xl font-bold mb-4">Create New Debt</h2>
-              <form onSubmit={handleCreateDebt}>
-                <div className="mb-4">
-                  <label htmlFor="borrowerEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                    Borrower Email (must be a group member)
-                  </label>
-                  <input
+      {showDebtModal && (
+        <div className="fixed inset-0 z-50">
+          <DialogOverlay />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create new debt</DialogTitle>
+            </DialogHeader>
+            <div className="px-6 pb-6">
+              <form onSubmit={handleCreateDebt} className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="borrowerEmail">Borrower email (must be a group member)</Label>
+                  <Input
                     id="borrowerEmail"
                     type="email"
                     required
                     value={debtFormData.borrowerEmail}
                     onChange={(e) => setDebtFormData({ ...debtFormData, borrowerEmail: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="borrower@example.com"
                   />
                 </div>
-                <div className="mb-4">
-                  <label htmlFor="debtAmount" className="block text-sm font-medium text-gray-700 mb-2">
-                    Amount ($)
-                  </label>
-                  <input
+                <div className="grid gap-2">
+                  <Label htmlFor="debtAmount">Amount ($)</Label>
+                  <Input
                     id="debtAmount"
                     type="number"
                     step="0.01"
@@ -474,48 +480,40 @@ export default function GroupDetailPage() {
                     required
                     value={debtFormData.amount}
                     onChange={(e) => setDebtFormData({ ...debtFormData, amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0.00"
                   />
                 </div>
-                <div className="mb-4">
-                  <label htmlFor="debtDescription" className="block text-sm font-medium text-gray-700 mb-2">
-                    Description (optional)
-                  </label>
-                  <textarea
+                <div className="grid gap-2">
+                  <Label htmlFor="debtDescription">Description (optional)</Label>
+                  <Textarea
                     id="debtDescription"
                     value={debtFormData.description}
                     onChange={(e) => setDebtFormData({ ...debtFormData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     rows={3}
                     placeholder="What is this debt for?"
                   />
                 </div>
-                <div className="flex justify-end space-x-3">
-                  <button
+                <DialogFooter>
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => {
                       setShowDebtModal(false)
                       setDebtFormData({ amount: '', description: '', borrowerEmail: '' })
                       setError('')
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creating}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
-                  >
-                    {creating ? 'Creating...' : 'Create Debt'}
-                  </button>
-                </div>
+                  </Button>
+                  <Button type="submit" disabled={creating}>
+                    {creating ? 'Creating…' : 'Create debt'}
+                  </Button>
+                </DialogFooter>
               </form>
             </div>
-          </div>
-        )}
-      </div>
+          </DialogContent>
+        </div>
+      )}
     </div>
   )
 }
