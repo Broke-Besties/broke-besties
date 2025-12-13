@@ -1,13 +1,16 @@
-import { getGroups } from '@/actions/group.actions'
+import { getUser } from '@/lib/supabase'
+import { groupService } from '@/services/group.service'
 import { redirect } from 'next/navigation'
 import GroupsPageClient from './groups-client'
 
 export default async function GroupsPage() {
-  const result = await getGroups()
+  const user = await getUser()
 
-  if (!result.success) {
+  if (!user) {
     redirect('/login')
   }
 
-  return <GroupsPageClient initialGroups={result.groups || []} />
+  const groups = await groupService.getUserGroups(user.id)
+
+  return <GroupsPageClient initialGroups={groups} />
 }

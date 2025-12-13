@@ -1,6 +1,6 @@
-import { getGroup } from '@/actions/group.actions'
-import { getDebts } from '@/actions/debt.actions'
-import { getCurrentUser } from '@/actions/user.actions'
+import { getUser } from '@/lib/supabase'
+import { groupService } from '@/services/group.service'
+import { debtService } from '@/services/debt.service'
 import { redirect } from 'next/navigation'
 import GroupDetailPageClient from './group-detail-client'
 
@@ -16,26 +16,28 @@ export default async function GroupDetailPage({ params }: PageProps) {
     redirect('/groups')
   }
 
-  const [groupResult, debtsResult, userResult] = await Promise.all([
-    getGroup(groupId),
-    getDebts({ groupId }),
-    getCurrentUser(),
-  ])
+  const user = await getUser()
 
-  if (!groupResult.success || !userResult.success || !userResult.user) {
+  if (!user) {
     redirect('/login')
   }
 
-  if (!groupResult.group) {
+  try {
+    const [group, debts] = await Promise.all([
+      groupService.getGroupById(groupId, user.id),
+      debtService.getUserDebts(user.id, { groupId }),
+    ])
+
+    return (
+      <GroupDetailPageClient
+        initialGroup={group}
+        initialDebts={debts}
+        currentUser={user}
+        groupId={groupId}
+      />
+    )
+  } catch (error) {
+    console.error('Group detail error:', error)
     redirect('/groups')
   }
-
-  return (
-    <GroupDetailPageClient
-      initialGroup={groupResult.group}
-      initialDebts={debtsResult.debts || []}
-      currentUser={userResult.user}
-      groupId={groupId}
-    />
-  )
 }

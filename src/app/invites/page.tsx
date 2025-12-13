@@ -1,13 +1,16 @@
-import { getInvites } from '@/actions/invite.actions'
+import { getUser } from '@/lib/supabase'
+import { inviteService } from '@/services/invite.service'
 import { redirect } from 'next/navigation'
 import InvitesPageClient from './invites-client'
 
 export default async function InvitesPage() {
-  const result = await getInvites()
+  const user = await getUser()
 
-  if (!result.success) {
+  if (!user) {
     redirect('/login')
   }
 
-  return <InvitesPageClient initialInvites={result.invites || []} />
+  const invites = await inviteService.getUserInvites(user.email!)
+
+  return <InvitesPageClient initialInvites={invites} />
 }

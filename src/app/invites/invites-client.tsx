@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { acceptInvite } from '@/actions/invite.actions'
+import { acceptInvite } from './actions'
 
 type Invite = {
   id: number
@@ -48,7 +48,7 @@ export default function InvitesPageClient({ initialInvites }: InvitesPageClientP
         return
       }
 
-      router.push(`/groups/${result.group.id}`)
+      router.push(`/groups/${result.group?.id}`)
     } catch (err) {
       setError('An error occurred while accepting the invite')
       setProcessingId(null)

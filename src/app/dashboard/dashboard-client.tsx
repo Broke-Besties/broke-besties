@@ -11,8 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { createDebt, updateDebtStatus } from '@/actions/debt.actions'
-import { searchUserByEmail } from '@/actions/user.actions'
+import { createDebt, updateDebtStatus, searchUserByEmail } from './actions'
 
 type Debt = {
   id: number
@@ -68,7 +67,7 @@ export default function DashboardPageClient({
       // First, find the user by email
       const userResult = await searchUserByEmail(formData.borrowerEmail)
 
-      if (!userResult.success) {
+      if (!userResult.success || !userResult.user) {
         setError(userResult.error || 'User not found')
         setCreating(false)
         return

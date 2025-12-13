@@ -1,22 +1,21 @@
-import { getDebts } from '@/actions/debt.actions'
-import { getCurrentUser } from '@/actions/user.actions'
+import { getUser } from '@/lib/supabase'
+import { debtService } from '@/services/debt.service'
 import { redirect } from 'next/navigation'
 import DashboardPageClient from './dashboard-client'
 
 export default async function DashboardPage() {
-  const [debtsResult, userResult] = await Promise.all([
-    getDebts(),
-    getCurrentUser(),
-  ])
+  const user = await getUser()
 
-  if (!debtsResult.success || !userResult.success || !userResult.user) {
+  if (!user) {
     redirect('/login')
   }
 
+  const debts = await debtService.getUserDebts(user.id)
+
   return (
     <DashboardPageClient
-      initialDebts={debtsResult.debts || []}
-      currentUser={userResult.user}
+      initialDebts={debts}
+      currentUser={user}
     />
   )
 }
