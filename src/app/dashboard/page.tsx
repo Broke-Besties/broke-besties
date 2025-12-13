@@ -1,12 +1,12 @@
-import { getDebtsAction } from '@/actions/debt.actions'
-import { getCurrentUserAction } from '@/actions/user.actions'
+import { getDebts } from '@/actions/debt.actions'
+import { getCurrentUser } from '@/actions/user.actions'
 import { redirect } from 'next/navigation'
 import DashboardPageClient from './dashboard-client'
 
 export default async function DashboardPage() {
   const [debtsResult, userResult] = await Promise.all([
-    getDebtsAction(),
-    getCurrentUserAction(),
+    getDebts(),
+    getCurrentUser(),
   ])
 
   if (!debtsResult.success || !userResult.success || !userResult.user) {

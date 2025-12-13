@@ -4,7 +4,7 @@ import { getUser } from '@/lib/supabase'
 import { inviteService } from '@/services/invite.service'
 import { redirect } from 'next/navigation'
 
-export async function getInvitesAction() {
+export async function getInvites() {
   const user = await getUser()
 
   if (!user) {
@@ -23,7 +23,7 @@ export async function getInvitesAction() {
   }
 }
 
-export async function acceptInviteAction(inviteId: number) {
+export async function acceptInvite(inviteId: number) {
   const user = await getUser()
 
   if (!user) {
@@ -42,7 +42,7 @@ export async function acceptInviteAction(inviteId: number) {
   }
 }
 
-export async function createInviteAction(groupId: number, invitedEmail: string) {
+export async function createInvite(groupId: number, invitedEmail: string) {
   const user = await getUser()
 
   if (!user) {

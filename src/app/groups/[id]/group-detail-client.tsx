@@ -11,9 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { createInviteAction } from '@/actions/invite.actions'
-import { createDebtAction, updateDebtStatusAction } from '@/actions/debt.actions'
-import { searchUserByEmailAction } from '@/actions/user.actions'
+import { createInvite } from '@/actions/invite.actions'
+import { createDebt, updateDebtStatus } from '@/actions/debt.actions'
+import { searchUserByEmail } from '@/actions/user.actions'
 
 type Member = {
   id: number
@@ -95,7 +95,7 @@ export default function GroupDetailPageClient({
     setError('')
 
     try {
-      const result = await createInviteAction(groupId, inviteEmail)
+      const result = await createInvite(groupId, inviteEmail)
 
       if (!result.success) {
         setError(result.error || 'Failed to send invite')
@@ -119,7 +119,7 @@ export default function GroupDetailPageClient({
 
     try {
       // First, find the user by email
-      const userResult = await searchUserByEmailAction(debtFormData.borrowerEmail)
+      const userResult = await searchUserByEmail(debtFormData.borrowerEmail)
 
       if (!userResult.success) {
         setError(userResult.error || 'User not found')
@@ -127,7 +127,7 @@ export default function GroupDetailPageClient({
         return
       }
 
-      const result = await createDebtAction({
+      const result = await createDebt({
         amount: parseFloat(debtFormData.amount),
         description: debtFormData.description || undefined,
         borrowerId: userResult.user.id,
@@ -151,7 +151,7 @@ export default function GroupDetailPageClient({
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
     try {
-      const result = await updateDebtStatusAction(debtId, newStatus)
+      const result = await updateDebtStatus(debtId, newStatus)
 
       if (!result.success) {
         setError(result.error || 'Failed to update status')

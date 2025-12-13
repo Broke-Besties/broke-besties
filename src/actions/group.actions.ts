@@ -4,7 +4,7 @@ import { getUser } from '@/lib/supabase'
 import { groupService } from '@/services/group.service'
 import { redirect } from 'next/navigation'
 
-export async function getGroupsAction() {
+export async function getGroups() {
   const user = await getUser()
 
   if (!user) {
@@ -23,7 +23,7 @@ export async function getGroupsAction() {
   }
 }
 
-export async function createGroupAction(name: string) {
+export async function createGroup(name: string) {
   const user = await getUser()
 
   if (!user) {
@@ -42,7 +42,7 @@ export async function createGroupAction(name: string) {
   }
 }
 
-export async function getGroupByIdAction(groupId: number) {
+export async function getGroup(groupId: number) {
   const user = await getUser()
 
   if (!user) {

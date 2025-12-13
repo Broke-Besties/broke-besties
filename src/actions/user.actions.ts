@@ -4,7 +4,7 @@ import { getUser } from '@/lib/supabase'
 import { userService } from '@/services/user.service'
 import { redirect } from 'next/navigation'
 
-export async function getCurrentUserAction() {
+export async function getCurrentUser() {
   const user = await getUser()
 
   if (!user) {
@@ -23,7 +23,7 @@ export async function getCurrentUserAction() {
   }
 }
 
-export async function searchUserByEmailAction(email: string) {
+export async function searchUserByEmail(email: string) {
   const user = await getUser()
 
   if (!user) {

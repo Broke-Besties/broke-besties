@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createGroupAction } from "@/actions/group.actions";
+import { createGroup } from "@/actions/group.actions";
 
 type Group = {
   id: number;
@@ -49,7 +49,7 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
     setError("");
 
     try {
-      const result = await createGroupAction(newGroupName);
+      const result = await createGroup(newGroupName);
 
       if (!result.success) {
         setError(result.error || "Failed to create group");

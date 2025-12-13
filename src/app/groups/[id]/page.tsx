@@ -1,6 +1,6 @@
-import { getGroupByIdAction } from '@/actions/group.actions'
-import { getDebtsAction } from '@/actions/debt.actions'
-import { getCurrentUserAction } from '@/actions/user.actions'
+import { getGroup } from '@/actions/group.actions'
+import { getDebts } from '@/actions/debt.actions'
+import { getCurrentUser } from '@/actions/user.actions'
 import { redirect } from 'next/navigation'
 import GroupDetailPageClient from './group-detail-client'
 
@@ -17,9 +17,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
   }
 
   const [groupResult, debtsResult, userResult] = await Promise.all([
-    getGroupByIdAction(groupId),
-    getDebtsAction({ groupId }),
-    getCurrentUserAction(),
+    getGroup(groupId),
+    getDebts({ groupId }),
+    getCurrentUser(),
   ])
 
   if (!groupResult.success || !userResult.success || !userResult.user) {

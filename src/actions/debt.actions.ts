@@ -4,7 +4,7 @@ import { getUser } from '@/lib/supabase'
 import { debtService } from '@/services/debt.service'
 import { redirect } from 'next/navigation'
 
-export async function getDebtsAction(filters?: {
+export async function getDebts(filters?: {
   type?: 'lending' | 'borrowing' | null
   groupId?: number | null
   status?: string | null
@@ -27,7 +27,7 @@ export async function getDebtsAction(filters?: {
   }
 }
 
-export async function createDebtAction(data: {
+export async function createDebt(data: {
   amount: number
   description?: string
   borrowerId: string
@@ -57,7 +57,7 @@ export async function createDebtAction(data: {
   }
 }
 
-export async function updateDebtStatusAction(debtId: number, status: string) {
+export async function updateDebtStatus(debtId: number, status: string) {
   const user = await getUser()
 
   if (!user) {
