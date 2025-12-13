@@ -1,20 +1,17 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-// Add to settings.json to format on save
-//  "[prisma]": {
-//    "editor.defaultFormatter": "Prisma.prisma",
-//    "editor.formatOnSave": true
-//  }
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
 generator client {
-  provider     = "prisma-client"
-  output       = "../src/generated/prisma"
-  moduleFormat = "esm"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
 }
+        
 
 generator erd {
   provider = "prisma-erd-generator"
@@ -22,89 +19,74 @@ generator erd {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  clerkId   String   @unique
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  Groups  Group[]
-  borrowedDebts Debt[]          @relation("BorrowedDebts")
-  lentDebts     Debt[]          @relation("LentDebts")
-  leaderGoals   Goal[]          @relation("LeaderGoals")
-  goalProgress  GoalProgress[] @relation("UserGoalProgress")
+  id             String        @id @default(cuid())
+  email          String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  members        GroupMember[]
+  sentInvites    GroupInvite[] @relation("InviteSender")
+  receivedInvites GroupInvite[] @relation("InviteReceiver")
+  lentDebts      Debt[]        @relation("Lender")
+  borrowedDebts  Debt[]        @relation("Borrower")
 }
 
 model Group {
-  id        Int      @id @default(autoincrement())
+  id        Int           @id @default(autoincrement())
   name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users User[]
-  debts   Debt[]
-  goals   Goal[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  members   GroupMember[]
+  invites   GroupInvite[]
+  debts     Debt[]
 }
 
-// User and Group have a many-to-many relationship 
-//so prisma will create a join table automatically
+model GroupMember {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  groupId   Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 
-enum DebtStatus {
-  PENDING
-  PAID
-  OVERDUE
-  FORGIVEN
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model GroupInvite {
+  id         Int      @id @default(autoincrement())
+  groupId    Int
+  invitedBy  String
+  invitedEmail String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender     User     @relation("InviteSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+  receiver   User?    @relation("InviteReceiver", fields: [invitedEmail], references: [email], onDelete: Cascade)
+
+  @@unique([groupId, invitedEmail])
+  @@index([invitedEmail])
+  @@index([groupId])
 }
 
 model Debt {
-  id          Int        @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   amount      Float
-  description String
-  status      DebtStatus @default(PENDING)
-  receiptUrl  String? //do we need this?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  GroupId Int
-  Group   Group @relation(fields: [GroupId], references: [id])
-
-  borrowerId Int
-  borrower   User @relation("BorrowedDebts", fields: [borrowerId], references: [id])
-
-  lenderId Int
-  lender   User @relation("LentDebts", fields: [lenderId], references: [id])
-}
-
-model Goal {
-  id          Int      @id @default(autoincrement())
-  name        String
-  description String
-  target      Float
+  description String?
+  status      String   @default("pending")
+  lenderId    String
+  borrowerId  String
+  groupId     Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  leaderId Int
-  leader   User @relation("LeaderGoals", fields: [leaderId], references: [id])
+  lender      User     @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower    User     @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  GroupId Int
-  Group   Group @relation(fields: [GroupId], references: [id])
-
-  progress GoalProgress[]
-}
-
-model GoalProgress {
-  id          Int      @id @default(autoincrement())
-  amount      Float    @default(0)
-  target      Float
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  goalId Int
-  goal   Goal @relation(fields: [goalId], references: [id])
-
-  userId Int
-  user   User @relation("UserGoalProgress", fields: [userId], references: [id])
-
-  @@unique([goalId, userId])
+  @@index([lenderId])
+  @@index([borrowerId])
+  @@index([groupId])
 }
