@@ -73,7 +73,7 @@ export default function GroupDetailPageClient({
   groupId,
 }: GroupDetailPageClientProps) {
   const [group] = useState<Group>(initialGroup)
-  const [debts] = useState<Debt[]>(initialDebts)
+  const [debts, setDebts] = useState<Debt[]>(initialDebts)
   const [error, setError] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showDebtModal, setShowDebtModal] = useState(false)
@@ -148,17 +148,41 @@ export default function GroupDetailPageClient({
   }
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
+    // Store the old status in case we need to revert
+    const oldStatus = debts.find(d => d.id === debtId)?.status
+
+    // Optimistically update the UI
+    setDebts(prevDebts =>
+      prevDebts.map(debt =>
+        debt.id === debtId ? { ...debt, status: newStatus } : debt
+      )
+    )
+
     try {
       const result = await updateDebtStatus(debtId, newStatus)
 
       if (!result.success) {
         setError(result.error || 'Failed to update status')
+        // Revert to old status
+        if (oldStatus) {
+          setDebts(prevDebts =>
+            prevDebts.map(debt =>
+              debt.id === debtId ? { ...debt, status: oldStatus } : debt
+            )
+          )
+        }
         return
       }
-
-      router.refresh()
     } catch (err) {
       setError('An error occurred while updating the status')
+      // Revert to old status
+      if (oldStatus) {
+        setDebts(prevDebts =>
+          prevDebts.map(debt =>
+            debt.id === debtId ? { ...debt, status: oldStatus } : debt
+          )
+        )
+      }
     }
   }
 

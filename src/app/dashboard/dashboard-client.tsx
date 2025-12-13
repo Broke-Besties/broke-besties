@@ -95,17 +95,41 @@ export default function DashboardPageClient({
   }
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
+    // Store the old status in case we need to revert
+    const oldStatus = debts.find(d => d.id === debtId)?.status
+
+    // Optimistically update the UI
+    setDebts(prevDebts =>
+      prevDebts.map(debt =>
+        debt.id === debtId ? { ...debt, status: newStatus } : debt
+      )
+    )
+
     try {
       const result = await updateDebtStatus(debtId, newStatus)
 
       if (!result.success) {
         setError(result.error || 'Failed to update status')
+        // Revert to old status
+        if (oldStatus) {
+          setDebts(prevDebts =>
+            prevDebts.map(debt =>
+              debt.id === debtId ? { ...debt, status: oldStatus } : debt
+            )
+          )
+        }
         return
       }
-
-      router.refresh()
     } catch (err) {
       setError('An error occurred while updating the status')
+      // Revert to old status
+      if (oldStatus) {
+        setDebts(prevDebts =>
+          prevDebts.map(debt =>
+            debt.id === debtId ? { ...debt, status: oldStatus } : debt
+          )
+        )
+      }
     }
   }
 
