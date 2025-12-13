@@ -86,28 +86,43 @@ export async function PATCH(
       return NextResponse.json({ error: "Debt not found" }, { status: 404 });
     }
 
-    // Only lender can update the debt details
-    if (existingDebt.lenderId !== user.id) {
+    // Verify user is either lender or borrower
+    const isLender = existingDebt.lenderId === user.id;
+    const isBorrower = existingDebt.borrowerId === user.id;
+
+    if (!isLender && !isBorrower) {
       return NextResponse.json(
-        { error: "Only the lender can update debt details" },
+        { error: "You don't have permission to update this debt" },
         { status: 403 }
       );
     }
 
     // Build update data
     const updateData: any = {};
-    if (amount !== undefined) {
-      if (amount <= 0) {
+
+    // Only lender can update amount and description
+    if (amount !== undefined || description !== undefined) {
+      if (!isLender) {
         return NextResponse.json(
-          { error: "Amount must be positive" },
-          { status: 400 }
+          { error: "Only the lender can update amount and description" },
+          { status: 403 }
         );
       }
-      updateData.amount = amount;
+      if (amount !== undefined) {
+        if (amount <= 0) {
+          return NextResponse.json(
+            { error: "Amount must be positive" },
+            { status: 400 }
+          );
+        }
+        updateData.amount = amount;
+      }
+      if (description !== undefined) {
+        updateData.description = description;
+      }
     }
-    if (description !== undefined) {
-      updateData.description = description;
-    }
+
+    // Both lender and borrower can update status
     if (status !== undefined) {
       updateData.status = status;
     }
@@ -144,7 +159,7 @@ export async function PATCH(
 
 // DELETE /api/debts/[id] - Delete a debt
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {

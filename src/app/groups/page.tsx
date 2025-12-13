@@ -96,6 +96,12 @@ export default function GroupsPage() {
           </div>
           <div className="space-x-4">
             <button
+              onClick={() => router.push('/dashboard')}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            >
+              View Dashboard
+            </button>
+            <button
               onClick={() => router.push('/invites')}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
             >

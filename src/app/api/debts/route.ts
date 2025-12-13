@@ -27,6 +27,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Prevent creating a debt to yourself
+    if (borrowerId === user.id) {
+      return NextResponse.json(
+        { error: "Cannot create a debt to yourself" },
+        { status: 400 }
+      );
+    }
+
     // Verify borrower exists
     const borrower = await prisma.user.findUnique({
       where: { id: borrowerId },
