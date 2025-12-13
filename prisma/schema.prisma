@@ -21,6 +21,8 @@ model User {
   members        GroupMember[]
   sentInvites    GroupInvite[] @relation("InviteSender")
   receivedInvites GroupInvite[] @relation("InviteReceiver")
+  lentDebts      Debt[]        @relation("Lender")
+  borrowedDebts  Debt[]        @relation("Borrower")
 }
 
 model Group {
@@ -30,6 +32,7 @@ model Group {
   updatedAt DateTime      @updatedAt
   members   GroupMember[]
   invites   GroupInvite[]
+  debts     Debt[]
 }
 
 model GroupMember {
@@ -60,5 +63,25 @@ model GroupInvite {
 
   @@unique([groupId, invitedEmail])
   @@index([invitedEmail])
+  @@index([groupId])
+}
+
+model Debt {
+  id          Int      @id @default(autoincrement())
+  amount      Float
+  description String?
+  status      String   @default("pending")
+  lenderId    String
+  borrowerId  String
+  groupId     Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lender      User     @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower    User     @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([lenderId])
+  @@index([borrowerId])
   @@index([groupId])
 }

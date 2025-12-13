@@ -1,4 +1,26 @@
--- Create a trigger function to create a public.User when auth.users is created
+-- Create auth schema and table for shadow database (will skip in Supabase due to permissions)
+DO $$
+BEGIN
+  -- Try to create auth schema (will succeed in shadow DB, fail gracefully in Supabase)
+  CREATE SCHEMA IF NOT EXISTS auth;
+EXCEPTION
+  WHEN insufficient_privilege THEN
+    NULL; -- Schema already exists or no permission
+END $$;
+
+DO $$
+BEGIN
+  -- Try to create minimal auth.users table (will succeed in shadow DB, fail gracefully in Supabase)
+  CREATE TABLE IF NOT EXISTS auth.users (
+    id UUID PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL
+  );
+EXCEPTION
+  WHEN insufficient_privilege OR duplicate_table THEN
+    NULL; -- Table already exists or no permission
+END $$;
+
+-- Create function to handle new user creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
