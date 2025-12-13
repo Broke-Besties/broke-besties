@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
-import { prisma } from "@/lib/prisma";
+import { userService } from "@/services/user.service";
 
 // GET /api/users/search - Search for users by email
 export async function GET(request: NextRequest) {
@@ -20,27 +20,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
+    const user = await userService.searchUserByEmail(email);
 
     return NextResponse.json({ user });
   } catch (error) {
     console.error("Error searching for user:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Internal server error";
+    let status = 500;
+    if (message === "Email parameter is required") status = 400;
+    if (message === "User not found") status = 404;
+    return NextResponse.json({ error: message }, { status });
   }
 }

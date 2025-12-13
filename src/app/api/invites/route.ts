@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
+import { inviteService } from '@/services/invite.service'
 
 // Create an invite
 export async function POST(request: NextRequest) {
@@ -16,74 +16,7 @@ export async function POST(request: NextRequest) {
 
     const { groupId, invitedEmail } = await request.json()
 
-    if (!groupId || !invitedEmail) {
-      return NextResponse.json(
-        { error: 'Group ID and invited email are required' },
-        { status: 400 }
-      )
-    }
-
-    // Check if user is a member of the group
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'You are not a member of this group' },
-        { status: 403 }
-      )
-    }
-
-    // Check if invite already exists
-    const existingInvite = await prisma.groupInvite.findUnique({
-      where: {
-        groupId_invitedEmail: {
-          groupId,
-          invitedEmail,
-        },
-      },
-    })
-
-    if (existingInvite) {
-      return NextResponse.json(
-        { error: 'Invite already exists for this email' },
-        { status: 400 }
-      )
-    }
-
-    // Check if user is already a member
-    const existingMember = await prisma.user.findUnique({
-      where: { email: invitedEmail },
-      include: {
-        members: {
-          where: { groupId },
-        },
-      },
-    })
-
-    if (existingMember && existingMember.members.length > 0) {
-      return NextResponse.json(
-        { error: 'User is already a member of this group' },
-        { status: 400 }
-      )
-    }
-
-    // Create invite
-    const invite = await prisma.groupInvite.create({
-      data: {
-        groupId,
-        invitedBy: user.id,
-        invitedEmail,
-      },
-      include: {
-        group: true,
-        sender: true,
-      },
-    })
+    const invite = await inviteService.createInvite(user.id, groupId, invitedEmail)
 
     return NextResponse.json({
       message: 'Invite sent successfully',
@@ -91,10 +24,17 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Create invite error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    let status = 500
+    if (
+      message === 'Group ID and invited email are required' ||
+      message === 'Invite already exists for this email' ||
+      message === 'User is already a member of this group'
+    ) {
+      status = 400
+    }
+    if (message === 'You are not a member of this group') status = 403
+    return NextResponse.json({ error: message }, { status })
   }
 }
 
@@ -110,24 +50,7 @@ export async function GET() {
       )
     }
 
-    const invites = await prisma.groupInvite.findMany({
-      where: {
-        invitedEmail: user.email!,
-        status: 'pending',
-      },
-      include: {
-        group: {
-          include: {
-            members: {
-              include: {
-                user: true,
-              },
-            },
-          },
-        },
-        sender: true,
-      },
-    })
+    const invites = await inviteService.getUserInvites(user.email!)
 
     return NextResponse.json({ invites })
   } catch (error) {

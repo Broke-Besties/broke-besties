@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
-import { prisma } from "@/lib/prisma";
+import { debtService } from "@/services/debt.service";
 
 // GET /api/debts/[id] - Get a specific debt
 export async function GET(
@@ -20,40 +20,16 @@ export async function GET(
       return NextResponse.json({ error: "Invalid debt ID" }, { status: 400 });
     }
 
-    const debt = await prisma.debt.findUnique({
-      where: { id: debtId },
-      include: {
-        lender: {
-          select: { id: true, email: true },
-        },
-        borrower: {
-          select: { id: true, email: true },
-        },
-        group: {
-          select: { id: true, name: true },
-        },
-      },
-    });
-
-    if (!debt) {
-      return NextResponse.json({ error: "Debt not found" }, { status: 404 });
-    }
-
-    // Verify user is either lender or borrower
-    if (debt.lenderId !== user.id && debt.borrowerId !== user.id) {
-      return NextResponse.json(
-        { error: "You don't have permission to view this debt" },
-        { status: 403 }
-      );
-    }
+    const debt = await debtService.getDebtById(debtId, user.id);
 
     return NextResponse.json({ debt });
   } catch (error) {
     console.error("Error fetching debt:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Internal server error";
+    let status = 500;
+    if (message === "Debt not found") status = 404;
+    if (message === "You don't have permission to view this debt") status = 403;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -77,71 +53,10 @@ export async function PATCH(
 
     const { amount, description, status } = await request.json();
 
-    // Fetch existing debt
-    const existingDebt = await prisma.debt.findUnique({
-      where: { id: debtId },
-    });
-
-    if (!existingDebt) {
-      return NextResponse.json({ error: "Debt not found" }, { status: 404 });
-    }
-
-    // Verify user is either lender or borrower
-    const isLender = existingDebt.lenderId === user.id;
-    const isBorrower = existingDebt.borrowerId === user.id;
-
-    if (!isLender && !isBorrower) {
-      return NextResponse.json(
-        { error: "You don't have permission to update this debt" },
-        { status: 403 }
-      );
-    }
-
-    // Build update data
-    const updateData: any = {};
-
-    // Only lender can update amount and description
-    if (amount !== undefined || description !== undefined) {
-      if (!isLender) {
-        return NextResponse.json(
-          { error: "Only the lender can update amount and description" },
-          { status: 403 }
-        );
-      }
-      if (amount !== undefined) {
-        if (amount <= 0) {
-          return NextResponse.json(
-            { error: "Amount must be positive" },
-            { status: 400 }
-          );
-        }
-        updateData.amount = amount;
-      }
-      if (description !== undefined) {
-        updateData.description = description;
-      }
-    }
-
-    // Both lender and borrower can update status
-    if (status !== undefined) {
-      updateData.status = status;
-    }
-
-    // Update the debt
-    const debt = await prisma.debt.update({
-      where: { id: debtId },
-      data: updateData,
-      include: {
-        lender: {
-          select: { id: true, email: true },
-        },
-        borrower: {
-          select: { id: true, email: true },
-        },
-        group: {
-          select: { id: true, name: true },
-        },
-      },
+    const debt = await debtService.updateDebt(debtId, user.id, {
+      amount,
+      description,
+      status,
     });
 
     return NextResponse.json({
@@ -150,10 +65,17 @@ export async function PATCH(
     });
   } catch (error) {
     console.error("Error updating debt:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Internal server error";
+    let status = 500;
+    if (message === "Debt not found") status = 404;
+    if (
+      message === "You don't have permission to update this debt" ||
+      message === "Only the lender can update amount and description"
+    ) {
+      status = 403;
+    }
+    if (message === "Amount must be positive") status = 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -175,35 +97,17 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid debt ID" }, { status: 400 });
     }
 
-    // Fetch existing debt
-    const existingDebt = await prisma.debt.findUnique({
-      where: { id: debtId },
-    });
-
-    if (!existingDebt) {
-      return NextResponse.json({ error: "Debt not found" }, { status: 404 });
-    }
-
-    // Only lender can delete the debt
-    if (existingDebt.lenderId !== user.id) {
-      return NextResponse.json(
-        { error: "Only the lender can delete this debt" },
-        { status: 403 }
-      );
-    }
-
-    await prisma.debt.delete({
-      where: { id: debtId },
-    });
+    await debtService.deleteDebt(debtId, user.id);
 
     return NextResponse.json({
       message: "Debt deleted successfully",
     });
   } catch (error) {
     console.error("Error deleting debt:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Internal server error";
+    let status = 500;
+    if (message === "Debt not found") status = 404;
+    if (message === "Only the lender can delete this debt") status = 403;
+    return NextResponse.json({ error: message }, { status });
   }
 }

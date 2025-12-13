@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
+import { groupService } from '@/services/group.service'
 
 export async function GET(
   request: NextRequest,
@@ -26,54 +26,18 @@ export async function GET(
       )
     }
 
-    // Check if user is a member of the group
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'You are not a member of this group' },
-        { status: 403 }
-      )
-    }
-
-    // Get group details with members and invites
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
-      include: {
-        members: {
-          include: {
-            user: true,
-          },
-        },
-        invites: {
-          where: {
-            status: 'pending',
-          },
-          include: {
-            sender: true,
-          },
-        },
-      },
-    })
-
-    if (!group) {
-      return NextResponse.json(
-        { error: 'Group not found' },
-        { status: 404 }
-      )
-    }
+    const group = await groupService.getGroupById(groupId, user.id)
 
     return NextResponse.json({ group })
   } catch (error) {
     console.error('Get group error:', error)
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    let status = 500
+    if (message === 'You are not a member of this group') status = 403
+    if (message === 'Group not found') status = 404
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: message },
+      { status }
     )
   }
 }

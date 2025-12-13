@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
+import { inviteService } from '@/services/invite.service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,60 +22,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the invite
-    const invite = await prisma.groupInvite.findUnique({
-      where: { id: inviteId },
-    })
-
-    if (!invite) {
-      return NextResponse.json(
-        { error: 'Invite not found' },
-        { status: 404 }
-      )
-    }
-
-    // Check if the invite is for the current user
-    if (invite.invitedEmail !== user.email) {
-      return NextResponse.json(
-        { error: 'This invite is not for you' },
-        { status: 403 }
-      )
-    }
-
-    // Check if invite is still pending
-    if (invite.status !== 'pending') {
-      return NextResponse.json(
-        { error: 'This invite has already been processed' },
-        { status: 400 }
-      )
-    }
-
-    // Add user to group and update invite status
-    const [member] = await prisma.$transaction([
-      prisma.groupMember.create({
-        data: {
-          userId: user.id,
-          groupId: invite.groupId,
-        },
-        include: {
-          group: true,
-        },
-      }),
-      prisma.groupInvite.update({
-        where: { id: inviteId },
-        data: { status: 'accepted' },
-      }),
-    ])
+    const group = await inviteService.acceptInvite(user.id, user.email!, inviteId)
 
     return NextResponse.json({
       message: 'Invite accepted successfully',
-      group: member.group,
+      group,
     })
   } catch (error) {
     console.error('Accept invite error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    let status = 500
+    if (message === 'Invite not found') status = 404
+    if (message === 'This invite is not for you') status = 403
+    if (message === 'This invite has already been processed') status = 400
+    return NextResponse.json({ error: message }, { status })
   }
 }

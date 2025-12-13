@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
+import { userService } from "@/services/user.service";
 
 // GET /api/user - Get current user info
 export async function GET() {
@@ -9,12 +10,13 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    return NextResponse.json({ user });
+    const userData = await userService.getUserById(user.id);
+
+    return NextResponse.json({ user: userData });
   } catch (error) {
     console.error("Error fetching user:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = message === "User not found" ? 404 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

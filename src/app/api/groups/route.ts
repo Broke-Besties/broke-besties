@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
+import { groupService } from '@/services/group.service'
 
 // Create a new group
 export async function POST(request: NextRequest) {
@@ -16,31 +16,7 @@ export async function POST(request: NextRequest) {
 
     const { name } = await request.json()
 
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Group name is required' },
-        { status: 400 }
-      )
-    }
-
-    // Create group and add creator as member
-    const group = await prisma.group.create({
-      data: {
-        name,
-        members: {
-          create: {
-            userId: user.id,
-          },
-        },
-      },
-      include: {
-        members: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    })
+    const group = await groupService.createGroup(user.id, name)
 
     return NextResponse.json({
       message: 'Group created successfully',
@@ -48,9 +24,11 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Create group error:', error)
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    const status = error instanceof Error && error.message === 'Group name is required' ? 400 : 500
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: message },
+      { status }
     )
   }
 }
@@ -67,27 +45,7 @@ export async function GET() {
       )
     }
 
-    const groups = await prisma.group.findMany({
-      where: {
-        members: {
-          some: {
-            userId: user.id,
-          },
-        },
-      },
-      include: {
-        members: {
-          include: {
-            user: true,
-          },
-        },
-        _count: {
-          select: {
-            members: true,
-          },
-        },
-      },
-    })
+    const groups = await groupService.getUserGroups(user.id)
 
     return NextResponse.json({ groups })
   } catch (error) {
