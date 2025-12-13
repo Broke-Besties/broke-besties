@@ -2,8 +2,12 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getUser } from "@/lib/supabase";
+import { LogoutButton } from "./logout-button";
 
-export function SiteHeader({ className }: { className?: string }) {
+export async function SiteHeader({ className }: { className?: string }) {
+  const user = await getUser();
+
   return (
     <header className={cn("sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur", className)}>
       <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4">
@@ -26,12 +30,21 @@ export function SiteHeader({ className }: { className?: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Log in</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/signup">Sign up</Link>
-          </Button>
+          {user ? (
+            <>
+              <span className="text-sm text-muted-foreground">{user.email}</span>
+              <LogoutButton />
+            </>
+          ) : (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">Log in</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/signup">Sign up</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </header>
