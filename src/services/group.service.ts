@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { prisma } from "@/lib/prisma";
 
 export class GroupService {
   /**
@@ -6,7 +6,7 @@ export class GroupService {
    */
   async createGroup(userId: string, name: string) {
     if (!name) {
-      throw new Error('Group name is required')
+      throw new Error("Group name is required");
     }
 
     const group = await prisma.group.create({
@@ -25,9 +25,9 @@ export class GroupService {
           },
         },
       },
-    })
+    });
 
-    return group
+    return group;
   }
 
   /**
@@ -54,30 +54,25 @@ export class GroupService {
           },
         },
       },
-    })
+    });
 
-    return groups
+    return groups;
   }
 
   /**
    * Get a specific group by ID
    */
   async getGroupById(groupId: number, userId: string) {
-    // Check if user is a member of the group
-    const membership = await prisma.groupMember.findFirst({
+    // Fetch the group ONLY if the user is a member (single query).
+    const group = await prisma.group.findFirst({
       where: {
-        groupId,
-        userId,
+        id: groupId,
+        members: {
+          some: {
+            userId,
+          },
+        },
       },
-    })
-
-    if (!membership) {
-      throw new Error('You are not a member of this group')
-    }
-
-    // Get group details with members and invites
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
       include: {
         members: {
           include: {
@@ -86,20 +81,21 @@ export class GroupService {
         },
         invites: {
           where: {
-            status: 'pending',
+            status: "pending",
           },
           include: {
             sender: true,
           },
         },
       },
-    })
+    });
 
     if (!group) {
-      throw new Error('Group not found')
+      // Either the group doesn't exist or the user isn't a member.
+      throw new Error("Group not found or you are not a member of this group");
     }
 
-    return group
+    return group;
   }
 
   /**
@@ -111,10 +107,10 @@ export class GroupService {
         groupId,
         userId,
       },
-    })
+    });
 
-    return !!membership
+    return !!membership;
   }
 }
 
-export const groupService = new GroupService()
+export const groupService = new GroupService();
