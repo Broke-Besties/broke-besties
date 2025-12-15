@@ -6,38 +6,35 @@ export class ReceiptService {
   /**
    * Upload receipt image to Supabase storage and parse it with AI
    */
-  async uploadAndParseReceipt(file: File, debtId: number, userId: string) {
+  async uploadAndParseReceipt(file: File, groupId: number, userId: string) {
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Verify debt exists and user has access to it
-    const debt = await prisma.debt.findFirst({
+    // Verify group exists and user is a member
+    const groupMember = await prisma.groupMember.findFirst({
       where: {
-        id: debtId,
-        OR: [{ lenderId: userId }, { borrowerId: userId }],
+        groupId,
+        userId,
       },
     });
 
-    if (!debt) {
-      throw new Error("Debt not found or access denied");
+    if (!groupMember) {
+      throw new Error("Group not found or access denied");
     }
 
     // Create receipt record first to get the ID
     const receipt = await prisma.receipt.create({
       data: {
-        debtId,
+        groupId,
       },
     });
 
     try {
-      // Get file extension
-      const extension = file.name.split(".").pop() || "jpg";
-      const storagePath = `${receipt.id}.${extension}`;
+      const storagePath = `group/${groupId}/receipts/${receipt.id}`;
 
-      // Upload to Supabase storage using receipt ID
       const { error: uploadError } = await supabase.storage
         .from("receipts")
         .upload(storagePath, file, {
@@ -46,12 +43,10 @@ export class ReceiptService {
         });
 
       if (uploadError) {
-        // Clean up receipt record if upload fails
         await prisma.receipt.delete({ where: { id: receipt.id } });
         throw new Error(`Failed to upload receipt: ${uploadError.message}`);
       }
 
-      // Get signed URL (valid for 1 hour)
       const { data: signedUrlData, error: signedUrlError } =
         await supabase.storage
           .from("receipts")
@@ -61,7 +56,6 @@ export class ReceiptService {
         throw new Error(`Failed to get signed URL: ${signedUrlError?.message}`);
       }
 
-      // Parse receipt with AI agent
       const result = await agent.invoke({
         imageUrl: signedUrlData.signedUrl,
       });
@@ -70,7 +64,6 @@ export class ReceiptService {
         throw new Error(result.error);
       }
 
-      // Update receipt with parsed text
       const updatedReceipt = await prisma.receipt.update({
         where: { id: receipt.id },
         data: { rawText: result.rawText },
@@ -82,7 +75,6 @@ export class ReceiptService {
         rawText: updatedReceipt.rawText,
       };
     } catch (error) {
-      // Clean up on any error
       await prisma.receipt.delete({ where: { id: receipt.id } }).catch(() => {});
       throw error;
     }
@@ -95,12 +87,13 @@ export class ReceiptService {
     const receipt = await prisma.receipt.findFirst({
       where: {
         id: receiptId,
-        debt: {
-          OR: [{ lenderId: userId }, { borrowerId: userId }],
-        },
       },
       include: {
-        debt: true,
+        group: {
+          include: {
+            members: true,
+          },
+        },
       },
     });
 
@@ -108,27 +101,32 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
+    const isMember = receipt.group.members.some(m => m.userId === userId);
+    if (!isMember) {
+      throw new Error("Access denied");
+    }
+
     return receipt;
   }
 
   /**
-   * Get all receipts for a debt
+   * Get all receipts for a group
    */
-  async getDebtReceipts(debtId: number, userId: string) {
-    // Verify user has access to the debt
-    const debt = await prisma.debt.findFirst({
+  async getGroupReceipts(groupId: number, userId: string) {
+    // Verify user is a member of the group
+    const groupMember = await prisma.groupMember.findFirst({
       where: {
-        id: debtId,
-        OR: [{ lenderId: userId }, { borrowerId: userId }],
+        groupId,
+        userId,
       },
     });
 
-    if (!debt) {
-      throw new Error("Debt not found or access denied");
+    if (!groupMember) {
+      throw new Error("Group not found or access denied");
     }
 
     return prisma.receipt.findMany({
-      where: { debtId },
+      where: { groupId },
       orderBy: { createdAt: "desc" },
     });
   }
@@ -137,7 +135,7 @@ export class ReceiptService {
    * Delete receipt from storage and database
    */
   async deleteReceipt(receiptId: string, userId: string) {
-    await this.getReceiptById(receiptId, userId);
+    const receipt = await this.getReceiptById(receiptId, userId);
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -145,11 +143,8 @@ export class ReceiptService {
     );
 
     // Find the file in storage (try common extensions)
-    const extensions = ["jpg", "jpeg", "png", "webp"];
-    for (const ext of extensions) {
-      const storagePath = `${receiptId}.${ext}`;
-      await supabase.storage.from("receipts").remove([storagePath]);
-    }
+    const storagePath = `group/${receipt.groupId}/receipts/${receiptId}`;
+    await supabase.storage.from("receipts").remove([storagePath]);
 
     // Delete from database
     await prisma.receipt.delete({

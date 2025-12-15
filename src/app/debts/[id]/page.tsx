@@ -24,7 +24,7 @@ export default async function DebtDetailPage({
 
   try {
     const debt = await debtService.getDebtById(debtId, user.id);
-    const receipts = await receiptService.getDebtReceipts(debtId, user.id);
+    const receipts = await receiptService.getGroupReceipts(debt.groupId, user.id);
 
     return (
       <DebtDetailClient
@@ -34,7 +34,7 @@ export default async function DebtDetailPage({
       />
     );
   } catch (error) {
-
+    console.error("Error fetching debt:", error);
     redirect("/dashboard");
   }
 }

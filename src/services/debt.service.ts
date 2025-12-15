@@ -5,7 +5,7 @@ type CreateDebtParams = {
   description?: string | null
   lenderId: string
   borrowerId: string
-  groupId?: number | null
+  groupId: number
 }
 
 type UpdateDebtParams = {
@@ -36,6 +36,10 @@ export class DebtService {
       throw new Error('Borrower ID is required')
     }
 
+    if (!groupId) {
+      throw new Error('Group ID is required')
+    }
+
     // Prevent creating a debt to yourself
     if (borrowerId === lenderId) {
       throw new Error('Cannot create a debt to yourself')
@@ -50,25 +54,23 @@ export class DebtService {
       throw new Error('Borrower not found')
     }
 
-    // If groupId is provided, verify the group exists and both users are members
-    if (groupId) {
-      const group = await prisma.group.findUnique({
-        where: { id: groupId },
-        include: {
-          members: {
-            select: { userId: true },
-          },
+    // Verify the group exists and both users are members
+    const group = await prisma.group.findUnique({
+      where: { id: groupId },
+      include: {
+        members: {
+          select: { userId: true },
         },
-      })
+      },
+    })
 
-      if (!group) {
-        throw new Error('Group not found')
-      }
+    if (!group) {
+      throw new Error('Group not found')
+    }
 
-      const memberIds = group.members.map((m) => m.userId)
-      if (!memberIds.includes(lenderId) || !memberIds.includes(borrowerId)) {
-        throw new Error('Both lender and borrower must be group members')
-      }
+    const memberIds = group.members.map((m) => m.userId)
+    if (!memberIds.includes(lenderId) || !memberIds.includes(borrowerId)) {
+      throw new Error('Both lender and borrower must be group members')
     }
 
     // Create the debt
@@ -78,7 +80,7 @@ export class DebtService {
         description: description || null,
         lenderId,
         borrowerId,
-        groupId: groupId || null,
+        groupId,
         status: 'pending',
       },
       include: {

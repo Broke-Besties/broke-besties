@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const debtIdStr = formData.get("debtId") as string;
+    const groupIdStr = formData.get("groupId") as string;
 
     if (!file) {
       return NextResponse.json(
@@ -21,17 +21,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!debtIdStr) {
+    if (!groupIdStr) {
       return NextResponse.json(
-        { error: "debtId is required" },
+        { error: "groupId is required" },
         { status: 400 }
       );
     }
 
-    const debtId = parseInt(debtIdStr, 10);
-    if (isNaN(debtId)) {
+    const groupId = parseInt(groupIdStr, 10);
+    if (isNaN(groupId)) {
       return NextResponse.json(
-        { error: "Invalid debtId" },
+        { error: "Invalid groupId" },
         { status: 400 }
       );
     }
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     const result = await receiptService.uploadAndParseReceipt(
       file,
-      debtId,
+      groupId,
       user.id
     );
 

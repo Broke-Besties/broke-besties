@@ -36,7 +36,7 @@ type Debt = {
 
 type Receipt = {
   id: string;
-  debtId: number;
+  groupId: number;
   rawText: string | null;
   createdAt: Date | string;
 };
@@ -97,7 +97,7 @@ export default function DebtDetailClient({
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("debtId", debt.id.toString());
+      formData.append("groupId", debt.group!.id.toString());
 
       const response = await fetch("/api/receipts/upload", {
         method: "POST",
@@ -278,7 +278,7 @@ export default function DebtDetailClient({
           <CardHeader>
             <CardTitle>Receipts ({receipts.length})</CardTitle>
             <CardDescription>
-              All uploaded receipts for this debt
+              All uploaded receipts for this group
             </CardDescription>
           </CardHeader>
           <CardContent>
