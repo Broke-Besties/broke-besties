@@ -6,7 +6,12 @@ export class ReceiptService {
   /**
    * Upload receipt image to Supabase storage and parse it with AI
    */
-  async uploadAndParseReceipt(file: File, groupId: number, userId: string) {
+  async uploadAndParseReceipt(
+    file: File,
+    groupId: number,
+    userId: string,
+    debtId?: number
+  ) {
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,6 +73,14 @@ export class ReceiptService {
         where: { id: receipt.id },
         data: { rawText: result.rawText },
       });
+
+      // If debtId is provided, link the receipt to the debt
+      if (debtId) {
+        await prisma.debt.update({
+          where: { id: debtId },
+          data: { receiptId: receipt.id },
+        });
+      }
 
       return {
         id: updatedReceipt.id,

@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const groupIdStr = formData.get("groupId") as string;
+    const debtIdStr = formData.get("debtId") as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -36,6 +37,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Optional debtId
+    let debtId: number | undefined;
+    if (debtIdStr) {
+      debtId = parseInt(debtIdStr, 10);
+      if (isNaN(debtId)) {
+        return NextResponse.json(
+          { error: "Invalid debtId" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate file type
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
@@ -57,7 +70,8 @@ export async function POST(request: NextRequest) {
     const result = await receiptService.uploadAndParseReceipt(
       file,
       groupId,
-      user.id
+      user.id,
+      debtId
     );
 
     return NextResponse.json({

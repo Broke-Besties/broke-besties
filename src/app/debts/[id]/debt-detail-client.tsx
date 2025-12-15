@@ -19,6 +19,7 @@ type Debt = {
   amount: number;
   description: string | null;
   status: string;
+  receiptId: string | null;
   createdAt: Date | string;
   lender: {
     id: string;
@@ -31,6 +32,10 @@ type Debt = {
   group: {
     id: number;
     name: string;
+  } | null;
+  receipt?: {
+    id: string;
+    rawText: string | null;
   } | null;
 };
 
@@ -98,6 +103,7 @@ export default function DebtDetailClient({
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("groupId", debt.group!.id.toString());
+      formData.append("debtId", debt.id.toString());
 
       const response = await fetch("/api/receipts/upload", {
         method: "POST",
@@ -213,6 +219,22 @@ export default function DebtDetailClient({
               {new Date(debt.createdAt).toLocaleDateString()}
             </p>
           </div>
+          {debt.receipt && (
+            <div>
+              <Label className="text-muted-foreground">Linked Receipt</Label>
+              <div className="mt-1 rounded-md border bg-muted/50 p-3">
+                <div className="text-xs text-muted-foreground">
+                  Receipt ID: {debt.receipt.id.substring(0, 8)}...
+                </div>
+                {debt.receipt.rawText && (
+                  <pre className="mt-2 whitespace-pre-wrap text-xs">
+                    {debt.receipt.rawText.substring(0, 100)}
+                    {debt.receipt.rawText.length > 100 ? "..." : ""}
+                  </pre>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -223,7 +245,7 @@ export default function DebtDetailClient({
           <CardHeader>
             <CardTitle>Upload receipt</CardTitle>
             <CardDescription>
-              Upload a receipt image to extract text with AI
+              Upload a receipt for this debt (will be linked automatically)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
