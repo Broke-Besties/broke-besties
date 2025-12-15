@@ -8,7 +8,7 @@ const AgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
   groupId: Annotation<number>,
   imageUrl: Annotation<string | undefined>,
-  extractedText: Annotation<string | undefined>,
+  description: Annotation<string | undefined>,
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;

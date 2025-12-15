@@ -13,14 +13,12 @@ export async function mainLLMNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
   // Build context-aware system message
-  let contextMessage = "You are a receipt processing assistant. ";
+  let contextMessage = "You are a debt creation assistant. You are either given a receipt image or description of a debt. You need to create a debt record based on the information provided. ";
 
-  if (state.extractedText) {
-    contextMessage += `The receipt text has already been extracted: "${state.extractedText}". Use this text to help the user.`;
-  } else if (state.imageUrl) {
+  if (state.imageUrl) {
     contextMessage += `A receipt image is available at: ${state.imageUrl}. If you need to read the receipt, use the extract_receipt_text tool with this URL.`;
-  } else {
-    contextMessage += "No receipt data is currently available.";
+  } else if (state.description) {
+    contextMessage += `A description of a debt is available: ${state.description}.`;
   }
 
   const messagesWithContext = [
