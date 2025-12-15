@@ -12,14 +12,9 @@ datasource db {
   provider = "postgresql"
 }
         
-
-generator erd {
-  provider = "prisma-erd-generator"
-  output   = "./prisma/ERD.svg" // png/pdf also supported
-}
-
 model User {
   id             String        @id @default(cuid())
+  name           String
   email          String        @unique
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -38,6 +33,7 @@ model Group {
   members   GroupMember[]
   invites   GroupInvite[]
   debts     Debt[]
+  receipts  Receipt[]
 }
 
 model GroupMember {
@@ -72,21 +68,37 @@ model GroupInvite {
 }
 
 model Debt {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   amount      Float
   description String?
-  status      String   @default("pending")
+  status      String    @default("pending")
   lenderId    String
   borrowerId  String
-  groupId     Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  groupId     Int
+  receiptId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  lender      User     @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
-  borrower    User     @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lender      User      @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower    User      @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  receipt     Receipt?  @relation("DebtReceipt", fields: [receiptId], references: [id], onDelete: SetNull)
 
   @@index([lenderId])
   @@index([borrowerId])
+  @@index([groupId])
+  @@index([receiptId])
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  groupId   Int
+  rawText   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  debts     Debt[]   @relation("DebtReceipt")
+
   @@index([groupId])
 }

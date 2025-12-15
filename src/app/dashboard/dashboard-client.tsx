@@ -6,12 +6,8 @@ import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { createDebt, updateDebtStatus, searchUserByEmail } from './actions'
+import { updateDebtStatus } from './actions'
 
 type Debt = {
   id: number
@@ -49,50 +45,7 @@ export default function DashboardPageClient({
 }: DashboardPageClientProps) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts)
   const [error, setError] = useState('')
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [formData, setFormData] = useState({
-    amount: '',
-    description: '',
-    borrowerEmail: '',
-  })
   const router = useRouter()
-
-  const handleCreateDebt = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setCreating(true)
-    setError('')
-
-    try {
-      // First, find the user by email
-      const userResult = await searchUserByEmail(formData.borrowerEmail)
-
-      if (!userResult.success || !userResult.user) {
-        setError(userResult.error || 'User not found')
-        setCreating(false)
-        return
-      }
-
-      const result = await createDebt({
-        amount: parseFloat(formData.amount),
-        description: formData.description || undefined,
-        borrowerId: userResult.user.id,
-      })
-
-      if (!result.success) {
-        setError(result.error || 'Failed to create debt')
-        return
-      }
-
-      setShowCreateModal(false)
-      setFormData({ amount: '', description: '', borrowerEmail: '' })
-      router.refresh()
-    } catch (err) {
-      setError('An error occurred while creating the debt')
-    } finally {
-      setCreating(false)
-    }
-  }
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
     // Store the old status in case we need to revert
@@ -148,10 +101,9 @@ export default function DashboardPageClient({
           <p className="text-sm text-muted-foreground">Manage your debts and loans.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => router.push('/groups')}>
+          <Button onClick={() => router.push('/groups')}>
             View groups
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>Create debt</Button>
         </div>
       </div>
 
@@ -186,7 +138,8 @@ export default function DashboardPageClient({
               lendingDebts.map((debt) => (
                 <div
                   key={debt.id}
-                  className="rounded-lg border bg-background p-4 shadow-sm"
+                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() => router.push(`/debts/${debt.id}`)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -221,6 +174,7 @@ export default function DashboardPageClient({
                     <select
                       value={debt.status}
                       onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
                       className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="pending">Pending</option>
@@ -258,7 +212,8 @@ export default function DashboardPageClient({
               borrowingDebts.map((debt) => (
                 <div
                   key={debt.id}
-                  className="rounded-lg border bg-background p-4 shadow-sm"
+                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() => router.push(`/debts/${debt.id}`)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -293,6 +248,7 @@ export default function DashboardPageClient({
                     <select
                       value={debt.status}
                       onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
                       className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="pending">Pending</option>
@@ -306,71 +262,6 @@ export default function DashboardPageClient({
           </CardContent>
         </Card>
       </div>
-
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create new debt</DialogTitle>
-            </DialogHeader>
-            <div className="px-6 pb-6">
-              <form onSubmit={handleCreateDebt} className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="borrowerEmail">Borrower email</Label>
-                  <Input
-                    id="borrowerEmail"
-                    type="email"
-                    required
-                    value={formData.borrowerEmail}
-                    onChange={(e) => setFormData({ ...formData, borrowerEmail: e.target.value })}
-                    placeholder="borrower@example.com"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="amount">Amount ($)</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description (optional)</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={3}
-                    placeholder="What is this debt for?"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setShowCreateModal(false)
-                      setFormData({ amount: '', description: '', borrowerEmail: '' })
-                      setError('')
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={creating}>
-                    {creating ? 'Creating…' : 'Create debt'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </div>
-          </DialogContent>
-        </div>
-      )}
     </div>
   )
 }
