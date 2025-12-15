@@ -1,98 +1,157 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, TextInput, View } from 'react-native';
+import Constants from 'expo-constants';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { styles } from '@/styles/login';
 
-export default function HomeScreen() {
+const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl ?? 'http://localhost:3000';
+
+type ButtonProps = {
+  children: string;
+  variant?: 'primary' | 'outline';
+  onPress?: () => void;
+  disabled?: boolean;
+};
+
+function Button({ children, variant = 'primary', onPress, disabled }: ButtonProps) {
+  const tint = useThemeColor({}, 'tint');
+  const background = useThemeColor({}, 'background');
+  const text = useThemeColor({}, 'text');
+
+  const isPrimary = variant === 'primary';
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.button,
+        {
+          backgroundColor: isPrimary ? tint : background,
+          borderColor: isPrimary ? tint : text,
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}
+    >
+      <ThemedText style={[styles.buttonText, { color: isPrimary ? background : text }]}>
+        {children}
+      </ThemedText>
+    </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
+export default function HomeScreen() {
+  const iconColor = useThemeColor({}, 'icon');
+  const textColor = useThemeColor({}, 'text');
+  const borderColor = useThemeColor({}, 'icon');
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin() {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Login failed');
+        return;
+      }
+
+      Alert.alert('Success', `Welcome back, ${data.user.email}!`);
+    } catch (error) {
+      Alert.alert('Error', 'Could not connect to server');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSignup() {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Signup failed');
+        return;
+      }
+
+      Alert.alert('Success', `Check your email (${data.user.email}) to confirm your account!`);
+    } catch (error) {
+      Alert.alert('Error', 'Could not connect to server');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ThemedView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.hero}>
+          <ThemedText type="title" style={styles.headline}>
+            Welcome back
+          </ThemedText>
+          <ThemedText style={[styles.subheadline, { color: iconColor }]}>
+            Sign in to manage your shared expenses
+          </ThemedText>
+        </View>
+
+        <View style={styles.form}>
+          <TextInput
+            style={[styles.input, { borderColor, color: textColor }]}
+            placeholder="Email"
+            placeholderTextColor={iconColor}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TextInput
+            style={[styles.input, { borderColor, color: textColor }]}
+            placeholder="Password"
+            placeholderTextColor={iconColor}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          <View style={styles.buttons}>
+            <Button onPress={handleLogin} disabled={loading}>
+              {loading ? 'Loading...' : 'Log in'}
+            </Button>
+            <Button variant="outline" onPress={handleSignup} disabled={loading}>
+              Create account
+            </Button>
+          </View>
+        </View>
+      </View>
+    </ThemedView>
+  );
+}
+
