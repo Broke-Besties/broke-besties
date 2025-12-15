@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+        
+model User {
+  id             String        @id @default(cuid())
+  name           String
+  email          String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  members        GroupMember[]
+  sentInvites    GroupInvite[] @relation("InviteSender")
+  receivedInvites GroupInvite[] @relation("InviteReceiver")
+  lentDebts      Debt[]        @relation("Lender")
+  borrowedDebts  Debt[]        @relation("Borrower")
+}
+
+model Group {
+  id        Int           @id @default(autoincrement())
+  name      String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  members   GroupMember[]
+  invites   GroupInvite[]
+  debts     Debt[]
+  receipts  Receipt[]
+}
+
+model GroupMember {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  groupId   Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model GroupInvite {
+  id         Int      @id @default(autoincrement())
+  groupId    Int
+  invitedBy  String
+  invitedEmail String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender     User     @relation("InviteSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+  receiver   User?    @relation("InviteReceiver", fields: [invitedEmail], references: [email], onDelete: Cascade)
+
+  @@unique([groupId, invitedEmail])
+  @@index([invitedEmail])
+  @@index([groupId])
+}
+
+model Debt {
+  id          Int       @id @default(autoincrement())
+  amount      Float
+  description String?
+  status      String    @default("pending")
+  lenderId    String
+  borrowerId  String
+  groupId     Int
+  receiptId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  lender      User      @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower    User      @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  receipt     Receipt?  @relation("DebtReceipt", fields: [receiptId], references: [id], onDelete: SetNull)
+
+  @@index([lenderId])
+  @@index([borrowerId])
+  @@index([groupId])
+  @@index([receiptId])
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  groupId   Int
+  rawText   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  debts     Debt[]   @relation("DebtReceipt")
+
+  @@index([groupId])
+}
