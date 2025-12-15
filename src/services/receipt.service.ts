@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { agent } from "@/agents/graph";
 import { prisma } from "@/lib/prisma";
+import { HumanMessage } from "@langchain/core/messages";
 
 export class ReceiptService {
   /**
@@ -62,16 +63,26 @@ export class ReceiptService {
       }
 
       const result = await agent.invoke({
+        groupId,
         imageUrl: signedUrlData.signedUrl,
+        messages: [
+          new HumanMessage("Please extract all information from the receipt."),
+        ],
       });
 
-      if (result.error) {
-        throw new Error(result.error);
-      }
+      // Extract text from the tool message in the conversation
+      const toolMessage = result.messages.find(
+        (msg: any) => msg.constructor.name === "ToolMessage"
+      );
+      const extractedText = toolMessage
+        ? typeof toolMessage.content === "string"
+          ? toolMessage.content
+          : JSON.stringify(toolMessage.content)
+        : "";
 
       const updatedReceipt = await prisma.receipt.update({
         where: { id: receipt.id },
-        data: { rawText: result.rawText },
+        data: { rawText: extractedText },
       });
 
       // If debtId is provided, link the receipt to the debt
@@ -85,7 +96,7 @@ export class ReceiptService {
       return {
         id: updatedReceipt.id,
         signedUrl: signedUrlData.signedUrl,
-        rawText: updatedReceipt.rawText,
+        rawText: extractedText,
       };
     } catch (error) {
       await prisma.receipt.delete({ where: { id: receipt.id } }).catch(() => {});
