@@ -12,12 +12,6 @@ datasource db {
   provider = "postgresql"
 }
         
-
-generator erd {
-  provider = "prisma-erd-generator"
-  output   = "./prisma/ERD.svg" // png/pdf also supported
-}
-
 model User {
   id             String        @id @default(cuid())
   name           String
@@ -73,21 +67,34 @@ model GroupInvite {
 }
 
 model Debt {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   amount      Float
   description String?
-  status      String   @default("pending")
+  status      String    @default("pending")
   lenderId    String
   borrowerId  String
   groupId     Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  lender      User     @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
-  borrower    User     @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lender      User      @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower    User      @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group       Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  receipts    Receipt[]
 
   @@index([lenderId])
   @@index([borrowerId])
   @@index([groupId])
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  debtId    Int
+  rawText   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  debt      Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  @@index([debtId])
 }

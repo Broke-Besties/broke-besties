@@ -186,7 +186,8 @@ export default function DashboardPageClient({
               lendingDebts.map((debt) => (
                 <div
                   key={debt.id}
-                  className="rounded-lg border bg-background p-4 shadow-sm"
+                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() => router.push(`/debts/${debt.id}`)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -221,6 +222,7 @@ export default function DashboardPageClient({
                     <select
                       value={debt.status}
                       onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
                       className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="pending">Pending</option>
@@ -258,7 +260,8 @@ export default function DashboardPageClient({
               borrowingDebts.map((debt) => (
                 <div
                   key={debt.id}
-                  className="rounded-lg border bg-background p-4 shadow-sm"
+                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() => router.push(`/debts/${debt.id}`)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -293,6 +296,7 @@ export default function DashboardPageClient({
                     <select
                       value={debt.status}
                       onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
                       className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="pending">Pending</option>
