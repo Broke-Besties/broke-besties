@@ -1,11 +1,19 @@
-import { START, END, StateGraph, MessagesAnnotation, Annotation } from "@langchain/langgraph";
+import {
+  START,
+  END,
+  StateGraph,
+  MessagesAnnotation,
+  Annotation,
+} from "@langchain/langgraph";
 import { mainLLMNode } from "./MainLLMNode";
 import { extractReceiptTextTool } from "./ReceiptNode";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { BaseMessage } from "@langchain/core/messages";
+import { createDebt } from "./CreateDebtNode";
 
 const AgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
+  userId: Annotation<string>,
   groupId: Annotation<number>,
   imageUrl: Annotation<string | undefined>,
   description: Annotation<string | undefined>,
@@ -13,7 +21,7 @@ const AgentStateAnnotation = Annotation.Root({
 
 export type AgentState = typeof AgentStateAnnotation.State;
 
-const toolNode = new ToolNode([extractReceiptTextTool]);
+const toolNode = new ToolNode([extractReceiptTextTool, createDebt]);
 
 function shouldContinue(state: AgentState): "tools" | typeof END {
   const lastMessage = state.messages[state.messages.length - 1] as BaseMessage;
@@ -36,4 +44,3 @@ export const agent = new StateGraph(AgentStateAnnotation)
   .addConditionalEdges("agent", shouldContinue)
   .addEdge("tools", "agent")
   .compile();
-
