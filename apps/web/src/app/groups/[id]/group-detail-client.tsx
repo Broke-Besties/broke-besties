@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Sparkles } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -202,6 +203,10 @@ export default function GroupDetailPageClient({
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setShowDebtModal(true)}>
               Create debt
+            </Button>
+            <Button variant="secondary" onClick={() => router.push(`/ai?group=${groupId}`)}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Create with AI
             </Button>
             <Button onClick={() => setShowInviteModal(true)}>
               Invite member

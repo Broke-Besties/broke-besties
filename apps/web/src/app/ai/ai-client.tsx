@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -12,17 +13,54 @@ type Message = {
   id?: string
 }
 
+type Group = {
+  id: number
+  name: string
+}
+
 type AIPageClientProps = {
   user: any
 }
 
 export default function AIPageClient({ user }: AIPageClientProps) {
+  const searchParams = useSearchParams()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [groupId, setGroupId] = useState('')
+  const [groups, setGroups] = useState<Group[]>([])
+  const [isLoadingGroups, setIsLoadingGroups] = useState(true)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  // Fetch user's groups on mount
+  useEffect(() => {
+    async function fetchGroups() {
+      try {
+        const response = await fetch('/api/groups')
+        if (!response.ok) {
+          throw new Error('Failed to fetch groups')
+        }
+        const data = await response.json()
+        setGroups(data.groups)
+
+        // Check if group is specified in URL params
+        const groupParam = searchParams.get('group')
+        if (groupParam) {
+          setGroupId(groupParam)
+        } else if (data.groups.length > 0) {
+          // Auto-select first group if no param and groups available
+          setGroupId(data.groups[0].id.toString())
+        }
+      } catch (err) {
+        console.error('Error fetching groups:', err)
+        setError('Failed to load groups')
+      } finally {
+        setIsLoadingGroups(false)
+      }
+    }
+    fetchGroups()
+  }, [searchParams])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -104,13 +142,21 @@ export default function AIPageClient({ user }: AIPageClientProps) {
             Chat with the LangGraph agent to manage debts and receipts
           </CardDescription>
           <div className="flex gap-2 mt-2">
-            <Input
-              type="number"
-              placeholder="Group ID (required)"
+            <select
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
-              className="max-w-xs"
-            />
+              disabled={isLoadingGroups}
+              className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 max-w-xs"
+            >
+              <option value="" disabled>
+                {isLoadingGroups ? 'Loading groups...' : 'Select a group'}
+              </option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col h-[calc(100%-8rem)]">
