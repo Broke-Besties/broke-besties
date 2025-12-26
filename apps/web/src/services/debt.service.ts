@@ -16,7 +16,7 @@ type UpdateDebtParams = {
 
 type GetDebtsFilters = {
   type?: 'lending' | 'borrowing' | null
-  groupId?: number | null
+  groupId?: string | null
   status?: string | null
 }
 

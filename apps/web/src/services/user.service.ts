@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { User } from '@prisma/client'
 
 export class UserService {
   /**
@@ -35,6 +36,14 @@ export class UserService {
     if (!user) {
       throw new Error('User not found')
     }
+
+    return user
+  }
+  async updateUser(userId: string, data: Partial<User>) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data,
+    })
 
     return user
   }
