@@ -6,10 +6,10 @@ import {
   Annotation,
 } from "@langchain/langgraph";
 import { mainLLMNode } from "./MainLLMNode";
-import { extractReceiptTextTool } from "./ReceiptNode";
+import { extractReceiptTextTool } from "./ReceiptTool";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { BaseMessage } from "@langchain/core/messages";
-import { createDebt } from "./CreateDebtNode";
+import { createDebt, readDebtsFromGroup } from "./DebtTools";
 
 const AgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
@@ -21,7 +21,11 @@ const AgentStateAnnotation = Annotation.Root({
 
 export type AgentState = typeof AgentStateAnnotation.State;
 
-const toolNode = new ToolNode([extractReceiptTextTool, createDebt]);
+const toolNode = new ToolNode([
+  extractReceiptTextTool,
+  createDebt,
+  readDebtsFromGroup,
+]);
 
 function shouldContinue(state: AgentState): "tools" | typeof END {
   const lastMessage = state.messages[state.messages.length - 1] as BaseMessage;

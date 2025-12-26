@@ -1,14 +1,14 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { SystemMessage } from "@langchain/core/messages";
 import { AgentState } from "./graph";
-import { extractReceiptTextTool } from "./ReceiptNode";
-import { createDebt } from "./CreateDebtNode";
+import { extractReceiptTextTool } from "./ReceiptTool";
+import { createDebt, readDebtsFromGroup } from "./DebtTools";
 
 const model = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
   apiKey: process.env.GOOGLE_API_KEY,
   temperature: 0,
-}).bindTools([extractReceiptTextTool, createDebt]);
+}).bindTools([extractReceiptTextTool, createDebt, readDebtsFromGroup]);
 
 export async function mainLLMNode(
   state: AgentState
@@ -22,6 +22,7 @@ IMPORTANT RULES:
 3. Only use tools when the user explicitly wants to:
    - Process a receipt image (use extract_receipt_text tool)
    - Create a debt record (use create_debt tool)
+   - Read debts from a group (use read_debts_from_group tool)
 4. After completing a task, summarize what you did and STOP. Do not ask follow-up questions or continue the conversation unless the user asks.
 
 AVAILABLE CONTEXT:
