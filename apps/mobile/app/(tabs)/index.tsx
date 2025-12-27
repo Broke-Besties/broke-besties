@@ -232,19 +232,12 @@ function DashboardContent() {
                         <Badge
                           variant="outline"
                           className={cn(
-                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10',
-                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10',
-                            debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10',
+                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700',
+                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+                            debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
                           )}
                         >
-                          <Text className={cn(
-                            'text-xs font-medium',
-                            debt.status === 'pending' && 'text-yellow-700',
-                            debt.status === 'paid' && 'text-emerald-700',
-                            debt.status === 'not_paying' && 'text-rose-700',
-                          )}>
-                            {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                          </Text>
+                          {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
                         </Badge>
 
                         <View className="h-9 w-32 rounded-md border bg-background">
@@ -322,19 +315,12 @@ function DashboardContent() {
                         <Badge
                           variant="outline"
                           className={cn(
-                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10',
-                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10',
-                            debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10',
+                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700',
+                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+                            debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
                           )}
                         >
-                          <Text className={cn(
-                            'text-xs font-medium',
-                            debt.status === 'pending' && 'text-yellow-700',
-                            debt.status === 'paid' && 'text-emerald-700',
-                            debt.status === 'not_paying' && 'text-rose-700',
-                          )}>
-                            {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                          </Text>
+                          {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
                         </Badge>
 
                         <View className="h-9 w-32 rounded-md border bg-background">

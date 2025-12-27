@@ -139,7 +139,7 @@ export default function GroupsScreen() {
             {inviteCount > 0 && (
               <View className="absolute -top-2 -right-2">
                 <Badge variant="destructive">
-                  <Text className="text-xs">{inviteCount}</Text>
+                  {inviteCount}
                 </Badge>
               </View>
             )}

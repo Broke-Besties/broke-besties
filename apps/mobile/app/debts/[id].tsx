@@ -169,7 +169,7 @@ export default function DebtDetailScreen() {
               </CardDescription>
             </View>
             <Badge variant="outline" className={getStatusColor(debt.status)}>
-              <Text className="text-xs">{getStatusLabel(debt.status)}</Text>
+              {getStatusLabel(debt.status)}
             </Badge>
           </View>
         </CardHeader>

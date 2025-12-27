@@ -283,8 +283,8 @@ export default function GroupDetailScreen() {
                   <CardTitle>Members</CardTitle>
                   <CardDescription>{group.members.length} total</CardDescription>
                 </View>
-                <Badge variant="secondary">
-                  <Text>{group.members.length}</Text>
+                <Badge variant="secondary" className="text-xs">
+                  {group.members.length}
                 </Badge>
               </View>
             </CardHeader>
@@ -306,8 +306,8 @@ export default function GroupDetailScreen() {
                   <CardTitle>Pending invites</CardTitle>
                   <CardDescription>{group.invites.length} outstanding</CardDescription>
                 </View>
-                <Badge variant="secondary">
-                  <Text>{group.invites.length}</Text>
+                <Badge variant="secondary" className="text-xs">
+                  {group.invites.length}
                 </Badge>
               </View>
             </CardHeader>
@@ -327,7 +327,7 @@ export default function GroupDetailScreen() {
                         </Text>
                       </View>
                       <Badge variant="outline" className={getStatusColor('pending')}>
-                        <Text className="text-xs">Pending</Text>
+                        Pending
                       </Badge>
                     </View>
                   </View>
@@ -345,8 +345,8 @@ export default function GroupDetailScreen() {
                 <CardTitle>Group debts</CardTitle>
                 <CardDescription>{debts.length} total</CardDescription>
               </View>
-              <Badge variant="secondary">
-                <Text>{debts.length}</Text>
+              <Badge variant="secondary" className="text-xs">
+                {debts.length}
               </Badge>
             </View>
           </CardHeader>
@@ -395,8 +395,8 @@ export default function GroupDetailScreen() {
                     <Separator />
 
                     <View className="flex-row items-center justify-between gap-3 mt-3">
-                      <Badge variant="outline" className={getStatusColor(debt.status)}>
-                        <Text className="text-xs">{getStatusLabel(debt.status)}</Text>
+                      <Badge variant="outline" className={cn('text-xs', getStatusColor(debt.status))}>
+                        {getStatusLabel(debt.status)}
                       </Badge>
 
                       <View className="border border-border rounded-md overflow-hidden bg-background">

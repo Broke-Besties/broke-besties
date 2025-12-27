@@ -164,10 +164,8 @@ export default function InvitesScreen() {
                     </CardDescription>
                   </View>
                   <Badge variant="secondary">
-                    <Text className="text-xs">
-                      {invite.group._count.members}{' '}
-                      {invite.group._count.members === 1 ? 'member' : 'members'}
-                    </Text>
+                    {invite.group._count.members}{' '}
+                    {invite.group._count.members === 1 ? 'member' : 'members'}
                   </Badge>
                 </View>
               </CardHeader>
