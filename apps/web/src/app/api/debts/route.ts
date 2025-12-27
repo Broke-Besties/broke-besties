@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const user = await getUser();
-    if (!user) {
+  if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

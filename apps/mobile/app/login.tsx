@@ -1,85 +1,46 @@
 import { useState } from 'react';
-import { Alert, Platform, Pressable, TextInput, View } from 'react-native';
-import Constants from 'expo-constants';
+import { Alert, Platform, Pressable, View, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
-
-const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl;
-
-type ButtonProps = {
-  children: string;
-  variant?: 'primary' | 'outline';
-  onPress?: () => void;
-  disabled?: boolean;
-};
-
-function Button({ children, variant = 'primary', onPress, disabled }: ButtonProps) {
-  const tint = useThemeColor({}, 'tint');
-  const background = useThemeColor({}, 'background');
-  const text = useThemeColor({}, 'text');
-
-  const isPrimary = variant === 'primary';
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      className="items-center px-5 py-3.5 rounded-[10px] border"
-      style={{
-        backgroundColor: isPrimary ? tint : background,
-        borderColor: isPrimary ? tint : text,
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      <ThemedText className="text-base font-semibold" style={{ color: isPrimary ? background : text }}>
-        {children}
-      </ThemedText>
-    </Pressable>
-  );
-}
 
 export default function LoginScreen() {
-  const iconColor = useThemeColor({}, 'icon');
-  const textColor = useThemeColor({}, 'text');
-  const borderColor = useThemeColor({}, 'icon');
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleLogin() {
     if (!email || !password) {
+      setError('Please enter email and password');
       Alert.alert('Error', 'Please enter email and password');
-      return;
-    }
-    if (!API_BASE_URL) {
-      Alert.alert(
-        'Error',
-        'API base URL is not configured. Set API_BASE_URL (or EXPO_PUBLIC_API_BASE_URL) in apps/mobile/.env and restart Expo.'
-      );
       return;
     }
 
     setLoading(true);
+    setError('');
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Error', data.error || 'Login failed');
+      if (error) {
+        setError(error.message);
+        Alert.alert('Error', error.message);
         return;
       }
 
-      Alert.alert('Success', `Welcome back, ${data.user.email}!`);
+      router.replace('/');
     } catch (error) {
-      Alert.alert('Error', 'Could not connect to server');
+      const errorMessage = 'Could not connect to server';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -87,107 +48,120 @@ export default function LoginScreen() {
 
   async function handleSignup() {
     if (!email || !password) {
+      setError('Please enter email and password');
       Alert.alert('Error', 'Please enter email and password');
-      return;
-    }
-    if (!API_BASE_URL) {
-      Alert.alert(
-        'Error',
-        'API base URL is not configured. Set API_BASE_URL (or EXPO_PUBLIC_API_BASE_URL) in apps/mobile/.env and restart Expo.'
-      );
       return;
     }
 
     setLoading(true);
+    setError('');
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Error', data.error || 'Signup failed');
+      if (error) {
+        setError(error.message);
+        Alert.alert('Error', error.message);
         return;
       }
 
-      Alert.alert('Success', `Check your email (${data.user.email}) to confirm your account!`);
+      Alert.alert('Success', `Check your email (${email}) to confirm your account!`);
+      router.replace('/');
     } catch (error) {
-      Alert.alert('Error', 'Could not connect to server');
+      const errorMessage = 'Could not connect to server';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <ThemedView className="flex-1">
-      <View className="flex-1 p-6 justify-center gap-8">
-        <Pressable onPress={() => router.back()} className="absolute top-[60px] left-6">
-          <ThemedText style={{ color: iconColor }}>← Back</ThemedText>
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-6">
+      <View className="flex-1 justify-center gap-8">
+        {/* Back Button */}
+        <Pressable onPress={() => router.back()} className="absolute top-[60px] left-0">
+          <ThemedText className="text-sm text-primary">← Back</ThemedText>
         </Pressable>
 
-        <View className="gap-3">
+        {/* Header */}
+        <View className="gap-3 mt-20">
           <ThemedText type="title" className="text-[32px] leading-[38px] tracking-tight">
             Welcome back
           </ThemedText>
-          <ThemedText className="text-base leading-6" style={{ color: iconColor }}>
+          <ThemedText className="text-base leading-6 text-muted-foreground">
             Sign in to manage your shared expenses
           </ThemedText>
         </View>
 
-        <View className="gap-3">
-          <TextInput
-            className="border rounded-[10px] px-4"
-            style={{
-              borderColor,
-              color: textColor,
-              height: 52,
-              fontSize: 16,
-              lineHeight: 20,
-              paddingVertical: 0,
-              ...(Platform.OS === 'android'
-                ? { textAlignVertical: 'center' as const, includeFontPadding: false }
-                : null),
-            }}
-            placeholder="Email"
-            placeholderTextColor={iconColor}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextInput
-            className="border rounded-[10px] px-4"
-            style={{
-              borderColor,
-              color: textColor,
-              height: 52,
-              fontSize: 16,
-              lineHeight: 20,
-              paddingVertical: 0,
-              ...(Platform.OS === 'android'
-                ? { textAlignVertical: 'center' as const, includeFontPadding: false }
-                : null),
-            }}
-            placeholder="Password"
-            placeholderTextColor={iconColor}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-          <View className="gap-3 mt-1">
-            <Button onPress={handleLogin} disabled={loading}>
-              {loading ? 'Loading...' : 'Log in'}
-            </Button>
-            <Button variant="outline" onPress={handleSignup} disabled={loading}>
-              Create account
-            </Button>
-          </View>
+        {/* Login Form Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in to your account</CardTitle>
+            <CardDescription>
+              Enter your credentials to continue
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            {/* Error Message */}
+            {error && (
+              <View className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+                <ThemedText className="text-sm text-destructive">{error}</ThemedText>
+              </View>
+            )}
+
+            {/* Email Field */}
+            <View className="gap-2">
+              <Label>Email</Label>
+              <Input
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+            </View>
+
+            {/* Password Field */}
+            <View className="gap-2">
+              <Label>Password</Label>
+              <Input
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                secureTextEntry
+                editable={!loading}
+              />
+            </View>
+
+            {/* Action Buttons */}
+            <View className="gap-3 mt-2">
+              <Button onPress={handleLogin} disabled={loading}>
+                <ThemedText className="text-base font-semibold">
+                  {loading ? 'Loading...' : 'Log in'}
+                </ThemedText>
+              </Button>
+              <Button variant="outline" onPress={handleSignup} disabled={loading}>
+                <ThemedText className="text-base font-semibold">
+                  Create account
+                </ThemedText>
+              </Button>
+            </View>
+          </CardContent>
+        </Card>
+
+        {/* Alternative Options */}
+        <View className="items-center gap-2">
+          <ThemedText className="text-xs text-muted-foreground text-center">
+            By continuing, you agree to our Terms of Service and Privacy Policy
+          </ThemedText>
         </View>
       </View>
-    </ThemedView>
+    </ScrollView>
   );
 }

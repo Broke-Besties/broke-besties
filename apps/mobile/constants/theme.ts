@@ -1,29 +1,65 @@
 /**
  * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * The app now uses a semantic color system matching the web app design tokens.
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
+// Semantic colors matching web app design system
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
+    background: 'hsl(0, 0%, 100%)',
+    foreground: 'hsl(222.2, 84%, 4.9%)',
+    card: 'hsl(0, 0%, 100%)',
+    cardForeground: 'hsl(222.2, 84%, 4.9%)',
+    popover: 'hsl(0, 0%, 100%)',
+    popoverForeground: 'hsl(222.2, 84%, 4.9%)',
+    primary: 'hsl(222.2, 47.4%, 11.2%)',
+    primaryForeground: 'hsl(210, 40%, 98%)',
+    secondary: 'hsl(210, 40%, 96.1%)',
+    secondaryForeground: 'hsl(222.2, 47.4%, 11.2%)',
+    muted: 'hsl(210, 40%, 96.1%)',
+    mutedForeground: 'hsl(215.4, 16.3%, 46.9%)',
+    accent: 'hsl(210, 40%, 96.1%)',
+    accentForeground: 'hsl(222.2, 47.4%, 11.2%)',
+    destructive: 'hsl(0, 84.2%, 60.2%)',
+    destructiveForeground: 'hsl(210, 40%, 98%)',
+    border: 'hsl(214.3, 31.8%, 91.4%)',
+    input: 'hsl(214.3, 31.8%, 91.4%)',
+    ring: 'hsl(222.2, 84%, 4.9%)',
+    // Legacy compatibility
+    text: 'hsl(222.2, 84%, 4.9%)',
+    tint: 'hsl(222.2, 47.4%, 11.2%)',
     icon: '#687076',
     tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    tabIconSelected: 'hsl(222.2, 47.4%, 11.2%)',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
+    background: 'hsl(222.2, 84%, 4.9%)',
+    foreground: 'hsl(210, 40%, 98%)',
+    card: 'hsl(222.2, 84%, 4.9%)',
+    cardForeground: 'hsl(210, 40%, 98%)',
+    popover: 'hsl(222.2, 84%, 4.9%)',
+    popoverForeground: 'hsl(210, 40%, 98%)',
+    primary: 'hsl(210, 40%, 98%)',
+    primaryForeground: 'hsl(222.2, 47.4%, 11.2%)',
+    secondary: 'hsl(217.2, 32.6%, 17.5%)',
+    secondaryForeground: 'hsl(210, 40%, 98%)',
+    muted: 'hsl(217.2, 32.6%, 17.5%)',
+    mutedForeground: 'hsl(215, 20.2%, 65.1%)',
+    accent: 'hsl(217.2, 32.6%, 17.5%)',
+    accentForeground: 'hsl(210, 40%, 98%)',
+    destructive: 'hsl(0, 62.8%, 30.6%)',
+    destructiveForeground: 'hsl(210, 40%, 98%)',
+    border: 'hsl(217.2, 32.6%, 17.5%)',
+    input: 'hsl(217.2, 32.6%, 17.5%)',
+    ring: 'hsl(212.7, 26.8%, 83.9%)',
+    // Legacy compatibility
+    text: 'hsl(210, 40%, 98%)',
+    tint: 'hsl(210, 40%, 98%)',
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    tabIconSelected: 'hsl(210, 40%, 98%)',
   },
 };
 
