@@ -31,7 +31,7 @@ export async function createDebt(data: {
   amount: number
   description?: string
   borrowerId: string
-  groupId?: number
+  groupId: number
 }) {
   const user = await getUser()
 
