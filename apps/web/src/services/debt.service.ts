@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { DebtPolicy } from '@/policies'
 
 type CreateDebtParams = {
   amount: number
@@ -54,22 +55,8 @@ export class DebtService {
       throw new Error('Borrower not found')
     }
 
-    // Verify the group exists and both users are members
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
-      include: {
-        members: {
-          select: { userId: true },
-        },
-      },
-    })
-
-    if (!group) {
-      throw new Error('Group not found')
-    }
-
-    const memberIds = group.members.map((m) => m.userId)
-    if (!memberIds.includes(lenderId) || !memberIds.includes(borrowerId)) {
+    // Verify both users are members of the group (policy handles the check)
+    if (!await DebtPolicy.areBothGroupMembers(lenderId, borrowerId, groupId)) {
       throw new Error('Both lender and borrower must be group members')
     }
 
@@ -169,8 +156,8 @@ export class DebtService {
       throw new Error('Debt not found')
     }
 
-    // Verify user is either lender or borrower
-    if (debt.lenderId !== userId && debt.borrowerId !== userId) {
+    // Check permission using the fetched debt object
+    if (!DebtPolicy.canView(userId, debt)) {
       throw new Error("You don't have permission to view this debt")
     }
 
@@ -183,20 +170,10 @@ export class DebtService {
   async updateDebt(debtId: number, userId: string, updates: UpdateDebtParams) {
     const { amount, description, status } = updates
 
-    // Fetch existing debt
-    const existingDebt = await prisma.debt.findUnique({
-      where: { id: debtId },
-    })
+    // Check permission and get debt info (policy handles the fetch)
+    const { canUpdate, isLender, debt: existingDebt } = await DebtPolicy.canUpdate(userId, debtId)
 
-    if (!existingDebt) {
-      throw new Error('Debt not found')
-    }
-
-    // Verify user is either lender or borrower
-    const isLender = existingDebt.lenderId === userId
-    const isBorrower = existingDebt.borrowerId === userId
-
-    if (!isLender && !isBorrower) {
+    if (!canUpdate || !existingDebt) {
       throw new Error("You don't have permission to update this debt")
     }
 
@@ -248,17 +225,8 @@ export class DebtService {
    * Delete a debt (only lender can delete)
    */
   async deleteDebt(debtId: number, userId: string) {
-    // Fetch existing debt
-    const existingDebt = await prisma.debt.findUnique({
-      where: { id: debtId },
-    })
-
-    if (!existingDebt) {
-      throw new Error('Debt not found')
-    }
-
-    // Only lender can delete the debt
-    if (existingDebt.lenderId !== userId) {
+    // Check if user can delete (policy handles the fetch)
+    if (!await DebtPolicy.canDelete(userId, debtId)) {
       throw new Error('Only the lender can delete this debt')
     }
 
@@ -267,5 +235,7 @@ export class DebtService {
     })
   }
 }
+
+
 
 export const debtService = new DebtService()

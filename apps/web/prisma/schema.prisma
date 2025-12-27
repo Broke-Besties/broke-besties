@@ -37,13 +37,19 @@ model Group {
   receipts  Receipt[]
 }
 
+enum GroupRole {
+  ADMIN
+  MEMBER
+}
+
 model GroupMember {
-  id        Int      @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
+  role      GroupRole  @default(MEMBER)
   userId    String
   groupId   Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
 
   @@unique([userId, groupId])
   @@index([userId])
