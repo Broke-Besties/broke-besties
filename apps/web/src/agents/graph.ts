@@ -10,6 +10,7 @@ import { extractReceiptTextTool } from "./ReceiptTool";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { BaseMessage } from "@langchain/core/messages";
 import { createDebt, readDebtsFromGroup } from "./DebtTools";
+import { listNamesInGroupTool } from "./UserTool";
 
 const AgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
@@ -25,6 +26,7 @@ const toolNode = new ToolNode([
   extractReceiptTextTool,
   createDebt,
   readDebtsFromGroup,
+  listNamesInGroupTool,
 ]);
 
 function shouldContinue(state: AgentState): "tools" | typeof END {
