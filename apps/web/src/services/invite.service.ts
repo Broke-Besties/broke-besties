@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import { InvitePolicy } from '@/policies'
+import { GroupRole } from '@prisma/client'
 
 export class InviteService {
   /**
@@ -9,43 +11,18 @@ export class InviteService {
       throw new Error('Group ID and invited email are required')
     }
 
-    // Check if user is a member of the group
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId,
-      },
-    })
-
-    if (!membership) {
+    // Check if user can create invites for this group
+    if (!await InvitePolicy.canCreate(userId, groupId)) {
       throw new Error('You are not a member of this group')
     }
 
     // Check if invite already exists
-    const existingInvite = await prisma.groupInvite.findUnique({
-      where: {
-        groupId_invitedEmail: {
-          groupId,
-          invitedEmail,
-        },
-      },
-    })
-
-    if (existingInvite) {
+    if (await InvitePolicy.inviteExists(groupId, invitedEmail)) {
       throw new Error('Invite already exists for this email')
     }
 
     // Check if user is already a member
-    const existingMember = await prisma.user.findUnique({
-      where: { email: invitedEmail },
-      include: {
-        members: {
-          where: { groupId },
-        },
-      },
-    })
-
-    if (existingMember && existingMember.members.length > 0) {
+    if (await InvitePolicy.isAlreadyMember(groupId, invitedEmail)) {
       throw new Error('User is already a member of this group')
     }
 
@@ -104,22 +81,21 @@ export class InviteService {
       throw new Error('Invite not found')
     }
 
-    // Check if the invite is for the current user
-    if (invite.invitedEmail !== userEmail) {
-      throw new Error('This invite is not for you')
-    }
-
-    // Check if invite is still pending
-    if (invite.status !== 'pending') {
+    // Check if user can accept this invite
+    if (!InvitePolicy.canAccept(userEmail, invite)) {
+      if (invite.invitedEmail !== userEmail) {
+        throw new Error('This invite is not for you')
+      }
       throw new Error('This invite has already been processed')
     }
 
-    // Add user to group and update invite status
+    // Add user to group as MEMBER and update invite status
     const [member] = await prisma.$transaction([
       prisma.groupMember.create({
         data: {
           userId,
           groupId: invite.groupId,
+          role: GroupRole.MEMBER,  // Invited users join as MEMBER
         },
         include: {
           group: true,
