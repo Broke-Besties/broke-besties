@@ -34,16 +34,28 @@ type User = {
   email: string
 }
 
+type Group = {
+  id: number
+  name: string
+  createdAt: Date | string
+  _count: {
+    members: number
+  }
+}
+
 type DashboardPageClientProps = {
   initialDebts: any[]
+  initialGroups: any[]
   currentUser: any
 }
 
 export default function DashboardPageClient({
   initialDebts,
+  initialGroups,
   currentUser,
 }: DashboardPageClientProps) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts)
+  const [groups] = useState<Group[]>(initialGroups)
   const [error, setError] = useState('')
   const router = useRouter()
 
@@ -99,11 +111,6 @@ export default function DashboardPageClient({
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Manage your debts and loans.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => router.push('/groups')}>
-            View groups
-          </Button>
         </div>
       </div>
 
@@ -261,6 +268,55 @@ export default function DashboardPageClient({
             )}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold tracking-tight">Your Groups</h2>
+            <p className="text-sm text-muted-foreground">Groups you're a member of</p>
+          </div>
+          <Button onClick={() => router.push('/groups')}>
+            View all
+          </Button>
+        </div>
+
+        {groups.length === 0 ? (
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle>No groups yet</CardTitle>
+              <CardDescription>
+                You haven&apos;t joined any groups. Create one to get started.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => router.push('/groups')}>
+                Go to groups
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {groups.map((group) => (
+              <Card
+                key={group.id}
+                className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+                onClick={() => router.push(`/groups/${group.id}`)}
+              >
+                <CardHeader>
+                  <CardTitle className="text-lg">{group.name}</CardTitle>
+                  <CardDescription>
+                    {group._count.members}{" "}
+                    {group._count.members === 1 ? "member" : "members"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Created {new Date(group.createdAt).toLocaleDateString()}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

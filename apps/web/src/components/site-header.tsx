@@ -29,12 +29,6 @@ export async function SiteHeader({ className }: { className?: string }) {
               Groups
             </Link>
             <Link
-              href="/dashboard"
-              className="rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground"
-            >
-              Dashboard
-            </Link>
-            <Link
               href="/invites"
               className="rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground"
             >
