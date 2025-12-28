@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { GroupPolicy } from "@/policies";
-import { GroupRole } from "@prisma/client";
 
 export class GroupService {
   /**
-   * Create a new group with the user as the initial ADMIN member
+   * Create a new group with the user as the initial member
    */
   async createGroup(userId: string, name: string) {
     if (!name) {
@@ -17,7 +16,6 @@ export class GroupService {
         members: {
           create: {
             userId,
-            role: GroupRole.ADMIN,  // Creator is ADMIN
           },
         },
       },

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { Group, GroupMember, GroupRole } from '@prisma/client'
+import { Group, GroupMember } from '@prisma/client'
 
 export class GroupPolicy {
   /**
@@ -36,41 +36,26 @@ export class GroupPolicy {
   }
 
   /**
-   * Check if user is an admin of a group
-   * Use this for admin-only operations
-   */
-  static async isAdmin(userId: string, groupId: number): Promise<boolean> {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        userId,
-        groupId,
-        role: GroupRole.ADMIN,
-      },
-    })
-    return !!membership
-  }
-
-  /**
-   * Check if user can invite others to a group (must be ADMIN)
+   * Check if user can invite others to a group (must be member)
    * Makes DB call for CREATE operation
    */
   static async canInvite(userId: string, groupId: number): Promise<boolean> {
-    return this.isAdmin(userId, groupId)
+    return this.isMember(userId, groupId)
   }
 
   /**
-   * Check if user can update a group (must be ADMIN)
+   * Check if user can update a group (must be member)
    * Makes DB call for UPDATE operation
    */
   static async canUpdate(userId: string, groupId: number): Promise<boolean> {
-    return this.isAdmin(userId, groupId)
+    return this.isMember(userId, groupId)
   }
 
   /**
-   * Check if user can delete a group (must be ADMIN)
+   * Check if user can delete a group (must be member)
    * Makes DB call for DELETE operation
    */
   static async canDelete(userId: string, groupId: number): Promise<boolean> {
-    return this.isAdmin(userId, groupId)
+    return this.isMember(userId, groupId)
   }
 }
