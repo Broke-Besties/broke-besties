@@ -11,7 +11,7 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const debts = await debtService.getUserDebts(user.id)
+  const debts = await debtService.getUserDebts(user.id, { status: 'pending' })
   const groups = await groupService.getUserGroups(user.id)
 
   return (
