@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { InvitePolicy } from '@/policies'
-import { GroupRole } from '@prisma/client'
 
 export class InviteService {
   /**
@@ -89,13 +88,12 @@ export class InviteService {
       throw new Error('This invite has already been processed')
     }
 
-    // Add user to group as MEMBER and update invite status
+    // Add user to group and update invite status
     const [member] = await prisma.$transaction([
       prisma.groupMember.create({
         data: {
           userId,
           groupId: invite.groupId,
-          role: GroupRole.MEMBER,  // Invited users join as MEMBER
         },
         include: {
           group: true,

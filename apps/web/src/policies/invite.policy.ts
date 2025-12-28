@@ -3,8 +3,7 @@ import { GroupInvite } from '@prisma/client'
 
 export class InvitePolicy {
   /**
-   * Check if user can create an invite for a group (must be member)
-   * This still requires a DB call since we check before fetching invite data
+   * Check if user can create an invite for a group (any member can invite)
    */
   static async canCreate(userId: string, groupId: number): Promise<boolean> {
     const membership = await prisma.groupMember.findFirst({
