@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Search } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,12 +12,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { createInvite, createDebt, updateDebtStatus, searchUserByEmail } from './actions'
+import { createInvite, createDebt, updateDebtStatus, searchGroupMembers } from './actions'
 
 type Member = {
   id: number
   user: {
     id: string
+    name: string
     email: string
   }
 }
@@ -55,11 +56,6 @@ type Group = {
   invites: Invite[]
 }
 
-type User = {
-  id: string
-  email: string
-}
-
 type GroupDetailPageClientProps = {
   initialGroup: any
   initialDebts: any[]
@@ -84,9 +80,39 @@ export default function GroupDetailPageClient({
   const [debtFormData, setDebtFormData] = useState({
     amount: '',
     description: '',
-    borrowerEmail: '',
+    borrowerId: '',
   })
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; email: string }>>([])
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [searching, setSearching] = useState(false)
   const router = useRouter()
+
+  // Debounced search for group members
+  useEffect(() => {
+    if (!searchQuery.trim() || !showDebtModal) {
+      setSearchResults([])
+      return
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const result = await searchGroupMembers(groupId, searchQuery)
+        if (result.success) {
+          // Filter out the current user from search results
+          const filteredMembers = result.members.filter((member) => member.id !== currentUser?.id)
+          setSearchResults(filteredMembers)
+        }
+      } catch (error) {
+        console.error('Search error:', error)
+      } finally {
+        setSearching(false)
+      }
+    }, 300) // 300ms debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery, showDebtModal, groupId, currentUser?.id])
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -117,11 +143,8 @@ export default function GroupDetailPageClient({
     setError('')
 
     try {
-      // First, find the user by email
-      const userResult = await searchUserByEmail(debtFormData.borrowerEmail)
-
-      if (!userResult.success || !userResult.user) {
-        setError(userResult.error || 'User not found')
+      if (!debtFormData.borrowerId) {
+        setError('Please select a borrower')
         setCreating(false)
         return
       }
@@ -129,7 +152,7 @@ export default function GroupDetailPageClient({
       const result = await createDebt({
         amount: parseFloat(debtFormData.amount),
         description: debtFormData.description || undefined,
-        borrowerId: userResult.user.id,
+        borrowerId: debtFormData.borrowerId,
         groupId,
       })
 
@@ -139,7 +162,9 @@ export default function GroupDetailPageClient({
       }
 
       setShowDebtModal(false)
-      setDebtFormData({ amount: '', description: '', borrowerEmail: '' })
+      setDebtFormData({ amount: '', description: '', borrowerId: '' })
+      setSearchQuery('')
+      setSelectedUser(null)
       router.refresh()
     } catch (err) {
       setError('An error occurred while creating the debt')
@@ -234,8 +259,8 @@ export default function GroupDetailPageClient({
             {group.members.map((member) => (
               <div key={member.id} className="flex items-center justify-between rounded-md border bg-background p-3">
                 <div className="min-w-0">
-                  <div className="truncate font-medium">{member.user.email}</div>
-                  <div className="text-xs text-muted-foreground">Member</div>
+                  <div className="truncate font-medium">{member.user.name}</div>
+                  <div className="text-xs text-muted-foreground">{member.user.email}</div>
                 </div>
               </div>
             ))}
@@ -398,16 +423,70 @@ export default function GroupDetailPageClient({
             <div className="px-6 pb-6">
               <form onSubmit={handleCreateDebt} className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="borrowerEmail">Borrower email (must be a group member)</Label>
-                  <Input
-                    id="borrowerEmail"
-                    type="email"
-                    required
-                    value={debtFormData.borrowerEmail}
-                    onChange={(e) => setDebtFormData({ ...debtFormData, borrowerEmail: e.target.value })}
-                    placeholder="borrower@example.com"
-                  />
+                  <Label htmlFor="borrowerSearch">Search for a group member</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="borrowerSearch"
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by name or email..."
+                      className="pl-9"
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  {selectedUser && (
+                    <div className="mt-2 rounded-md border bg-muted/50 p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{selectedUser.name}</div>
+                          <div className="text-sm text-muted-foreground">{selectedUser.email}</div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUser(null)
+                            setDebtFormData({ ...debtFormData, borrowerId: '' })
+                            setSearchQuery('')
+                          }}
+                        >
+                          Change
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!selectedUser && searchQuery && (
+                    <div className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-background">
+                      {searching ? (
+                        <div className="p-3 text-center text-sm text-muted-foreground">Searching...</div>
+                      ) : searchResults.length > 0 ? (
+                        searchResults.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedUser(user)
+                              setDebtFormData({ ...debtFormData, borrowerId: user.id })
+                              setSearchQuery('')
+                            }}
+                            className="w-full border-b p-3 text-left hover:bg-muted/50 last:border-b-0"
+                          >
+                            <div className="font-medium">{user.name}</div>
+                            <div className="text-sm text-muted-foreground">{user.email}</div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="p-3 text-center text-sm text-muted-foreground">No members found</div>
+                      )}
+                    </div>
+                  )}
                 </div>
+
                 <div className="grid gap-2">
                   <Label htmlFor="debtAmount">Amount ($)</Label>
                   <Input
@@ -437,13 +516,15 @@ export default function GroupDetailPageClient({
                     variant="secondary"
                     onClick={() => {
                       setShowDebtModal(false)
-                      setDebtFormData({ amount: '', description: '', borrowerEmail: '' })
+                      setDebtFormData({ amount: '', description: '', borrowerId: '' })
+                      setSearchQuery('')
+                      setSelectedUser(null)
                       setError('')
                     }}
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={creating}>
+                  <Button type="submit" disabled={creating || !debtFormData.borrowerId}>
                     {creating ? 'Creating…' : 'Create debt'}
                   </Button>
                 </DialogFooter>

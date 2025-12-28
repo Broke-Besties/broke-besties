@@ -4,6 +4,7 @@ import { getUser } from '@/lib/supabase'
 import { inviteService } from '@/services/invite.service'
 import { debtService } from '@/services/debt.service'
 import { userService } from '@/services/user.service'
+import { groupService } from '@/services/group.service'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -96,6 +97,26 @@ export async function searchUserByEmail(email: string) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'User not found',
+    }
+  }
+}
+
+export async function searchGroupMembers(groupId: number, query: string) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    const members = await groupService.searchGroupMembers(groupId, user.id, query)
+    return { success: true, members }
+  } catch (error) {
+    console.error('Search group members error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search members',
+      members: [],
     }
   }
 }

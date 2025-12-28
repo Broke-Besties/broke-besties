@@ -111,6 +111,53 @@ export class GroupService {
 
     return !!membership;
   }
+
+  /**
+   * Search members in a group by name or email
+   */
+  async searchGroupMembers(groupId: number, userId: string, query: string) {
+    // First verify the user is a member of the group
+    const isMember = await this.isUserMember(groupId, userId);
+
+    if (!isMember) {
+      throw new Error("You are not a member of this group");
+    }
+
+    // Search for members whose name or email matches the query
+    const members = await prisma.groupMember.findMany({
+      where: {
+        groupId,
+        user: {
+          OR: [
+            {
+              name: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+            {
+              email: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      take: 10, // Limit results to 10
+    });
+
+    return members.map((member) => member.user);
+  }
 }
 
 export const groupService = new GroupService();
