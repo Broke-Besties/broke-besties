@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { updateDebtStatus } from './actions'
+import { updateDebtStatus, updateTabStatus } from './actions'
 
 type Debt = {
   id: number
@@ -43,19 +43,31 @@ type Group = {
   }
 }
 
+type Tab = {
+  id: number
+  amount: number
+  description: string
+  personName: string
+  status: string
+  createdAt: Date | string
+}
+
 type DashboardPageClientProps = {
   initialDebts: any[]
   initialGroups: any[]
+  initialTabs: any[]
   currentUser: any
 }
 
 export default function DashboardPageClient({
   initialDebts,
   initialGroups,
+  initialTabs,
   currentUser,
 }: DashboardPageClientProps) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts)
   const [groups] = useState<Group[]>(initialGroups)
+  const [tabs, setTabs] = useState<Tab[]>(initialTabs)
   const [error, setError] = useState('')
   const router = useRouter()
 
@@ -98,8 +110,45 @@ export default function DashboardPageClient({
     }
   }
 
+  const handleUpdateTabStatus = async (tabId: number, newStatus: string) => {
+    const oldStatus = tabs.find(t => t.id === tabId)?.status
+
+    // Optimistically update the UI
+    setTabs(prevTabs =>
+      prevTabs.map(tab =>
+        tab.id === tabId ? { ...tab, status: newStatus } : tab
+      )
+    )
+
+    try {
+      const result = await updateTabStatus(tabId, newStatus)
+
+      if (!result.success) {
+        setError(result.error || 'Failed to update tab status')
+        if (oldStatus) {
+          setTabs(prevTabs =>
+            prevTabs.map(tab =>
+              tab.id === tabId ? { ...tab, status: oldStatus } : tab
+            )
+          )
+        }
+        return
+      }
+    } catch (err) {
+      setError('An error occurred while updating the tab status')
+      if (oldStatus) {
+        setTabs(prevTabs =>
+          prevTabs.map(tab =>
+            tab.id === tabId ? { ...tab, status: oldStatus } : tab
+          )
+        )
+      }
+    }
+  }
+
   const lendingDebts = debts.filter((debt) => debt.lender.id === currentUser?.id)
   const borrowingDebts = debts.filter((debt) => debt.borrower.id === currentUser?.id)
+  const pendingTabs = tabs.filter((tab) => tab.status === 'pending')
 
   const calculateTotal = (debtList: Debt[]) => {
     return debtList.reduce((sum, debt) => sum + debt.amount, 0)
@@ -268,6 +317,62 @@ export default function DashboardPageClient({
             )}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold tracking-tight">Your Tabs</h2>
+            <p className="text-sm text-muted-foreground">Money you owe outside the platform</p>
+          </div>
+          <Button onClick={() => router.push('/tabs')}>
+            View all
+          </Button>
+        </div>
+
+        {pendingTabs.length === 0 ? (
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle>No tabs yet</CardTitle>
+              <CardDescription>
+                Track what you owe to people outside the platform.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => router.push('/tabs')}>
+                Add a tab
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {pendingTabs.map((tab) => (
+              <Card key={tab.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-lg">{tab.personName}</CardTitle>
+                    <Badge variant="secondary">Pending</Badge>
+                  </div>
+                  <CardDescription className="text-xl font-semibold text-foreground">
+                    ${tab.amount.toFixed(2)}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">{tab.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Added {new Date(tab.createdAt).toLocaleDateString()}
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateTabStatus(tab.id, 'paid')}
+                  >
+                    Mark Paid
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
