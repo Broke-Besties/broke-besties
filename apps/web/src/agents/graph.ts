@@ -17,6 +17,7 @@ const AgentStateAnnotation = Annotation.Root({
   userId: Annotation<string>,
   groupId: Annotation<number>,
   imageUrl: Annotation<string | undefined>,
+  imageBase64: Annotation<string | undefined>,
   description: Annotation<string | undefined>,
 });
 
