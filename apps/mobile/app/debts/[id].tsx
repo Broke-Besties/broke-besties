@@ -15,14 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { apiClient } from '@/lib/api';
-import { Debt } from '@/lib/types';
-
-type Receipt = {
-  id: string;
-  groupId: number;
-  rawText: string | null;
-  createdAt: Date | string;
-};
+import { Debt, Receipt } from '@/lib/types';
 
 export default function DebtDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

@@ -88,7 +88,7 @@ function DashboardContent() {
       setDebts(Array.isArray(data) ? data : []);
       setError('');
     } catch (err: any) {
-      setError(err.message || 'Failed to load debts');
+      setError(err instanceof Error ? err.message : 'Failed to load debts');
       setDebts([]);
     } finally {
       setLoading(false);
@@ -104,9 +104,14 @@ function DashboardContent() {
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
     const oldStatus = debts.find(d => d.id === debtId)?.status;
 
+    if (newStatus !== 'pending' && newStatus !== 'paid' && newStatus !== 'not_paying') {
+      setError('Invalid status');
+      return;
+    }
+
     setDebts(prevDebts =>
       prevDebts.map(debt =>
-        debt.id === debtId ? { ...debt, status: newStatus as any } : debt
+        debt.id === debtId ? { ...debt, status: newStatus as 'pending' | 'paid' | 'not_paying' } : debt
       )
     );
 
@@ -124,7 +129,7 @@ function DashboardContent() {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred while updating the status');
+      setError(err instanceof Error ? err.message : 'An error occurred while updating the status');
       if (oldStatus) {
         setDebts(prevDebts =>
           prevDebts.map(debt =>

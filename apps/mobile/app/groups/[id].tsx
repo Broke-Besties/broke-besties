@@ -321,9 +321,9 @@ export default function GroupDetailScreen() {
                   <View key={invite.id} className="rounded-md border border-border bg-background p-3">
                     <View className="flex-row items-center justify-between">
                       <View className="flex-1 min-w-0">
-                        <Text className="font-medium text-foreground truncate">{invite.email}</Text>
+                        <Text className="font-medium text-foreground truncate">{invite.invitedEmail}</Text>
                         <Text className="text-xs text-muted-foreground">
-                          Invited by {invite.group.creator.email}
+                          Invited by {invite.sender?.name ?? invite.sender?.email ?? 'Unknown'}
                         </Text>
                       </View>
                       <Badge variant="outline" className={getStatusColor('pending')}>

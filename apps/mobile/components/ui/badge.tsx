@@ -30,6 +30,17 @@ export function Badge({
   className,
   ...props
 }: BadgeProps) {
+  const renderedChildren = React.Children.toArray(children).map((child, index) => {
+    if (typeof child === 'string' || typeof child === 'number') {
+      return (
+        <Text key={`badge-text-${index}`} className={cn('text-xs font-medium', textVariants[variant])}>
+          {child}
+        </Text>
+      );
+    }
+    return child;
+  });
+
   return (
     <View
       className={cn(
@@ -39,13 +50,7 @@ export function Badge({
       )}
       {...props}
     >
-      {typeof children === 'string' ? (
-        <Text className={cn('text-xs font-medium', textVariants[variant])}>
-          {children}
-        </Text>
-      ) : (
-        children
-      )}
+      {renderedChildren}
     </View>
   );
 }

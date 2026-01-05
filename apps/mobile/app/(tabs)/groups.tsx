@@ -3,12 +3,12 @@ import {
   View,
   Text,
   ScrollView,
-  Pressable,
+  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, Href } from 'expo-router';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -92,7 +92,12 @@ export default function GroupsScreen() {
   };
 
   const handleGroupPress = (groupId: number) => {
-    router.push(`/groups/${groupId}`);
+    console.log('=== GROUP CLICK DEBUG ===');
+    console.log('Group ID clicked:', groupId);
+    console.log('Group ID type:', typeof groupId);
+    console.log('Navigation path:', `/groups/${groupId}`);
+    console.log('========================');
+    router.push(`/groups/${groupId}` as Href);
   };
 
   if (!isAuthenticated) {
@@ -185,8 +190,12 @@ export default function GroupsScreen() {
         {!loading && groups.length > 0 && (
           <View className="gap-4">
             {groups.map((group) => (
-              <Pressable key={group.id} onPress={() => handleGroupPress(group.id)}>
-                <Card className="active:opacity-70">
+              <TouchableOpacity
+                key={group.id}
+                onPress={() => handleGroupPress(group.id)}
+                activeOpacity={0.7}
+              >
+                <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">{group.name}</CardTitle>
                     <CardDescription>
@@ -200,7 +209,7 @@ export default function GroupsScreen() {
                     </Text>
                   </CardContent>
                 </Card>
-              </Pressable>
+              </TouchableOpacity>
             ))}
           </View>
         )}

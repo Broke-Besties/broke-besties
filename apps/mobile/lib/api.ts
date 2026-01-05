@@ -50,11 +50,21 @@ export class ApiClient {
         headers,
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data: any = undefined;
+      try {
+        data = rawText ? JSON.parse(rawText) : undefined;
+      } catch {
+        data = rawText;
+      }
 
       if (!response.ok) {
+        const message =
+          typeof data === 'object' && data && 'error' in data
+            ? (data as any).error
+            : `HTTP ${response.status}: ${response.statusText}`;
         throw new ApiError(
-          data.error || `HTTP ${response.status}: ${response.statusText}`,
+          message,
           response.status,
           data
         );
@@ -97,7 +107,8 @@ export class ApiClient {
   }
 
   async getGroup(id: number) {
-    return this.request<any>(`/api/groups/${id}`);
+    const response = await this.request<{ group: any }>(`/api/groups/${id}`);
+    return response.group;
   }
 
   async createGroup(name: string) {
@@ -108,7 +119,9 @@ export class ApiClient {
   }
 
   async getGroupDebts(groupId: number) {
-    return this.request<any[]>(`/api/groups/${groupId}/debts`);
+    // Web API supports group filtering via /api/debts?groupId=...
+    const response = await this.request<{ debts: any[] }>(`/api/debts?groupId=${groupId}`);
+    return response.debts;
   }
 
   // Debts endpoints
@@ -151,13 +164,14 @@ export class ApiClient {
   async createInvite(groupId: number, email: string) {
     return this.request<any>('/api/invites', {
       method: 'POST',
-      body: JSON.stringify({ groupId, email }),
+      body: JSON.stringify({ groupId, invitedEmail: email }),
     });
   }
 
   async acceptInvite(id: number) {
-    return this.request<any>(`/api/invites/${id}/accept`, {
+    return this.request<any>('/api/invites/accept', {
       method: 'POST',
+      body: JSON.stringify({ inviteId: id }),
     });
   }
 

@@ -38,7 +38,7 @@ export default function InvitesScreen() {
       setInvites(data);
       setError('');
     } catch (err: any) {
-      setError(err.message || 'Failed to load invites');
+      setError(err instanceof Error ? err.message : 'Failed to load invites');
     } finally {
       setLoading(false);
     }
@@ -72,8 +72,9 @@ export default function InvitesScreen() {
         },
       ]);
     } catch (err: any) {
-      setError(err.message || 'Failed to accept invite');
-      Alert.alert('Error', err.message || 'Failed to accept invite');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to accept invite';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
       setProcessingId(null);
     }
@@ -111,7 +112,7 @@ export default function InvitesScreen() {
           Invitations
         </Text>
         <Text className="text-sm text-muted-foreground">
-          You have {invites.length} pending {invites.length === 1 ? 'invitation' : 'invitations'}.
+          You have {invites.length} pending {invites.length === 1 ? 'invitation' : 'invitations'}
         </Text>
       </View>
 
@@ -159,13 +160,13 @@ export default function InvitesScreen() {
                     <CardDescription>
                       Invited by{' '}
                       <Text className="font-medium text-foreground">
-                        {invite.group.creator.email}
+                        {invite.sender?.email || 'Unknown'}
                       </Text>
                     </CardDescription>
                   </View>
                   <Badge variant="secondary">
-                    {invite.group._count.members}{' '}
-                    {invite.group._count.members === 1 ? 'member' : 'members'}
+                    {invite.group.members?.length || 0}{' '}
+                    {(invite.group.members?.length || 0) === 1 ? 'member' : 'members'}
                   </Badge>
                 </View>
               </CardHeader>
