@@ -11,6 +11,7 @@ type Message = {
   role: 'user' | 'assistant' | 'system'
   content: string
   id?: string
+  imageUrl?: string
 }
 
 type Group = {
@@ -31,7 +32,11 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [groupId, setGroupId] = useState('')
   const [groups, setGroups] = useState<Group[]>([])
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
+  const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Fetch user's groups on mount
   useEffect(() => {
@@ -69,23 +74,140 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }, [messages])
 
+  // Handle paste events for images
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const file = item.getAsFile()
+          if (file) {
+            handleImageFile(file)
+          }
+          break
+        }
+      }
+    }
+
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [groupId])
+
+  const handleImageFile = (file: File) => {
+    if (!groupId) {
+      setError('Please select a group first')
+      return
+    }
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    if (!validTypes.includes(file.type)) {
+      setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+      return
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File too large. Maximum size is 10MB')
+      return
+    }
+
+    // Create a preview URL
+    const previewUrl = URL.createObjectURL(file)
+    setPendingImage({ url: previewUrl, file })
+    setError('')
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleImageFile(file)
+    }
+    // Reset the input so the same file can be selected again
+    e.target.value = ''
+  }
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const uploadImage = async (file: File): Promise<{ signedUrl: string; base64: string }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('groupId', groupId)
+
+    // Convert to base64 in parallel with upload
+    const [response, base64] = await Promise.all([
+      fetch('/api/receipts/upload', {
+        method: 'POST',
+        body: formData,
+      }),
+      fileToBase64(file),
+    ])
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to upload image')
+    }
+
+    const data = await response.json()
+    return { signedUrl: data.data.signedUrl, base64 }
+  }
+
+  const clearPendingImage = () => {
+    if (pendingImage) {
+      URL.revokeObjectURL(pendingImage.url)
+      setPendingImage(null)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!input.trim()) return
+    // Allow submit if there's text OR a pending image
+    if (!input.trim() && !pendingImage) return
     if (!groupId) {
-      setError('Please enter a Group ID')
+      setError('Please select a group first')
       return
+    }
+
+    let uploadedImageUrl: string | null = null
+    let uploadedImageBase64: string | null = null
+
+    // Upload pending image if there is one
+    if (pendingImage) {
+      setIsUploading(true)
+      try {
+        const result = await uploadImage(pendingImage.file)
+        uploadedImageUrl = result.signedUrl
+        uploadedImageBase64 = result.base64
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
+        setError(errorMessage)
+        setIsUploading(false)
+        return
+      }
+      setIsUploading(false)
     }
 
     const userMessage: Message = {
       role: 'user',
-      content: input.trim(),
+      content: input.trim() || 'Analyze this receipt',
       id: Date.now().toString(),
+      imageUrl: uploadedImageUrl || undefined,
     }
 
     setMessages(prev => [...prev, userMessage])
     setInput('')
+    clearPendingImage()
     setIsLoading(true)
     setError('')
 
@@ -104,6 +226,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         body: JSON.stringify({
           messages: langchainMessages,
           groupId: parseInt(groupId),
+          imageUrl: uploadedImageUrl,
+          imageBase64: uploadedImageBase64,
         }),
       })
 
@@ -186,6 +310,15 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                     <div className="text-sm font-semibold mb-1">
                       {message.role === 'user' ? 'You' : 'Agent'}
                     </div>
+                    {message.imageUrl && (
+                      <div className="mb-2">
+                        <img
+                          src={message.imageUrl}
+                          alt="Uploaded image"
+                          className="max-w-full max-h-64 rounded-md object-contain"
+                        />
+                      </div>
+                    )}
                     <div className="text-sm whitespace-pre-wrap">
                       {message.content}
                     </div>
@@ -209,16 +342,76 @@ export default function AIPageClient({ user }: AIPageClientProps) {
             </div>
           )}
 
+          {/* Pending image preview */}
+          {pendingImage && (
+            <div className="mb-4 p-3 bg-muted rounded-md">
+              <div className="flex items-start gap-3">
+                <img
+                  src={pendingImage.url}
+                  alt="Pending upload"
+                  className="max-w-32 max-h-32 rounded-md object-contain"
+                />
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Image ready to upload
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearPendingImage}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
           <form onSubmit={handleSubmit} className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || isUploading || !groupId}
+              title="Upload image"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+            </Button>
             <Input
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your message..."
-              disabled={isLoading || !groupId}
+              placeholder={pendingImage ? "Add a message (optional)..." : "Type your message or paste an image..."}
+              disabled={isLoading || isUploading || !groupId}
               className="flex-1"
             />
-            <Button type="submit" disabled={isLoading || !groupId}>
-              Send
+            <Button type="submit" disabled={isLoading || isUploading || !groupId || (!input.trim() && !pendingImage)}>
+              {isUploading ? 'Uploading...' : 'Send'}
             </Button>
           </form>
         </CardContent>

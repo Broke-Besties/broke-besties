@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { messages, groupId, imageUrl, description } = await request.json();
+    const { messages, groupId, imageUrl, imageBase64, description } = await request.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -27,6 +27,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log("[Agent Route] Invoking agent");
+    console.log("[Agent Route] Group ID:", groupId);
+    console.log("[Agent Route] Image URL present:", !!imageUrl);
+    console.log("[Agent Route] Image Base64 present:", !!imageBase64);
+    console.log("[Agent Route] Message count:", messages.length);
+
     // Invoke the agent with the provided state and recursion limit
     const result = await agent.invoke(
       {
@@ -34,6 +40,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         groupId: parseInt(groupId),
         imageUrl,
+        imageBase64,
         description,
       },
       {

@@ -1,9 +1,20 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { SystemMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, BaseMessage, isHumanMessage } from "@langchain/core/messages";
 import { AgentState } from "./graph";
 import { extractReceiptTextTool } from "./ReceiptTool";
 import { createDebt, readDebtsFromGroup } from "./DebtTools";
 import { listNamesInGroupTool } from "./UserTool";
+
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.statusText}`);
+  }
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const arrayBuffer = await response.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  return `data:${contentType};base64,${base64}`;
+}
 
 const model = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
@@ -14,6 +25,13 @@ const model = new ChatGoogleGenerativeAI({
 export async function mainLLMNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  console.log("[Agent LLM] === Starting LLM node ===");
+  console.log("[Agent LLM] Group ID:", state.groupId);
+  console.log("[Agent LLM] User ID:", state.userId);
+  console.log("[Agent LLM] Image URL present:", !!state.imageUrl);
+  console.log("[Agent LLM] Image Base64 present:", !!state.imageBase64);
+  console.log("[Agent LLM] Current message count:", state.messages.length);
+
   // Build context-aware system message
   let contextMessage = `You are a debt management assistant. Your purpose is to help users create and manage debt records, and process receipt images.
 
@@ -31,20 +49,54 @@ AVAILABLE CONTEXT:
 - User ID: ${state.userId}
 - Group ID: ${state.groupId}`;
 
-  if (state.imageUrl) {
-    contextMessage += `\n- Receipt image available at: ${state.imageUrl}`;
-  }
-
   if (state.description) {
     contextMessage += `\n- Debt description: ${state.description}`;
   }
 
+  // Process messages to inject image into the last human message if imageUrl is provided
+  let processedMessages: BaseMessage[] = [...state.messages];
+
+  // Use imageBase64 if available, otherwise fetch from imageUrl
+  const imageData = state.imageBase64 || (state.imageUrl ? await fetchImageAsBase64(state.imageUrl) : null);
+
+  if (imageData) {
+    // Find the last human message and add the image to it
+    const lastHumanIndex = processedMessages.findLastIndex(
+      (msg) => (msg as HumanMessage).type === "human"
+    );
+
+    if (lastHumanIndex !== -1) {
+      const lastHumanMsg = processedMessages[lastHumanIndex];
+      const textContent = typeof lastHumanMsg.content === "string"
+        ? lastHumanMsg.content
+        : "";
+
+      // Replace with multimodal message containing both text and image
+      processedMessages[lastHumanIndex] = new HumanMessage({
+        content: [
+          { type: "image_url", image_url: imageData },
+          { type: "text", text: textContent || "Please analyze this receipt image." },
+        ],
+      });
+    }
+  }
+
   const messagesWithContext = [
     new SystemMessage(contextMessage),
-    ...state.messages,
+    ...processedMessages,
   ];
 
+  console.log("[Agent LLM] Invoking model with", messagesWithContext.length, "messages");
+  console.log("[Agent LLM] Has image:", !!imageData);
+  if (imageData) {
+    console.log("[Agent LLM] Image data length:", imageData.length, "chars");
+  }
+
   const response = await model.invoke(messagesWithContext);
+
+  console.log("[Agent LLM] Response received");
+  console.log("[Agent LLM] Response type:", response.constructor.name);
+  console.log("[Agent LLM] Has tool calls:", !!(response as any).tool_calls?.length);
 
   return {
     messages: [response],
