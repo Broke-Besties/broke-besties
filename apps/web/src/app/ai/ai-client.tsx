@@ -12,6 +12,12 @@ type Message = {
   content: string
   id?: string
   imageUrl?: string
+  pendingAction?: {
+    toolCalls: Array<{
+      name: string
+      args: Record<string, unknown>
+    }>
+  }
 }
 
 type Group = {
@@ -34,6 +40,11 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState<{
+    toolCalls: Array<{ name: string; args: Record<string, unknown> }>
+  } | null>(null)
+  const [editedToolCalls, setEditedToolCalls] = useState<Array<{ name: string; args: Record<string, unknown> }>>([])
+  const [isEditingToolCalls, setIsEditingToolCalls] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -169,6 +180,75 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }
 
+  const handleApprove = async () => {
+    if (!pendingApproval) return
+
+    setIsLoading(true)
+    setError('')
+    setPendingApproval(null)
+    setIsEditingToolCalls(false)
+
+    try {
+      // Use edited tool calls if available, otherwise use original
+      const toolCallsToExecute = editedToolCalls.length > 0 ? editedToolCalls : pendingApproval.toolCalls
+
+      const langchainMessages = messages
+        .filter(msg => !msg.pendingAction)
+        .map(msg => ({
+          type: msg.role === 'user' ? 'human' : 'ai',
+          content: msg.content,
+        }))
+
+      const response = await fetch('/api/agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: langchainMessages,
+          groupId: parseInt(groupId),
+          executeApproved: true,
+          toolCallsOverride: toolCallsToExecute,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to execute action')
+      }
+
+      const data = await response.json()
+
+      const lastMessage = data.messages[data.messages.length - 1]
+
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: lastMessage.content || lastMessage.kwargs?.content || 'Action completed',
+        id: Date.now().toString(),
+      }
+
+      setMessages(prev => [...prev, assistantMessage])
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      setError(errorMessage)
+      console.error('Error:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEditToolCall = (index: number, field: string, value: string) => {
+    const calls = editedToolCalls.length > 0 ? [...editedToolCalls] : [...(pendingApproval?.toolCalls || [])]
+    calls[index] = {
+      ...calls[index],
+      args: {
+        ...calls[index].args,
+        [field]: field === 'amount' ? parseFloat(value) || 0 : value,
+      },
+    }
+    setEditedToolCalls(calls)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -177,6 +257,10 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     if (!groupId) {
       setError('Please select a group first')
       return
+    }
+
+    if (pendingApproval) {
+      setPendingApproval(null)
     }
 
     let uploadedImageUrl: string | null = null
@@ -238,16 +322,53 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
       const data = await response.json()
 
-      // Get the last message from the agent response
-      const lastMessage = data.messages[data.messages.length - 1]
+      // Check if there's a pending action that needs approval
+      if (data.pendingAction) {
+        setPendingApproval({ toolCalls: data.pendingAction.toolCalls })
+        setEditedToolCalls([])
+        setIsEditingToolCalls(false)
 
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: lastMessage.content || lastMessage.kwargs?.content || 'No response',
-        id: Date.now().toString(),
+        // Fetch group members to get emails
+        let emails: Record<string, string> = {}
+        try {
+          const res = await fetch(`/api/groups/${groupId}`)
+          if (res.ok) {
+            const { group } = await res.json()
+            emails = Object.fromEntries(
+              group.members.map((m: any) => [m.userId, m.user.email])
+            )
+          }
+        } catch (err) {
+          console.error('Failed to fetch members:', err)
+        }
+
+        const toolCallsDisplay = data.pendingAction.toolCalls
+          .map((tc: any, idx: number) => {
+            const from = tc.args.borrowerId === user.id ? 'You' : (emails[tc.args.borrowerId] || tc.args.borrowerId)
+            const to = tc.args.userId === user.id ? 'You' : (emails[tc.args.userId] || 'Unknown')
+            const label = data.pendingAction.toolCalls.length > 1 ? `Debt ${idx + 1}\n` : ''
+            return `${label}Amount: $${tc.args.amount}\nFrom: ${from}\nTo: ${to}\nDescription: ${tc.args.description || 'N/A'}`
+          })
+          .join('\n\n')
+
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `I'd like to create the following debt(s):\n\n${toolCallsDisplay}`,
+          id: Date.now().toString(),
+          pendingAction: data.pendingAction,
+        }])
+      } else {
+        const lastMessage = data.messages[data.messages.length - 1]
+
+        const assistantMessage: Message = {
+          role: 'assistant',
+          content: lastMessage.content || lastMessage.kwargs?.content || 'No response',
+          id: Date.now().toString(),
+        }
+
+        setMessages(prev => [...prev, assistantMessage])
+        setPendingApproval(null)
       }
-
-      setMessages(prev => [...prev, assistantMessage])
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
@@ -322,6 +443,55 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                     <div className="text-sm whitespace-pre-wrap">
                       {message.content}
                     </div>
+                    {message.pendingAction && pendingApproval && index === messages.length - 1 && (
+                      <div className="mt-3">
+                        {isEditingToolCalls ? (
+                          <div className="space-y-3">
+                            {(editedToolCalls.length > 0 ? editedToolCalls : pendingApproval.toolCalls).map((tc: any, tcIndex: number) => (
+                              <div key={tcIndex} className="p-3 bg-background/50 rounded border space-y-2">
+                                <div className="text-xs font-semibold mb-2">Debt {tcIndex + 1}</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-xs">Amount ($)</label>
+                                    <Input
+                                      type="number"
+                                      value={tc.args.amount}
+                                      onChange={(e) => handleEditToolCall(tcIndex, 'amount', e.target.value)}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs">Description</label>
+                                    <Input
+                                      value={tc.args.description || ''}
+                                      onChange={(e) => handleEditToolCall(tcIndex, 'description', e.target.value)}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleApprove} disabled={isLoading}>
+                                Save & Approve
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => setIsEditingToolCalls(false)}>
+                                Cancel Edit
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={handleApprove} disabled={isLoading}>
+                              Approve
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setIsEditingToolCalls(true)} disabled={isLoading}>
+                              Edit
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
