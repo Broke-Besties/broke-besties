@@ -20,7 +20,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
 
   const user = await getUser();
 
-  if (!user) {
+  if (!user || !user.email) {
     redirect("/login");
   }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sparkles } from 'lucide-react'
+import type { User } from '@supabase/supabase-js'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,7 +60,7 @@ type Group = {
 type GroupDetailPageClientProps = {
   initialGroup: Group
   initialDebts: Debt[]
-  currentUser: { id: string; email: string } | null
+  currentUser: User | null
   groupId: number
 }
 
