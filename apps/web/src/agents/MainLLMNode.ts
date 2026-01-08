@@ -1,8 +1,8 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { SystemMessage, HumanMessage, BaseMessage, isHumanMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, BaseMessage } from "@langchain/core/messages";
 import { AgentState } from "./graph";
 import { extractReceiptTextTool } from "./ReceiptTool";
-import { createDebt, readDebtsFromGroup } from "./DebtTools";
+import { readDebtsFromGroup } from "./DebtTools";
 import { listNamesInGroupTool } from "./UserTool";
 
 async function fetchImageAsBase64(url: string): Promise<string> {
@@ -20,7 +20,7 @@ const model = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
   apiKey: process.env.GOOGLE_API_KEY,
   temperature: 0,
-}).bindTools([extractReceiptTextTool, createDebt, readDebtsFromGroup, listNamesInGroupTool]);
+}).bindTools([extractReceiptTextTool, readDebtsFromGroup, listNamesInGroupTool]);
 
 export async function mainLLMNode(
   state: AgentState
@@ -40,10 +40,27 @@ IMPORTANT RULES:
 2. If the user asks something unrelated to debts or receipts, politely say you can only help with debt management and receipt processing, then STOP.
 3. Only use tools when the user explicitly wants to:
    - Process a receipt image (use extract_receipt_text tool)
-   - Create a debt record (use create_debt tool), if the user does not provide a description, ask for it. 
-   - If a user wants to create a debt with a specific person find the userId of the person, use the list_names_in_group tool to list all names in the group, then use the create_debt tool to create the debt. If you cannot find the user or the name is ambiguous, say so and stop.
    - Read debts from a group (use read_debts_from_group tool)
-4. After completing a task, summarize what you did and STOP. Do not ask follow-up questions or continue the conversation unless the user asks.
+   - Find user names in the group (use list_names_in_group tool)
+4. When the user wants to create debt(s), gather all necessary information:
+   - Who owes the money (borrower name)
+   - How much they owe (amount)
+   - Optional description
+   - Use list_names_in_group tool to find the borrower's user ID if needed
+5. Once you have all information to create debt(s), output ONLY a JSON object in this exact format:
+   {
+     "debtsReady": true,
+     "debts": [
+       {
+         "borrowerName": "John Doe",
+         "borrowerId": "user-id-here",
+         "amount": 25.50,
+         "description": "Lunch at cafe"
+       }
+     ]
+   }
+   Do NOT add any text before or after the JSON. ONLY output the JSON object.
+6. After completing any other task (not debt creation), summarize what you did and STOP.
 
 AVAILABLE CONTEXT:
 - User ID: ${state.userId}

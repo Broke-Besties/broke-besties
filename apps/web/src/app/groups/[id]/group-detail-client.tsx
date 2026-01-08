@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Search } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { createInvite, createDebt, updateDebtStatus, searchGroupMembers } from './actions'
+import { createInvite, createDebt, createDebts, updateDebtStatus } from './actions'
+import { DebtFormItem } from './debt-form-item'
 
 type Member = {
   id: number
@@ -57,9 +57,9 @@ type Group = {
 }
 
 type GroupDetailPageClientProps = {
-  initialGroup: any
-  initialDebts: any[]
-  currentUser: any
+  initialGroup: Group
+  initialDebts: Debt[]
+  currentUser: { id: string; email: string } | null
   groupId: number
 }
 
@@ -77,42 +77,19 @@ export default function GroupDetailPageClient({
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting, setInviting] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [debtFormData, setDebtFormData] = useState({
+  const [debtForms, setDebtForms] = useState([{
     amount: '',
     description: '',
     borrowerId: '',
-  })
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; email: string }>>([])
-  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; email: string } | null>(null)
-  const [searching, setSearching] = useState(false)
+    borrower: null as { id: string; name: string; email: string } | null,
+  }])
+  const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
   const router = useRouter()
 
-  // Debounced search for group members
+  // Sync debts state with initialDebts when it changes (after refresh)
   useEffect(() => {
-    if (!searchQuery.trim() || !showDebtModal) {
-      setSearchResults([])
-      return
-    }
-
-    const timeoutId = setTimeout(async () => {
-      setSearching(true)
-      try {
-        const result = await searchGroupMembers(groupId, searchQuery)
-        if (result.success) {
-          // Filter out the current user from search results
-          const filteredMembers = result.members.filter((member) => member.id !== currentUser?.id)
-          setSearchResults(filteredMembers)
-        }
-      } catch (error) {
-        console.error('Search error:', error)
-      } finally {
-        setSearching(false)
-      }
-    }, 300) // 300ms debounce
-
-    return () => clearTimeout(timeoutId)
-  }, [searchQuery, showDebtModal, groupId, currentUser?.id])
+    setDebts(initialDebts)
+  }, [initialDebts])
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -130,48 +107,105 @@ export default function GroupDetailPageClient({
       setShowInviteModal(false)
       setInviteEmail('')
       router.refresh()
-    } catch (err) {
+    } catch {
       setError('An error occurred while sending the invite')
     } finally {
       setInviting(false)
     }
   }
 
-  const handleCreateDebt = async (e: React.FormEvent) => {
+  const handleCreateDebts = async (e: React.FormEvent) => {
     e.preventDefault()
     setCreating(true)
     setError('')
 
     try {
-      if (!debtFormData.borrowerId) {
-        setError('Please select a borrower')
+      // Validate all debts have required fields
+      for (let i = 0; i < debtForms.length; i++) {
+        const debt = debtForms[i]
+        if (!debt.borrowerId) {
+          setError(`Debt ${i + 1}: Please select a borrower`)
+          setCreating(false)
+          setCurrentDebtIndex(i)
+          return
+        }
+        if (!debt.amount || parseFloat(debt.amount) <= 0) {
+          setError(`Debt ${i + 1}: Please enter a valid amount`)
+          setCreating(false)
+          setCurrentDebtIndex(i)
+          return
+        }
+      }
+
+      // Prepare data for all debts
+      const debtsToCreate = debtForms.map(debt => ({
+        amount: parseFloat(debt.amount),
+        description: debt.description || undefined,
+        borrowerId: debt.borrowerId,
+        groupId,
+      }))
+
+      // Use single or batch create based on number of debts
+      const result = debtsToCreate.length === 1
+        ? await createDebt(debtsToCreate[0])
+        : await createDebts(debtsToCreate)
+
+      if (!result.success) {
+        setError(result.error || 'Failed to create debt(s)')
         setCreating(false)
         return
       }
 
-      const result = await createDebt({
-        amount: parseFloat(debtFormData.amount),
-        description: debtFormData.description || undefined,
-        borrowerId: debtFormData.borrowerId,
-        groupId,
-      })
-
-      if (!result.success) {
-        setError(result.error || 'Failed to create debt')
-        return
-      }
-
+      // Reset form and refresh
       setShowDebtModal(false)
-      setDebtFormData({ amount: '', description: '', borrowerId: '' })
-      setSearchQuery('')
-      setSelectedUser(null)
+      setDebtForms([{
+        amount: '',
+        description: '',
+        borrowerId: '',
+        borrower: null,
+      }])
+      setCurrentDebtIndex(0)
+      setCreating(false)
+
+      // Refresh the page to show new debts
       router.refresh()
-    } catch (err) {
-      setError('An error occurred while creating the debt')
-    } finally {
+    } catch {
+      setError('An error occurred while creating the debt(s)')
       setCreating(false)
     }
   }
+
+  const addNewDebt = () => {
+    setDebtForms([...debtForms, {
+      amount: '',
+      description: '',
+      borrowerId: '',
+      borrower: null,
+    }])
+    setCurrentDebtIndex(debtForms.length)
+  }
+
+  const removeDebt = (index: number) => {
+    if (debtForms.length === 1) return
+    const newDebts = debtForms.filter((_, i) => i !== index)
+    setDebtForms(newDebts)
+    if (currentDebtIndex >= newDebts.length) {
+      setCurrentDebtIndex(newDebts.length - 1)
+    }
+  }
+
+  const updateDebtForm = (index: number, data: typeof debtForms[0]) => {
+    const newDebts = [...debtForms]
+    newDebts[index] = data
+    setDebtForms(newDebts)
+  }
+
+  const currentDebt = debtForms[currentDebtIndex]
+
+  // Check if all debts are valid
+  const allDebtsValid = debtForms.every(debt =>
+    debt.borrowerId && debt.amount && parseFloat(debt.amount) > 0
+  )
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
     // Store the old status in case we need to revert
@@ -199,7 +233,7 @@ export default function GroupDetailPageClient({
         }
         return
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred while updating the status')
       // Revert to old status
       if (oldStatus) {
@@ -227,10 +261,10 @@ export default function GroupDetailPageClient({
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setShowDebtModal(true)}>
-              Create debt
+              Create debts
             </Button>
             <Button variant="secondary" onClick={() => router.push(`/ai?group=${groupId}`)}>
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="h-4 w-4" />
               Create with AI
             </Button>
             <Button onClick={() => setShowInviteModal(true)}>
@@ -418,114 +452,85 @@ export default function GroupDetailPageClient({
           <DialogOverlay />
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create new debt</DialogTitle>
+              <DialogTitle>
+                Create new debt{debtForms.length > 1 && ` (${currentDebtIndex + 1} of ${debtForms.length})`}
+              </DialogTitle>
             </DialogHeader>
             <div className="px-6 pb-6">
-              <form onSubmit={handleCreateDebt} className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="borrowerSearch">Search for a group member</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="borrowerSearch"
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name or email..."
-                      className="pl-9"
-                      autoComplete="off"
-                    />
+              <form onSubmit={handleCreateDebts} className="grid gap-4">
+                <DebtFormItem
+                  debtData={currentDebt}
+                  groupId={groupId}
+                  currentUserId={currentUser?.id}
+                  onChange={(data) => updateDebtForm(currentDebtIndex, data)}
+                />
+
+                {debtForms.length > 1 && (
+                  <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))}
+                      disabled={currentDebtIndex === 0}
+                    >
+                      ← Prev
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Debt {currentDebtIndex + 1} of {debtForms.length}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentDebtIndex(Math.min(debtForms.length - 1, currentDebtIndex + 1))}
+                      disabled={currentDebtIndex === debtForms.length - 1}
+                    >
+                      Next →
+                    </Button>
                   </div>
+                )}
 
-                  {selectedUser && (
-                    <div className="mt-2 rounded-md border bg-muted/50 p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{selectedUser.name}</div>
-                          <div className="text-sm text-muted-foreground">{selectedUser.email}</div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedUser(null)
-                            setDebtFormData({ ...debtFormData, borrowerId: '' })
-                            setSearchQuery('')
-                          }}
-                        >
-                          Change
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {!selectedUser && searchQuery && (
-                    <div className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-background">
-                      {searching ? (
-                        <div className="p-3 text-center text-sm text-muted-foreground">Searching...</div>
-                      ) : searchResults.length > 0 ? (
-                        searchResults.map((user) => (
-                          <button
-                            key={user.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedUser(user)
-                              setDebtFormData({ ...debtFormData, borrowerId: user.id })
-                              setSearchQuery('')
-                            }}
-                            className="w-full border-b p-3 text-left hover:bg-muted/50 last:border-b-0"
-                          >
-                            <div className="font-medium">{user.name}</div>
-                            <div className="text-sm text-muted-foreground">{user.email}</div>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="p-3 text-center text-sm text-muted-foreground">No members found</div>
-                      )}
-                    </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addNewDebt}
+                    className="flex-1"
+                  >
+                    + Add another debt
+                  </Button>
+                  {debtForms.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => removeDebt(currentDebtIndex)}
+                    >
+                      Remove this debt
+                    </Button>
                   )}
                 </div>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="debtAmount">Amount ($)</Label>
-                  <Input
-                    id="debtAmount"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    value={debtFormData.amount}
-                    onChange={(e) => setDebtFormData({ ...debtFormData, amount: e.target.value })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="debtDescription">Description (optional)</Label>
-                  <Textarea
-                    id="debtDescription"
-                    value={debtFormData.description}
-                    onChange={(e) => setDebtFormData({ ...debtFormData, description: e.target.value })}
-                    rows={3}
-                    placeholder="What is this debt for?"
-                  />
-                </div>
                 <DialogFooter>
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => {
                       setShowDebtModal(false)
-                      setDebtFormData({ amount: '', description: '', borrowerId: '' })
-                      setSearchQuery('')
-                      setSelectedUser(null)
+                      setDebtForms([{
+                        amount: '',
+                        description: '',
+                        borrowerId: '',
+                        borrower: null,
+                      }])
+                      setCurrentDebtIndex(0)
                       setError('')
                     }}
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={creating || !debtFormData.borrowerId}>
-                    {creating ? 'Creating…' : 'Create debt'}
+                  <Button type="submit" disabled={creating || !allDebtsValid}>
+                    {creating ? 'Creating…' : `Create ${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}`}
                   </Button>
                 </DialogFooter>
               </form>

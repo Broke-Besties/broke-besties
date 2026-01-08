@@ -62,6 +62,48 @@ export async function createDebt(data: {
   }
 }
 
+export async function createDebts(debts: Array<{
+  amount: number
+  description?: string
+  borrowerId: string
+  groupId: number
+}>) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    const createdDebts = await Promise.all(
+      debts.map(data =>
+        debtService.createDebt({
+          amount: data.amount,
+          description: data.description,
+          lenderId: user.id,
+          borrowerId: data.borrowerId,
+          groupId: data.groupId,
+        })
+      )
+    )
+    
+    // Revalidate paths for all groups
+    const groupIds = [...new Set(debts.map(d => d.groupId).filter(Boolean))]
+    groupIds.forEach(groupId => {
+      revalidatePath(`/groups/${groupId}`)
+    })
+    revalidatePath('/dashboard')
+    
+    return { success: true, debts: createdDebts }
+  } catch (error) {
+    console.error('Create debts error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create debts',
+    }
+  }
+}
+
 export async function updateDebtStatus(debtId: number, status: string) {
   const user = await getUser()
 

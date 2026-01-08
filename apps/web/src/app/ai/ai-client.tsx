@@ -1,23 +1,25 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { DebtFormItem } from '@/app/groups/[id]/debt-form-item'
+import { createDebt } from '@/app/groups/[id]/actions'
 
 type Message = {
   role: 'user' | 'assistant' | 'system'
   content: string
   id?: string
   imageUrl?: string
-  pendingAction?: {
-    toolCalls: Array<{
-      name: string
-      args: Record<string, unknown>
-    }>
-  }
+  debts?: Array<{
+    borrowerName: string
+    borrowerId: string
+    amount: number
+    description?: string
+  }>
 }
 
 type Group = {
@@ -40,14 +42,17 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [pendingApproval, setPendingApproval] = useState<{
-    toolCalls: Array<{ name: string; args: Record<string, unknown> }>
-  } | null>(null)
-  const [editedToolCalls, setEditedToolCalls] = useState<Array<{ name: string; args: Record<string, unknown> }>>([])
-  const [isEditingToolCalls, setIsEditingToolCalls] = useState(false)
+  const [debtForms, setDebtForms] = useState<Array<{
+    amount: string
+    description: string
+    borrowerId: string
+    borrower: { id: string; name: string; email: string } | null
+  }>>([])
+  const [isCreatingDebts, setIsCreatingDebts] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
 
   // Fetch user's groups on mount
   useEffect(() => {
@@ -82,6 +87,24 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+    }
+  }, [messages])
+
+  // Populate debt forms when a message with debts is received
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.debts && lastMessage.debts.length > 0) {
+      const forms = lastMessage.debts.map(debt => ({
+        amount: debt.amount.toString(),
+        description: debt.description || '',
+        borrowerId: debt.borrowerId,
+        borrower: {
+          id: debt.borrowerId,
+          name: debt.borrowerName,
+          email: debt.borrowerName, // Using name as email fallback
+        },
+      }))
+      setDebtForms(forms)
     }
   }, [messages])
 
@@ -180,73 +203,45 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }
 
-  const handleApprove = async () => {
-    if (!pendingApproval) return
-
-    setIsLoading(true)
+  const handleCreateDebts = async () => {
+    setIsCreatingDebts(true)
     setError('')
-    setPendingApproval(null)
-    setIsEditingToolCalls(false)
 
     try {
-      // Use edited tool calls if available, otherwise use original
-      const toolCallsToExecute = editedToolCalls.length > 0 ? editedToolCalls : pendingApproval.toolCalls
-
-      const langchainMessages = messages
-        .filter(msg => !msg.pendingAction)
-        .map(msg => ({
-          type: msg.role === 'user' ? 'human' : 'ai',
-          content: msg.content,
-        }))
-
-      const response = await fetch('/api/agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: langchainMessages,
+      // Create each debt individually
+      for (const debt of debtForms) {
+        const result = await createDebt({
+          amount: parseFloat(debt.amount),
+          description: debt.description || undefined,
+          borrowerId: debt.borrowerId,
           groupId: parseInt(groupId),
-          executeApproved: true,
-          toolCallsOverride: toolCallsToExecute,
-        }),
-      })
+        })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to execute action')
+        if (!result.success) {
+          setError(result.error || 'Failed to create debt')
+          setIsCreatingDebts(false)
+          return
+        }
       }
 
-      const data = await response.json()
-
-      const lastMessage = data.messages[data.messages.length - 1]
-
-      const assistantMessage: Message = {
+      // Add success message
+      setMessages(prev => [...prev, {
         role: 'assistant',
-        content: lastMessage.content || lastMessage.kwargs?.content || 'Action completed',
+        content: `Successfully created ${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}!`,
         id: Date.now().toString(),
-      }
+      }])
 
-      setMessages(prev => [...prev, assistantMessage])
+      // Clear debt forms
+      setDebtForms([])
+
+      // Refresh the page data
+      router.refresh()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
-      setError(errorMessage)
+      setError('An error occurred while creating debts')
       console.error('Error:', err)
     } finally {
-      setIsLoading(false)
+      setIsCreatingDebts(false)
     }
-  }
-
-  const handleEditToolCall = (index: number, field: string, value: string) => {
-    const calls = editedToolCalls.length > 0 ? [...editedToolCalls] : [...(pendingApproval?.toolCalls || [])]
-    calls[index] = {
-      ...calls[index],
-      args: {
-        ...calls[index].args,
-        [field]: field === 'amount' ? parseFloat(value) || 0 : value,
-      },
-    }
-    setEditedToolCalls(calls)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -257,10 +252,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     if (!groupId) {
       setError('Please select a group first')
       return
-    }
-
-    if (pendingApproval) {
-      setPendingApproval(null)
     }
 
     let uploadedImageUrl: string | null = null
@@ -322,53 +313,31 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
       const data = await response.json()
 
-      // Check if there's a pending action that needs approval
-      if (data.pendingAction) {
-        setPendingApproval({ toolCalls: data.pendingAction.toolCalls })
-        setEditedToolCalls([])
-        setIsEditingToolCalls(false)
+      const lastMessage = data.messages[data.messages.length - 1]
+      const content = lastMessage.content || lastMessage.kwargs?.content || 'No response'
 
-        // Fetch group members to get emails
-        let emails: Record<string, string> = {}
-        try {
-          const res = await fetch(`/api/groups/${groupId}`)
-          if (res.ok) {
-            const { group } = await res.json()
-            emails = Object.fromEntries(
-              group.members.map((m: any) => [m.userId, m.user.email])
-            )
+      // Try to parse JSON from the content
+      let parsedDebts = null
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*"debtsReady"[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.debtsReady && Array.isArray(parsed.debts)) {
+            parsedDebts = parsed.debts
           }
-        } catch (err) {
-          console.error('Failed to fetch members:', err)
         }
-
-        const toolCallsDisplay = data.pendingAction.toolCalls
-          .map((tc: any, idx: number) => {
-            const from = tc.args.borrowerId === user.id ? 'You' : (emails[tc.args.borrowerId] || tc.args.borrowerId)
-            const to = tc.args.userId === user.id ? 'You' : (emails[tc.args.userId] || 'Unknown')
-            const label = data.pendingAction.toolCalls.length > 1 ? `Debt ${idx + 1}\n` : ''
-            return `${label}Amount: $${tc.args.amount}\nFrom: ${from}\nTo: ${to}\nDescription: ${tc.args.description || 'N/A'}`
-          })
-          .join('\n\n')
-
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `I'd like to create the following debt(s):\n\n${toolCallsDisplay}`,
-          id: Date.now().toString(),
-          pendingAction: data.pendingAction,
-        }])
-      } else {
-        const lastMessage = data.messages[data.messages.length - 1]
-
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: lastMessage.content || lastMessage.kwargs?.content || 'No response',
-          id: Date.now().toString(),
-        }
-
-        setMessages(prev => [...prev, assistantMessage])
-        setPendingApproval(null)
+      } catch (err) {
+        // Not JSON, treat as regular message
       }
+
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: parsedDebts ? 'I have the debt information ready. Please review and create:' : content,
+        id: Date.now().toString(),
+        debts: parsedDebts || undefined,
+      }
+
+      setMessages(prev => [...prev, assistantMessage])
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
@@ -443,53 +412,31 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                     <div className="text-sm whitespace-pre-wrap">
                       {message.content}
                     </div>
-                    {message.pendingAction && pendingApproval && index === messages.length - 1 && (
-                      <div className="mt-3">
-                        {isEditingToolCalls ? (
-                          <div className="space-y-3">
-                            {(editedToolCalls.length > 0 ? editedToolCalls : pendingApproval.toolCalls).map((tc: any, tcIndex: number) => (
-                              <div key={tcIndex} className="p-3 bg-background/50 rounded border space-y-2">
-                                <div className="text-xs font-semibold mb-2">Debt {tcIndex + 1}</div>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div>
-                                    <label className="text-xs">Amount ($)</label>
-                                    <Input
-                                      type="number"
-                                      value={tc.args.amount}
-                                      onChange={(e) => handleEditToolCall(tcIndex, 'amount', e.target.value)}
-                                      className="h-8 text-sm"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-xs">Description</label>
-                                    <Input
-                                      value={tc.args.description || ''}
-                                      onChange={(e) => handleEditToolCall(tcIndex, 'description', e.target.value)}
-                                      className="h-8 text-sm"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={handleApprove} disabled={isLoading}>
-                                Save & Approve
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => setIsEditingToolCalls(false)}>
-                                Cancel Edit
-                              </Button>
-                            </div>
+                    {message.debts && debtForms.length > 0 && index === messages.length - 1 && (
+                      <div className="mt-3 space-y-3">
+                        {debtForms.map((debt, debtIndex) => (
+                          <div key={debtIndex} className="p-3 bg-background/50 rounded border">
+                            <div className="text-xs font-semibold mb-2">Debt {debtIndex + 1}</div>
+                            <DebtFormItem
+                              debtData={debt}
+                              groupId={parseInt(groupId)}
+                              currentUserId={user?.id}
+                              onChange={(data) => {
+                                const newForms = [...debtForms]
+                                newForms[debtIndex] = data
+                                setDebtForms(newForms)
+                              }}
+                            />
                           </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleApprove} disabled={isLoading}>
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setIsEditingToolCalls(true)} disabled={isLoading}>
-                              Edit
-                            </Button>
-                          </div>
-                        )}
+                        ))}
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleCreateDebts} disabled={isCreatingDebts || debtForms.some(d => !d.borrowerId)}>
+                            {isCreatingDebts ? 'Creating...' : `Create ${debtForms.length} Debt${debtForms.length > 1 ? 's' : ''}`}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setDebtForms([])}>
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
