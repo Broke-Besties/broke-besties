@@ -216,7 +216,7 @@ export default function DebtDetailClient({
           <div>
             <Label className="text-muted-foreground">Created</Label>
             <p className="mt-1">
-              {new Date(debt.createdAt).toLocaleDateString()}
+              {new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
             </p>
           </div>
           {debt.receipt && (

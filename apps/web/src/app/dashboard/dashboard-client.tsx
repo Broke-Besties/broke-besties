@@ -210,7 +210,7 @@ export default function DashboardPageClient({
                     <div className="shrink-0 text-right">
                       <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
+                        {new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                       </div>
                     </div>
                   </div>
@@ -284,7 +284,7 @@ export default function DashboardPageClient({
                     <div className="shrink-0 text-right">
                       <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
+                        {new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                       </div>
                     </div>
                   </div>
@@ -360,7 +360,7 @@ export default function DashboardPageClient({
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">{tab.description}</p>
                   <p className="text-xs text-muted-foreground">
-                    Added {new Date(tab.createdAt).toLocaleDateString()}
+                    Added {new Date(tab.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                   </p>
                   <Button
                     size="sm"
@@ -416,7 +416,7 @@ export default function DashboardPageClient({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
-                  Created {new Date(group.createdAt).toLocaleDateString()}
+                  Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                 </CardContent>
               </Card>
             ))}

@@ -222,7 +222,7 @@ export default function GroupDetailPageClient({
           <div className="space-y-1">
             <h1 className="text-3xl font-semibold tracking-tight">{group.name}</h1>
             <p className="text-sm text-muted-foreground">
-              Created {new Date(group.createdAt).toLocaleDateString()}
+              Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -337,7 +337,7 @@ export default function GroupDetailPageClient({
                     <div className="shrink-0 text-right">
                       <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
+                        {new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                       </div>
                     </div>
                   </div>

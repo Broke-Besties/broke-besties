@@ -43,7 +43,7 @@ export const readDebtsFromGroup = tool(
       return `${index + 1}. $${debt.amount.toFixed(2)} ${direction} ${otherParty}
    Description: ${debt.description || "No description"}
    Status: ${debt.status}
-   Created: ${new Date(debt.createdAt).toLocaleDateString()}`;
+   Created: ${new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}`;
     }).join("\n\n");
 
     return `Found ${debts.length} debt(s) in this group:\n\n${formattedDebts}`;
