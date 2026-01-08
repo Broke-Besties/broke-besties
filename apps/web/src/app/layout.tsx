@@ -17,7 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Broke Besties",
-  description: "Split expenses with friends: groups, invites, debts, and balances.",
+  description:
+    "Split expenses with friends: groups, invites, debts, and balances.",
 };
 
 export default function RootLayout({
