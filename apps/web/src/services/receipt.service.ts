@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { agent } from "@/agents/graph";
 import { prisma } from "@/lib/prisma";
 import { HumanMessage } from "@langchain/core/messages";
+import { ReceiptPolicy } from "@/policies";
 
 export class ReceiptService {
   /**
@@ -19,15 +20,8 @@ export class ReceiptService {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Verify group exists and user is a member
-    const groupMember = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId,
-      },
-    });
-
-    if (!groupMember) {
+    // Check if user can create receipt (policy handles the DB call)
+    if (!await ReceiptPolicy.canCreate(userId, groupId)) {
       throw new Error("Group not found or access denied");
     }
 
@@ -134,8 +128,8 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    const isMember = receipt.group.members.some(m => m.userId === userId);
-    if (!isMember) {
+    // Check permission using the fetched receipt object
+    if (!ReceiptPolicy.canView(userId, receipt)) {
       throw new Error("Access denied");
     }
 
@@ -146,15 +140,8 @@ export class ReceiptService {
    * Get all receipts for a group
    */
   async getGroupReceipts(groupId: number, userId: string) {
-    // Verify user is a member of the group
-    const groupMember = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId,
-      },
-    });
-
-    if (!groupMember) {
+    // Check if user can list group receipts (policy handles the DB call)
+    if (!await ReceiptPolicy.canListGroupReceipts(userId, groupId)) {
       throw new Error("Group not found or access denied");
     }
 

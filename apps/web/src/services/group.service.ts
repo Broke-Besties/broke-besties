@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { GroupPolicy } from "@/policies";
 
 export class GroupService {
   /**
@@ -102,14 +103,7 @@ export class GroupService {
    * Check if a user is a member of a group
    */
   async isUserMember(groupId: number, userId: string) {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        groupId,
-        userId,
-      },
-    });
-
-    return !!membership;
+    return GroupPolicy.isMember(userId, groupId);
   }
 
   /**
