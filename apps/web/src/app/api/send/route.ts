@@ -1,22 +1,25 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { SlackConfirmEmail } from "@/components/emails/slack-confirm";
+import { GroupInviteEmail } from "@/components/emails/group-invite";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function GET(request: Request) {
   try {
     const { data, error } = await resend.emails.send({
-      // CRITICAL FIX 1: You CANNOT use "brokeBesties.com" yet.
-      // You must use this exact email for testing until you verify your domain.
+      // For testing: use onboarding@resend.dev
+      // For production: verify your domain and use something like noreply@yourdomain.com
       from: "onboarding@resend.dev",
 
-      // CRITICAL FIX 2: You must use the EXACT email you signed up to Resend with.
-      // You cannot send to other people yet.
+      // You can only send to your verified email in testing mode
       to: "danielvenistan@gmail.com",
 
-      subject: "Test from BrokeBesties",
-      react: SlackConfirmEmail({ validationCode: "ABC-123" }),
+      subject: "You've been invited to join a group on BrokeBesties",
+      react: GroupInviteEmail({
+        inviterName: "Test User",
+        groupName: "Test Group",
+        inviteLink: "https://broke-besties.vercel.app/invites"
+      }),
     });
 
     if (error) {
