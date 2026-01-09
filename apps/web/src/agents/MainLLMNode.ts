@@ -1,20 +1,9 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { SystemMessage, HumanMessage, BaseMessage } from "@langchain/core/messages";
+import { SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { AgentState } from "./graph";
 import { extractReceiptTextTool } from "./ReceiptTool";
 import { readDebtsFromGroup } from "./DebtTools";
 import { listNamesInGroupTool } from "./UserTool";
-
-async function fetchImageAsBase64(url: string): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.statusText}`);
-  }
-  const contentType = response.headers.get("content-type") || "image/jpeg";
-  const arrayBuffer = await response.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
-  return `data:${contentType};base64,${base64}`;
-}
 
 const model = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
@@ -28,75 +17,53 @@ export async function mainLLMNode(
   console.log("[Agent LLM] === Starting LLM node ===");
   console.log("[Agent LLM] Group ID:", state.groupId);
   console.log("[Agent LLM] User ID:", state.userId);
-  console.log("[Agent LLM] Image URL present:", !!state.imageUrl);
-  console.log("[Agent LLM] Image Base64 present:", !!state.imageBase64);
+  console.log("[Agent LLM] Image URL:", state.imageUrl || "none");
   console.log("[Agent LLM] Current message count:", state.messages.length);
 
-  // Build context-aware system message
-  let contextMessage = `You are a debt management assistant. Your purpose is to help users create and manage debt records, and process receipt images.
+  let contextMessage = `You are a function-calling debt management assistant. 
+  If the user's message is a greeting or unrelated to debts, respond normally and do not use tools.
+  Otherwise, you MUST use tools to complete tasks.`;
 
-IMPORTANT RULES:
-1. If the user greets you (hi, hello, hey, etc.), respond warmly and briefly explain what you can do, then STOP. Do NOT call any tools for greetings.
-2. If the user asks something unrelated to debts or receipts, politely say you can only help with debt management and receipt processing, then STOP.
-3. Only use tools when the user explicitly wants to:
-   - Process a receipt image (use extract_receipt_text tool)
-   - Read debts from a group (use read_debts_from_group tool)
-   - Find user names in the group (use list_names_in_group tool)
-4. When the user wants to create debt(s), gather all necessary information:
-   - Who owes the money (borrower name)
-   - How much they owe (amount)
-   - Optional description
-   - Use list_names_in_group tool to find the borrower's user ID if needed
-5. Once you have all information to create debt(s), output ONLY a JSON object in this exact format:
-   {
-     "debtsReady": true,
-     "debts": [
-       {
-         "borrowerName": "John Doe",
-         "borrowerId": "user-id-here",
-         "amount": 25.50,
-         "description": "Lunch at cafe"
-       }
-     ]
-   }
-   Do NOT add any text before or after the JSON. ONLY output the JSON object.
-6. After completing any other task (not debt creation), summarize what you did and STOP.
+  if (state.imageUrl) {
+    contextMessage += `
 
-AVAILABLE CONTEXT:
-- User ID: ${state.userId}
-- Group ID: ${state.groupId}`;
+TASK: Process receipt image at ${state.imageUrl}
+
+REQUIRED ACTIONS (you must call these tools):
+1. First, call extract_receipt_text tool with imageUrl parameter
+2. After getting receipt data, call list_names_in_group if user mentioned names
+3. Finally, output the debts JSON
+
+User message may contain names and items. Example:
+- User: "albert owes me lorem"
+- You MUST call: extract_receipt_text(imageUrl="${state.imageUrl}")
+- Tool returns: "Lorem 1.1..."
+- You MUST call: list_names_in_group(userId="${state.userId}", groupId=${state.groupId})
+- Tool returns: user IDs
+- You output: {"debtsReady":true,"debts":[...]}
+
+START BY CALLING extract_receipt_text NOW.`;
+  } else {
+    contextMessage += `
+
+TASK: Create manual debt entry
+
+Ask user for who owes money, amount, and description if not provided.
+Use list_names_in_group tool to get user IDs.
+Output the debt JSON when ready.`;
+  }
+
+  contextMessage += `
+
+Output format: {"debtsReady":true,"debts":[{"borrowerName":"Name","borrowerId":"id","amount":10.5,"description":"item"}]}
+
+Context: userId=${state.userId}, groupId=${state.groupId}`;
 
   if (state.description) {
-    contextMessage += `\n- Debt description: ${state.description}`;
+    contextMessage += `, description=${state.description}`;
   }
 
-  // Process messages to inject image into the last human message if imageUrl is provided
-  let processedMessages: BaseMessage[] = [...state.messages];
-
-  // Use imageBase64 if available, otherwise fetch from imageUrl
-  const imageData = state.imageBase64 || (state.imageUrl ? await fetchImageAsBase64(state.imageUrl) : null);
-
-  if (imageData) {
-    // Find the last human message and add the image to it
-    const lastHumanIndex = processedMessages.findLastIndex(
-      (msg) => (msg as HumanMessage).type === "human"
-    );
-
-    if (lastHumanIndex !== -1) {
-      const lastHumanMsg = processedMessages[lastHumanIndex];
-      const textContent = typeof lastHumanMsg.content === "string"
-        ? lastHumanMsg.content
-        : "";
-
-      // Replace with multimodal message containing both text and image
-      processedMessages[lastHumanIndex] = new HumanMessage({
-        content: [
-          { type: "image_url", image_url: imageData },
-          { type: "text", text: textContent || "Please analyze this receipt image." },
-        ],
-      });
-    }
-  }
+  const processedMessages: BaseMessage[] = [...state.messages];
 
   const messagesWithContext = [
     new SystemMessage(contextMessage),
@@ -104,10 +71,7 @@ AVAILABLE CONTEXT:
   ];
 
   console.log("[Agent LLM] Invoking model with", messagesWithContext.length, "messages");
-  console.log("[Agent LLM] Has image:", !!imageData);
-  if (imageData) {
-    console.log("[Agent LLM] Image data length:", imageData.length, "chars");
-  }
+  console.log("[Agent LLM] System message length:", contextMessage.length, "chars");
 
   const response = await model.invoke(messagesWithContext);
 

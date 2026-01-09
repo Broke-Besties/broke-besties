@@ -164,28 +164,15 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     e.target.value = ''
   }
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
-
-  const uploadImage = async (file: File): Promise<{ signedUrl: string; base64: string }> => {
+  const uploadImage = async (file: File): Promise<{ signedUrl: string }> => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('groupId', groupId)
 
-    // Convert to base64 in parallel with upload
-    const [response, base64] = await Promise.all([
-      fetch('/api/receipts/upload', {
-        method: 'POST',
-        body: formData,
-      }),
-      fileToBase64(file),
-    ])
+    const response = await fetch('/api/receipts/upload', {
+      method: 'POST',
+      body: formData,
+    })
 
     if (!response.ok) {
       const errorData = await response.json()
@@ -193,7 +180,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
 
     const data = await response.json()
-    return { signedUrl: data.data.signedUrl, base64 }
+    return { signedUrl: data.data.signedUrl }
   }
 
   const clearPendingImage = () => {
@@ -255,7 +242,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
 
     let uploadedImageUrl: string | null = null
-    let uploadedImageBase64: string | null = null
 
     // Upload pending image if there is one
     if (pendingImage) {
@@ -263,7 +249,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       try {
         const result = await uploadImage(pendingImage.file)
         uploadedImageUrl = result.signedUrl
-        uploadedImageBase64 = result.base64
+        // Note: We only need the URL now, ReceiptTool will fetch the image itself
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
         setError(errorMessage)
@@ -302,7 +288,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           messages: langchainMessages,
           groupId: parseInt(groupId),
           imageUrl: uploadedImageUrl,
-          imageBase64: uploadedImageBase64,
         }),
       })
 
@@ -391,10 +376,10 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                 >
                   <div
                     className={cn(
-                      'rounded-lg px-4 py-2 max-w-[80%]',
+                      'rounded-lg py-2 max-w-[80%] sm:max-w-[85%]',
                       message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
+                        ? 'bg-primary text-primary-foreground px-3 sm:px-4'
+                        : 'bg-muted px-2 sm:px-4'
                     )}
                   >
                     <div className="text-sm font-semibold mb-1">
@@ -413,23 +398,25 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                       {message.content}
                     </div>
                     {message.debts && debtForms.length > 0 && index === messages.length - 1 && (
-                      <div className="mt-3 space-y-3">
+                      <div className="mt-3 space-y-3 -mx-1 sm:mx-0">
                         {debtForms.map((debt, debtIndex) => (
-                          <div key={debtIndex} className="p-3 bg-background/50 rounded border">
-                            <div className="text-xs font-semibold mb-2">Debt {debtIndex + 1}</div>
-                            <DebtFormItem
-                              debtData={debt}
-                              groupId={parseInt(groupId)}
-                              currentUserId={user?.id}
-                              onChange={(data) => {
-                                const newForms = [...debtForms]
-                                newForms[debtIndex] = data
-                                setDebtForms(newForms)
-                              }}
-                            />
+                          <div key={debtIndex} className="px-1 sm:px-0">
+                            <div className="p-2 sm:p-3 bg-background/50 rounded border">
+                              <div className="text-xs font-semibold mb-2">Debt {debtIndex + 1}</div>
+                              <DebtFormItem
+                                debtData={debt}
+                                groupId={parseInt(groupId)}
+                                currentUserId={user?.id}
+                                onChange={(data) => {
+                                  const newForms = [...debtForms]
+                                  newForms[debtIndex] = data
+                                  setDebtForms(newForms)
+                                }}
+                              />
+                            </div>
                           </div>
                         ))}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 px-1 sm:px-0">
                           <Button size="sm" onClick={handleCreateDebts} disabled={isCreatingDebts || debtForms.some(d => !d.borrowerId)}>
                             {isCreatingDebts ? 'Creating...' : `Create ${debtForms.length} Debt${debtForms.length > 1 ? 's' : ''}`}
                           </Button>

@@ -1,7 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { agent } from "@/agents/graph";
 import { prisma } from "@/lib/prisma";
-import { HumanMessage } from "@langchain/core/messages";
 import { ReceiptPolicy } from "@/policies";
 
 export class ReceiptService {
@@ -59,35 +57,6 @@ export class ReceiptService {
       console.log("[Receipt Upload] Successfully uploaded to Supabase");
       console.log("[Receipt Upload] Presigned URL:", signedUrlData.signedUrl);
 
-      // Convert file to base64 for the agent (avoids fetching the URL back)
-      const arrayBuffer = await file.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
-      const imageBase64 = `data:${file.type};base64,${base64}`;
-
-      const result = await agent.invoke({
-        groupId,
-        imageUrl: signedUrlData.signedUrl,
-        imageBase64,
-        messages: [
-          new HumanMessage("Please extract all information from the receipt."),
-        ],
-      });
-
-      // Extract text from the tool message in the conversation
-      const toolMessage = result.messages.find(
-        (msg: any) => msg.constructor.name === "ToolMessage"
-      );
-      const extractedText = toolMessage
-        ? typeof toolMessage.content === "string"
-          ? toolMessage.content
-          : JSON.stringify(toolMessage.content)
-        : "";
-
-      const updatedReceipt = await prisma.receipt.update({
-        where: { id: receipt.id },
-        data: { rawText: extractedText },
-      });
-
       // If debtId is provided, link the receipt to the debt
       if (debtId) {
         await prisma.debt.update({
@@ -97,9 +66,8 @@ export class ReceiptService {
       }
 
       return {
-        id: updatedReceipt.id,
+        id: receipt.id,
         signedUrl: signedUrlData.signedUrl,
-        rawText: extractedText,
       };
     } catch (error) {
       await prisma.receipt.delete({ where: { id: receipt.id } }).catch(() => {});

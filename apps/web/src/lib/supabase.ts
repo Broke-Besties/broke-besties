@@ -28,6 +28,24 @@ export async function createClient() {
   )
 }
 
+// Admin client with service role key for server-side operations
+export function createAdminClient() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return []
+        },
+        setAll() {
+          // No-op for admin client
+        },
+      },
+    }
+  )
+}
+
 export async function getUser() {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()

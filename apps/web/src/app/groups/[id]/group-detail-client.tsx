@@ -11,9 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
 import { createInvite, createDebt, createDebts, updateDebtStatus } from './actions'
 import { DebtFormItem } from './debt-form-item'
+import { GroupDebtsList } from './group-debts-list'
 
 type Member = {
   id: number
@@ -335,76 +335,11 @@ export default function GroupDetailPageClient({
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="flex-row items-start justify-between space-y-0">
-          <div className="space-y-1">
-            <CardTitle>Group debts</CardTitle>
-            <CardDescription>{debts.length} total</CardDescription>
-          </div>
-          <Badge variant="secondary">{debts.length}</Badge>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {debts.length === 0 ? (
-            <div className="rounded-md border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-              No debts in this group yet.
-            </div>
-          ) : (
-            debts.map((debt) => {
-              const isLender = currentUser?.id === debt.lender.id
-              return (
-                <div key={debt.id} className="rounded-lg border bg-background p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <div className="font-medium">
-                        {isLender ? (
-                          <span>
-                            <span className="text-emerald-600 dark:text-emerald-400">You lent to</span> {debt.borrower.email}
-                          </span>
-                        ) : (
-                          <span>
-                            <span className="text-rose-600 dark:text-rose-400">You borrowed from</span> {debt.lender.email}
-                          </span>
-                        )}
-                      </div>
-                      {debt.description && <div className="text-sm text-muted-foreground">{debt.description}</div>}
-                    </div>
-
-                    <div className="shrink-0 text-right">
-                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                      )}
-                    >
-                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                    </Badge>
-
-                    <select
-                      value={debt.status}
-                      onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
-                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                      <option value="not_paying">Not Paying</option>
-                    </select>
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </CardContent>
-      </Card>
+      <GroupDebtsList
+        debts={debts}
+        currentUser={currentUser}
+        onUpdateStatus={handleUpdateStatus}
+      />
 
       {showInviteModal && (
         <div className="fixed inset-0 z-50">
