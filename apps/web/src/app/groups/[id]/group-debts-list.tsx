@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 
 import { Badge } from '@/components/ui/badge'
@@ -114,7 +115,11 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
             filteredDebts.map((debt) => {
               const isLender = currentUser?.id === debt.lender.id
               return (
-                <div key={debt.id} className="rounded-lg border bg-background p-4 shadow-sm">
+                <Link
+                  key={debt.id}
+                  href={`/debts/${debt.id}`}
+                  className="block rounded-lg border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <div className="font-medium">
@@ -161,7 +166,7 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
                       <option value="not_paying">Not Paying</option>
                     </select>
                   </div>
-                </div>
+                </Link>
               )
             })
           )}

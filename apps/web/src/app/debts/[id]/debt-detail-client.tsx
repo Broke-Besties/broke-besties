@@ -458,6 +458,72 @@ export default function DebtDetailClient({
         </CardContent>
       </Card>
 
+      {/* Transaction History */}
+      {transactions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Transaction History</CardTitle>
+            <CardDescription>
+              All change requests for this debt
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {transactions.map((transaction) => (
+                <div
+                  key={transaction.id}
+                  className="rounded-lg border bg-muted/50 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {transaction.type === "drop" ? "Delete Request" : "Modify Request"}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            transaction.status === "pending" &&
+                              "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                            transaction.status === "approved" &&
+                              "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                            transaction.status === "rejected" &&
+                              "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+                            transaction.status === "cancelled" &&
+                              "border-gray-500/30 bg-gray-500/10 text-gray-700 dark:text-gray-300"
+                          )}
+                        >
+                          {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Requested by {transaction.requester.email}
+                      </div>
+                      {transaction.type === "modify" && transaction.proposedAmount !== null && (
+                        <div className="text-sm">
+                          Proposed amount: ${transaction.proposedAmount.toFixed(2)}
+                        </div>
+                      )}
+                      {transaction.reason && (
+                        <div className="text-sm text-muted-foreground">
+                          Reason: {transaction.reason}
+                        </div>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right text-sm text-muted-foreground">
+                      {new Date(transaction.createdAt).toLocaleDateString()}
+                      <div className="text-xs">
+                        {new Date(transaction.createdAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Receipts Section */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Upload Receipt */}

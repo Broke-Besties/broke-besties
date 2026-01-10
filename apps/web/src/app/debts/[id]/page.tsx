@@ -41,6 +41,7 @@ export default async function DebtDetailPage({
 
     // Fetch pending transactions for this debt
     const transactions = await debtTransactionService.getDebtTransactions(debtId, user.id);
+    console.log('transactions', transactions);
 
     return (
       <DebtDetailClient
