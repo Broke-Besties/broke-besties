@@ -13,18 +13,20 @@ datasource db {
 }
         
 model User {
-  id               String            @id @default(cuid())
-  name             String
-  email            String            @unique
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  members          GroupMember[]
-  sentInvites      GroupInvite[]     @relation("InviteSender")
-  receivedInvites  GroupInvite[]     @relation("InviteReceiver")
-  lentDebts        Debt[]            @relation("Lender")
-  borrowedDebts    Debt[]            @relation("Borrower")
-  tabs             Tab[]
-  debtTransactions DebtTransaction[] @relation("TransactionRequester")
+  id                        String               @id @default(cuid())
+  name                      String
+  email                     String               @unique
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  members                   GroupMember[]
+  sentInvites               GroupInvite[]        @relation("InviteSender")
+  receivedInvites           GroupInvite[]        @relation("InviteReceiver")
+  lentDebts                 Debt[]               @relation("Lender")
+  borrowedDebts             Debt[]               @relation("Borrower")
+  tabs                      Tab[]
+  debtTransactions          DebtTransaction[]    @relation("TransactionRequester")
+  lentRecurringPayments     RecurringPayment[]   @relation("RecurringPaymentLender")
+  borrowedRecurringPayments RecurringPayment[]   @relation("RecurringPaymentBorrowers")
 }
 
 model Group {
@@ -146,4 +148,20 @@ model DebtTransaction {
   @@index([debtId])
   @@index([requesterId])
   @@index([status])
+}
+
+model RecurringPayment {
+  id          Int                     @id @default(autoincrement())
+  amount      Float
+  description String?
+  status      String                  @default("active") // "active" or "inactive"
+  lenderId    String
+  frequency   Int                     // Frequency in days
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  lender      User                    @relation("RecurringPaymentLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrowers   User[]                  @relation("RecurringPaymentBorrowers")
+
+  @@index([lenderId])
 }
