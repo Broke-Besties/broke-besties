@@ -84,4 +84,54 @@ export class DebtPolicy {
 
     return members.length === 2;
   }
+
+  /**
+   * Check if user can request deletion of a debt
+   * Must be lender or borrower, debt must be pending, and no existing deletion request
+   */
+  static async canRequestDeletion(userId: string, debtId: number): Promise<boolean> {
+    const debt = await prisma.debt.findUnique({
+      where: { id: debtId },
+      select: {
+        lenderId: true,
+        borrowerId: true,
+        deletionRequestedBy: true,
+        status: true
+      },
+    });
+
+    if (!debt) return false;
+
+    // Can't request deletion if already requested
+    if (debt.deletionRequestedBy !== null) return false;
+
+    // Only active debts can be deleted
+    if (debt.status !== 'pending') return false;
+
+    // Must be lender or borrower
+    return debt.lenderId === userId || debt.borrowerId === userId;
+  }
+
+  /**
+   * Check if user can approve deletion of a debt
+   * Must be the other party (not the requester)
+   */
+  static async canApproveDeletion(userId: string, debtId: number): Promise<boolean> {
+    const debt = await prisma.debt.findUnique({
+      where: { id: debtId },
+      select: {
+        lenderId: true,
+        borrowerId: true,
+        deletionRequestedBy: true
+      },
+    });
+
+    if (!debt || !debt.deletionRequestedBy) return false;
+
+    // Can't approve your own request
+    if (debt.deletionRequestedBy === userId) return false;
+
+    // Must be the other party (lender or borrower)
+    return debt.lenderId === userId || debt.borrowerId === userId;
+  }
 }

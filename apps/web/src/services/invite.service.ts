@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { InvitePolicy } from '@/policies'
+import { emailService } from './email.service'
 
 export class InviteService {
   /**
@@ -36,6 +37,15 @@ export class InviteService {
         group: true,
         sender: true,
       },
+    })
+
+    // Send email notification
+    const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/invites`
+    await emailService.sendGroupInvite({
+      to: invitedEmail,
+      inviterName: invite.sender.name,
+      groupName: invite.group.name,
+      inviteLink,
     })
 
     return invite
@@ -89,7 +99,7 @@ export class InviteService {
     }
 
     // Add user to group and update invite status
-    const [member] = await prisma.$transaction([
+    const [member, updatedInvite] = await prisma.$transaction([
       prisma.groupMember.create({
         data: {
           userId,
@@ -97,13 +107,26 @@ export class InviteService {
         },
         include: {
           group: true,
+          user: true,
         },
       }),
       prisma.groupInvite.update({
         where: { id: inviteId },
         data: { status: 'accepted' },
+        include: {
+          sender: true,
+        },
       }),
     ])
+
+    // Send confirmation email to the person who sent the invite
+    const groupLink = `${process.env.NEXT_PUBLIC_APP_URL}/groups/${member.group.id}`
+    await emailService.sendInviteAccepted({
+      to: updatedInvite.sender.email,
+      accepterName: member.user.name,
+      groupName: member.group.name,
+      groupLink,
+    })
 
     return member.group
   }

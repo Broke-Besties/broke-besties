@@ -14,6 +14,7 @@ type Debt = {
   amount: number
   description: string | null
   status: string
+  deletionRequestedBy: string | null
   createdAt: Date | string
   lender: {
     id: string
@@ -216,16 +217,23 @@ export default function DashboardPageClient({
                   </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                    <div className="flex gap-2">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+                          debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                          debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                        )}
+                      >
+                        {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                      </Badge>
+                      {debt.deletionRequestedBy && (
+                        <Badge variant="outline" className="border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300">
+                          Deletion Requested
+                        </Badge>
                       )}
-                    >
-                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                    </Badge>
+                    </div>
 
                     <select
                       value={debt.status}
@@ -290,16 +298,23 @@ export default function DashboardPageClient({
                   </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                    <div className="flex gap-2">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+                          debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                          debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                        )}
+                      >
+                        {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                      </Badge>
+                      {debt.deletionRequestedBy && (
+                        <Badge variant="outline" className="border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300">
+                          Deletion Requested
+                        </Badge>
                       )}
-                    >
-                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                    </Badge>
+                    </div>
 
                     <select
                       value={debt.status}

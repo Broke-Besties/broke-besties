@@ -13,6 +13,11 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  requestDebtDeletion,
+  approveDebtDeletion,
+  cancelDebtDeletionRequest,
+} from "./actions";
 
 type Debt = {
   id: number;
@@ -20,6 +25,8 @@ type Debt = {
   description: string | null;
   status: string;
   receiptId: string | null;
+  deletionRequestedBy: string | null;
+  deletionRequestedAt: Date | string | null;
   createdAt: Date | string;
   lender: {
     id: string;
@@ -62,10 +69,14 @@ export default function DebtDetailClient({
   const [uploading, setUploading] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
   const [error, setError] = useState("");
+  const [deletionLoading, setDeletionLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const isLender = debt.lender.id === currentUserId;
+  const hasDeletionRequest = debt.deletionRequestedBy !== null;
+  const isRequester = debt.deletionRequestedBy === currentUserId;
+  const canApprove = hasDeletionRequest && !isRequester;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,6 +152,60 @@ export default function DebtDetailClient({
     }
   };
 
+  const handleRequestDeletion = async () => {
+    setDeletionLoading(true);
+    setError("");
+
+    try {
+      const result = await requestDebtDeletion(debt.id);
+      if (!result.success) {
+        setError(result.error || "Failed to request deletion");
+        return;
+      }
+      router.refresh();
+    } catch (err) {
+      setError("An error occurred while requesting deletion");
+    } finally {
+      setDeletionLoading(false);
+    }
+  };
+
+  const handleApproveDeletion = async () => {
+    setDeletionLoading(true);
+    setError("");
+
+    try {
+      const result = await approveDebtDeletion(debt.id);
+      if (!result.success) {
+        setError(result.error || "Failed to approve deletion");
+        return;
+      }
+      // Redirect to dashboard after successful deletion
+      router.push("/dashboard");
+    } catch (err) {
+      setError("An error occurred while approving deletion");
+      setDeletionLoading(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    setDeletionLoading(true);
+    setError("");
+
+    try {
+      const result = await cancelDebtDeletionRequest(debt.id);
+      if (!result.success) {
+        setError(result.error || "Failed to cancel request");
+        return;
+      }
+      router.refresh();
+    } catch (err) {
+      setError("An error occurred while canceling request");
+    } finally {
+      setDeletionLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -161,6 +226,44 @@ export default function DebtDetailClient({
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
+      )}
+
+      {/* Deletion Request Banner */}
+      {hasDeletionRequest && debt.status === "pending" && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="font-medium">Deletion Requested</h3>
+                <p className="text-sm text-muted-foreground">
+                  {isRequester
+                    ? "You requested to delete this debt. Waiting for the other party to approve."
+                    : "The other party wants to delete this debt. Both parties must agree to delete."}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {isRequester ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelRequest}
+                    disabled={deletionLoading}
+                  >
+                    {deletionLoading ? "Canceling..." : "Cancel Request"}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handleApproveDeletion}
+                    disabled={deletionLoading}
+                  >
+                    {deletionLoading ? "Approving..." : "Approve Deletion"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Debt Info */}
@@ -233,6 +336,26 @@ export default function DebtDetailClient({
                   </pre>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Deletion Actions */}
+          {debt.status === "pending" && !hasDeletionRequest && (
+            <div className="mt-6 flex items-center justify-between border-t pt-4">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Delete this debt</Label>
+                <p className="text-xs text-muted-foreground">
+                  Both parties must agree to delete a debt
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRequestDeletion}
+                disabled={deletionLoading}
+              >
+                {deletionLoading ? "Requesting..." : "Request Deletion"}
+              </Button>
             </div>
           )}
         </CardContent>

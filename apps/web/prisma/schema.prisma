@@ -13,17 +13,18 @@ datasource db {
 }
         
 model User {
-  id             String        @id @default(cuid())
-  name           String
-  email          String        @unique
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  members        GroupMember[]
-  sentInvites    GroupInvite[] @relation("InviteSender")
-  receivedInvites GroupInvite[] @relation("InviteReceiver")
-  lentDebts      Debt[]        @relation("Lender")
-  borrowedDebts  Debt[]        @relation("Borrower")
-  tabs           Tab[]
+  id                 String        @id @default(cuid())
+  name               String
+  email              String        @unique
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  members            GroupMember[]
+  sentInvites        GroupInvite[] @relation("InviteSender")
+  receivedInvites    GroupInvite[] @relation("InviteReceiver")
+  lentDebts          Debt[]        @relation("Lender")
+  borrowedDebts      Debt[]        @relation("Borrower")
+  debtDeletionRequests Debt[]      @relation("DeletionRequester")
+  tabs               Tab[]
 }
 
 model Group {
@@ -69,21 +70,24 @@ model GroupInvite {
 }
 
 model Debt {
-  id          Int       @id @default(autoincrement())
-  amount      Float
-  description String?
-  status      String    @default("pending")
-  lenderId    String
-  borrowerId  String
-  groupId     Int
-  receiptId   String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                   Int       @id @default(autoincrement())
+  amount               Float
+  description          String?
+  status               String    @default("pending")
+  lenderId             String
+  borrowerId           String
+  groupId              Int
+  receiptId            String?
+  deletionRequestedBy  String?
+  deletionRequestedAt  DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  lender      User      @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
-  borrower    User      @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
-  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  receipt     Receipt?  @relation("DebtReceipt", fields: [receiptId], references: [id], onDelete: SetNull)
+  lender               User      @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower             User      @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group                Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  receipt              Receipt?  @relation("DebtReceipt", fields: [receiptId], references: [id], onDelete: SetNull)
+  deletionRequester    User?     @relation("DeletionRequester", fields: [deletionRequestedBy], references: [id], onDelete: SetNull)
 
   @@index([lenderId])
   @@index([borrowerId])
