@@ -1,24 +1,12 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getUser } from "@/lib/supabase";
 import { LogoutButton } from "./logout-button";
-import { debtTransactionService } from "@/services/debt-transaction.service";
 
 export async function SiteHeader({ className }: { className?: string }) {
   const user = await getUser();
-
-  // Fetch pending transaction count for logged-in users
-  let pendingCount = 0;
-  if (user) {
-    try {
-      pendingCount = await debtTransactionService.getPendingCountForUser(user.id);
-    } catch {
-      // Silently fail - don't break the header if service fails
-    }
-  }
 
   return (
     <header
@@ -53,18 +41,10 @@ export async function SiteHeader({ className }: { className?: string }) {
               Invites
             </Link>
             <Link
-              href="/debt-transactions"
-              className="relative rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground"
+              href="/debts"
+              className="rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground"
             >
-              Requests
-              {pendingCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="absolute -right-2 -top-1 h-5 min-w-5 px-1 text-xs"
-                >
-                  {pendingCount}
-                </Badge>
-              )}
+              Debts
             </Link>
           </nav>
         </div>

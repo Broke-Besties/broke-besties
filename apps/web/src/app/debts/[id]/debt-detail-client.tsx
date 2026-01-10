@@ -394,14 +394,10 @@ export default function DebtDetailClient({
                 debt.status === "pending" &&
                   "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
                 debt.status === "paid" &&
-                  "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                debt.status === "not_paying" &&
-                  "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                  "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
               )}
             >
-              {debt.status === "not_paying"
-                ? "Not paying"
-                : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+              {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
             </Badge>
           </div>
         </CardHeader>
