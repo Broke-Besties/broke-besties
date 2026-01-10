@@ -1,63 +1,69 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
-import { updateDebtStatus, updateTabStatus } from './actions'
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { updateDebtStatus, updateTabStatus } from "./actions";
 
 type Debt = {
-  id: number
-  amount: number
-  description: string | null
-  status: string
-  createdAt: Date | string
+  id: number;
+  amount: number;
+  description: string | null;
+  status: string;
+  createdAt: Date | string;
   lender: {
-    id: string
-    email: string
-  }
+    id: string;
+    email: string;
+  };
   borrower: {
-    id: string
-    email: string
-  }
+    id: string;
+    email: string;
+  };
   group: {
-    id: number
-    name: string
-  } | null
-}
+    id: number;
+    name: string;
+  } | null;
+};
 
 type User = {
-  id: string
-  email: string
-}
+  id: string;
+  email: string;
+};
 
 type Group = {
-  id: number
-  name: string
-  createdAt: Date | string
+  id: number;
+  name: string;
+  createdAt: Date | string;
   _count: {
-    members: number
-  }
-}
+    members: number;
+  };
+};
 
 type Tab = {
-  id: number
-  amount: number
-  description: string
-  personName: string
-  status: string
-  createdAt: Date | string
-}
+  id: number;
+  amount: number;
+  description: string;
+  personName: string;
+  status: string;
+  createdAt: Date | string;
+};
 
 type DashboardPageClientProps = {
-  initialDebts: any[]
-  initialGroups: any[]
-  initialTabs: any[]
-  currentUser: any
-}
+  initialDebts: any[];
+  initialGroups: any[];
+  initialTabs: any[];
+  currentUser: any;
+};
 
 export default function DashboardPageClient({
   initialDebts,
@@ -65,101 +71,118 @@ export default function DashboardPageClient({
   initialTabs,
   currentUser,
 }: DashboardPageClientProps) {
-  const [debts, setDebts] = useState<Debt[]>(initialDebts)
-  const [groups] = useState<Group[]>(initialGroups)
-  const [tabs, setTabs] = useState<Tab[]>(initialTabs)
-  const [error, setError] = useState('')
-  const router = useRouter()
+  const [debts, setDebts] = useState<Debt[]>(initialDebts);
+  const [groups] = useState<Group[]>(initialGroups);
+  const [tabs, setTabs] = useState<Tab[]>(initialTabs);
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  const formatShortDate = (value: Date | string) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
     // Store the old status in case we need to revert
-    const oldStatus = debts.find(d => d.id === debtId)?.status
+    const oldStatus = debts.find((d) => d.id === debtId)?.status;
 
     // Optimistically update the UI
-    setDebts(prevDebts =>
-      prevDebts.map(debt =>
+    setDebts((prevDebts) =>
+      prevDebts.map((debt) =>
         debt.id === debtId ? { ...debt, status: newStatus } : debt
       )
-    )
+    );
 
     try {
-      const result = await updateDebtStatus(debtId, newStatus)
+      const result = await updateDebtStatus(debtId, newStatus);
 
       if (!result.success) {
-        setError(result.error || 'Failed to update status')
+        setError(result.error || "Failed to update status");
         // Revert to old status
         if (oldStatus) {
-          setDebts(prevDebts =>
-            prevDebts.map(debt =>
+          setDebts((prevDebts) =>
+            prevDebts.map((debt) =>
               debt.id === debtId ? { ...debt, status: oldStatus } : debt
             )
-          )
+          );
         }
-        return
+        return;
       }
     } catch (err) {
-      setError('An error occurred while updating the status')
+      setError("An error occurred while updating the status");
       // Revert to old status
       if (oldStatus) {
-        setDebts(prevDebts =>
-          prevDebts.map(debt =>
+        setDebts((prevDebts) =>
+          prevDebts.map((debt) =>
             debt.id === debtId ? { ...debt, status: oldStatus } : debt
           )
-        )
+        );
       }
     }
-  }
+  };
 
   const handleUpdateTabStatus = async (tabId: number, newStatus: string) => {
-    const oldStatus = tabs.find(t => t.id === tabId)?.status
+    const oldStatus = tabs.find((t) => t.id === tabId)?.status;
 
     // Optimistically update the UI
-    setTabs(prevTabs =>
-      prevTabs.map(tab =>
+    setTabs((prevTabs) =>
+      prevTabs.map((tab) =>
         tab.id === tabId ? { ...tab, status: newStatus } : tab
       )
-    )
+    );
 
     try {
-      const result = await updateTabStatus(tabId, newStatus)
+      const result = await updateTabStatus(tabId, newStatus);
 
       if (!result.success) {
-        setError(result.error || 'Failed to update tab status')
+        setError(result.error || "Failed to update tab status");
         if (oldStatus) {
-          setTabs(prevTabs =>
-            prevTabs.map(tab =>
+          setTabs((prevTabs) =>
+            prevTabs.map((tab) =>
               tab.id === tabId ? { ...tab, status: oldStatus } : tab
             )
-          )
+          );
         }
-        return
+        return;
       }
     } catch (err) {
-      setError('An error occurred while updating the tab status')
+      setError("An error occurred while updating the tab status");
       if (oldStatus) {
-        setTabs(prevTabs =>
-          prevTabs.map(tab =>
+        setTabs((prevTabs) =>
+          prevTabs.map((tab) =>
             tab.id === tabId ? { ...tab, status: oldStatus } : tab
           )
-        )
+        );
       }
     }
-  }
+  };
 
-  const lendingDebts = debts.filter((debt) => debt.lender.id === currentUser?.id)
-  const borrowingDebts = debts.filter((debt) => debt.borrower.id === currentUser?.id)
-  const pendingTabs = tabs.filter((tab) => tab.status === 'pending')
+  const lendingDebts = debts.filter(
+    (debt) => debt.lender.id === currentUser?.id
+  );
+  const borrowingDebts = debts.filter(
+    (debt) => debt.borrower.id === currentUser?.id
+  );
+  const pendingTabs = tabs.filter((tab) => tab.status === "pending");
+  const pendingDebts = debts.filter((debt) => debt.status === "pending");
 
   const calculateTotal = (debtList: Debt[]) => {
-    return debtList.reduce((sum, debt) => sum + debt.amount, 0)
-  }
+    return debtList.reduce((sum, debt) => sum + debt.amount, 0);
+  };
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Manage your debts and loans.</p>
+          <p className="text-sm text-muted-foreground">
+            Manage your debts and loans.
+          </p>
         </div>
       </div>
 
@@ -169,161 +192,140 @@ export default function DashboardPageClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex-row items-start justify-between space-y-0">
-            <div className="space-y-1">
-              <CardTitle>You are lending</CardTitle>
-              <CardDescription>Money owed to you</CardDescription>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-semibold tracking-tight text-foreground">
-                ${calculateTotal(lendingDebts).toFixed(2)}
-              </div>
-              <Badge className="mt-2" variant="secondary">
-                {lendingDebts.length} item{lendingDebts.length === 1 ? '' : 's'}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {lendingDebts.length === 0 ? (
-              <div className="rounded-md border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
-                No lending records.
-              </div>
-            ) : (
-              lendingDebts.map((debt) => (
+      {/* Debts Summary */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4">
+          <p className="text-sm text-emerald-700 dark:text-emerald-300">
+            You are owed
+          </p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+            +${calculateTotal(lendingDebts).toFixed(2)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4">
+          <p className="text-sm text-rose-700 dark:text-rose-300">You owe</p>
+          <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+            -${calculateTotal(borrowingDebts).toFixed(2)}
+          </p>
+        </div>
+      </div>
+
+      {/* Debts Leaderboard */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Debt leaderboard
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {pendingDebts.length} pending • {debts.length} total
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => router.push("/debts")}>
+            View all
+          </Button>
+        </div>
+
+        {pendingDebts.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <p className="text-muted-foreground">No pending debts</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create a debt from a group page
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {pendingDebts.map((debt) => {
+              const isLending = debt.lender.id === currentUser?.id;
+              const otherPerson = isLending ? debt.borrower : debt.lender;
+
+              return (
                 <div
                   key={debt.id}
-                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   onClick={() => router.push(`/debts/${debt.id}`)}
+                  className={cn(
+                    "group flex items-center justify-between gap-4 rounded-xl border bg-card/50 p-4 cursor-pointer transition-colors hover:bg-accent/30"
+                  )}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-medium">{debt.borrower.email}</div>
-                      {debt.description && <div className="mt-0.5 text-sm text-muted-foreground">{debt.description}</div>}
-                      {debt.group && (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Group: <span className="font-medium text-foreground">{debt.group.name}</span>
-                        </div>
+                  {/* Left: Person & Details */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                        isLending
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          : "bg-rose-500/10 text-rose-700 dark:text-rose-300"
                       )}
+                    >
+                      {otherPerson.email.charAt(0).toUpperCase()}
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
-                      </div>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        {otherPerson.email}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {debt.description ||
+                          (debt.group ? debt.group.name : "No description")}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {debt.group?.name ? `${debt.group.name} • ` : ""}
+                        Added {formatShortDate(debt.createdAt)}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <Badge
-                      variant="outline"
+                  {/* Right: Amount & Status */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <p
+                        className={cn(
+                          "text-lg font-bold",
+                          isLending
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-rose-600 dark:text-rose-400"
+                        )}
+                      >
+                        {isLending ? "+" : "-"}${debt.amount.toFixed(2)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUpdateStatus(
+                          debt.id,
+                          debt.status === "pending" ? "paid" : "pending"
+                        );
+                      }}
                       className={cn(
-                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                        "h-8 rounded-full border px-3 text-xs font-medium shadow-sm transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        debt.status === "pending"
+                          ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/15 dark:text-yellow-300"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300"
                       )}
                     >
-                      {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                    </Badge>
-
-                    <select
-                      value={debt.status}
-                      onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                    </select>
+                      {debt.status === "pending" ? "Pending" : "Paid"}
+                    </button>
                   </div>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-start justify-between space-y-0">
-            <div className="space-y-1">
-              <CardTitle>You are borrowing</CardTitle>
-              <CardDescription>Money you owe</CardDescription>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-semibold tracking-tight text-foreground">
-                ${calculateTotal(borrowingDebts).toFixed(2)}
-              </div>
-              <Badge className="mt-2" variant="secondary">
-                {borrowingDebts.length} item{borrowingDebts.length === 1 ? '' : 's'}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {borrowingDebts.length === 0 ? (
-              <div className="rounded-md border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
-                No borrowing records.
-              </div>
-            ) : (
-              borrowingDebts.map((debt) => (
-                <div
-                  key={debt.id}
-                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                  onClick={() => router.push(`/debts/${debt.id}`)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-medium">{debt.lender.email}</div>
-                      {debt.description && <div className="mt-0.5 text-sm text-muted-foreground">{debt.description}</div>}
-                      {debt.group && (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Group: <span className="font-medium text-foreground">{debt.group.name}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                      )}
-                    >
-                      {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                    </Badge>
-
-                    <select
-                      value={debt.status}
-                      onChange={(e) => handleUpdateStatus(debt.id, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                    </select>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold tracking-tight">Your Tabs</h2>
-            <p className="text-sm text-muted-foreground">Money you owe outside the platform</p>
+            <p className="text-sm text-muted-foreground">
+              Money you owe outside the platform
+            </p>
           </div>
-          <Button onClick={() => router.push('/tabs')}>
-            View all
-          </Button>
+          <Button onClick={() => router.push("/tabs")}>View all</Button>
         </div>
 
         {pendingTabs.length === 0 ? (
@@ -335,9 +337,7 @@ export default function DashboardPageClient({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => router.push('/tabs')}>
-                Add a tab
-              </Button>
+              <Button onClick={() => router.push("/tabs")}>Add a tab</Button>
             </CardContent>
           </Card>
         ) : (
@@ -354,13 +354,15 @@ export default function DashboardPageClient({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{tab.description}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {tab.description}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     Added {new Date(tab.createdAt).toLocaleDateString()}
                   </p>
                   <Button
                     size="sm"
-                    onClick={() => handleUpdateTabStatus(tab.id, 'paid')}
+                    onClick={() => handleUpdateTabStatus(tab.id, "paid")}
                   >
                     Mark Paid
                   </Button>
@@ -374,12 +376,14 @@ export default function DashboardPageClient({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold tracking-tight">Your Groups</h2>
-            <p className="text-sm text-muted-foreground">Groups you're a member of</p>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Your Groups
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Groups you're a member of
+            </p>
           </div>
-          <Button onClick={() => router.push('/groups')}>
-            View all
-          </Button>
+          <Button onClick={() => router.push("/groups")}>View all</Button>
         </div>
 
         {groups.length === 0 ? (
@@ -391,7 +395,7 @@ export default function DashboardPageClient({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => router.push('/groups')}>
+              <Button onClick={() => router.push("/groups")}>
                 Go to groups
               </Button>
             </CardContent>
@@ -420,5 +424,5 @@ export default function DashboardPageClient({
         )}
       </div>
     </div>
-  )
+  );
 }

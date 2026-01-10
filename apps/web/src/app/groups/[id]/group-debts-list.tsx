@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 type Debt = {
@@ -34,6 +35,7 @@ type FilterStatus = 'all' | 'pending' | 'paid'
 
 export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebtsListProps) {
   const [filter, setFilter] = useState<FilterStatus>('all')
+  const router = useRouter()
 
   const filteredDebts = debts.filter(debt => {
     if (filter === 'all') return true
@@ -103,10 +105,10 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
             filteredDebts.map((debt) => {
               const isLender = currentUser?.id === debt.lender.id
               return (
-                <Link
+                <div
                   key={debt.id}
-                  href={`/debts/${debt.id}`}
-                  className="block rounded-lg border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50"
+                  onClick={() => router.push(`/debts/${debt.id}`)}
+                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
@@ -143,16 +145,22 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
                       {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
                     </Badge>
 
-                    <select
-                      value={debt.status}
-                      onChange={(e) => onUpdateStatus(debt.id, e.target.value)}
-                      className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                    </select>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Select
+                        value={debt.status}
+                        onValueChange={(value) => onUpdateStatus(debt.id, value)}
+                      >
+                        <SelectTrigger size="sm" className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                </Link>
+                </div>
               )
             })
           )}
