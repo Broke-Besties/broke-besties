@@ -305,10 +305,16 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                     min="0.01"
                     required
                     value={newTab.amount}
-                    onChange={(e) =>
-                      setNewTab({ ...newTab, amount: e.target.value })
-                    }
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value && !isNaN(parseFloat(value))) {
+                        const rounded = Math.round(parseFloat(value) * 100) / 100
+                        setNewTab({ ...newTab, amount: rounded.toString() })
+                      } else {
+                        setNewTab({ ...newTab, amount: value })
+                      }
+                    }}
+                    placeholder="0"
                   />
                 </div>
                 <div className="grid gap-2">

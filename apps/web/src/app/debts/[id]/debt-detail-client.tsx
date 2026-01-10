@@ -666,7 +666,15 @@ export default function DebtDetailClient({
                       step="0.01"
                       min="0.01"
                       value={proposedAmount}
-                      onChange={(e) => setProposedAmount(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value && !isNaN(parseFloat(value))) {
+                          const rounded = Math.round(parseFloat(value) * 100) / 100
+                          setProposedAmount(rounded.toString())
+                        } else {
+                          setProposedAmount(value)
+                        }
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
