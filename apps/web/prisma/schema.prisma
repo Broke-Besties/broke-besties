@@ -13,20 +13,20 @@ datasource db {
 }
         
 model User {
-  id                        String               @id @default(cuid())
+  id                        String                        @id @default(cuid())
   name                      String
-  email                     String               @unique
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
+  email                     String                        @unique
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
   members                   GroupMember[]
-  sentInvites               GroupInvite[]        @relation("InviteSender")
-  receivedInvites           GroupInvite[]        @relation("InviteReceiver")
-  lentDebts                 Debt[]               @relation("Lender")
-  borrowedDebts             Debt[]               @relation("Borrower")
+  sentInvites               GroupInvite[]                 @relation("InviteSender")
+  receivedInvites           GroupInvite[]                 @relation("InviteReceiver")
+  lentDebts                 Debt[]                        @relation("Lender")
+  borrowedDebts             Debt[]                        @relation("Borrower")
   tabs                      Tab[]
-  debtTransactions          DebtTransaction[]    @relation("TransactionRequester")
-  lentRecurringPayments     RecurringPayment[]   @relation("RecurringPaymentLender")
-  borrowedRecurringPayments RecurringPayment[]   @relation("RecurringPaymentBorrowers")
+  debtTransactions          DebtTransaction[]             @relation("TransactionRequester")
+  lentRecurringPayments     RecurringPayment[]           @relation("RecurringPaymentLender")
+  recurringPaymentBorrowers RecurringPaymentBorrower[]
 }
 
 model Group {
@@ -151,17 +151,31 @@ model DebtTransaction {
 }
 
 model RecurringPayment {
-  id          Int                     @id @default(autoincrement())
+  id          Int                           @id @default(autoincrement())
   amount      Float
   description String?
-  status      String                  @default("active") // "active" or "inactive"
+  status      String                        @default("active") // "active" or "inactive"
   lenderId    String
-  frequency   Int                     // Frequency in days
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
+  frequency   Int                           // Frequency in days
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
 
-  lender      User                    @relation("RecurringPaymentLender", fields: [lenderId], references: [id], onDelete: Cascade)
-  borrowers   User[]                  @relation("RecurringPaymentBorrowers")
+  lender      User                         @relation("RecurringPaymentLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrowers   RecurringPaymentBorrower[]
 
   @@index([lenderId])
+}
+
+model RecurringPaymentBorrower {
+  id                 Int              @id @default(autoincrement())
+  userId             String
+  recurringPaymentId Int
+  splitPercentage    Float            // Percentage of the total amount this borrower owes (0-100)
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurringPayment   RecurringPayment @relation(fields: [recurringPaymentId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+
+  @@unique([userId, recurringPaymentId])
+  @@index([userId])
+  @@index([recurringPaymentId])
 }
