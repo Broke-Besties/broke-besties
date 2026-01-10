@@ -145,8 +145,17 @@ export function DebtFormItem({ debtData, groupId, currentUserId, onChange }: Deb
           min="0.01"
           required
           value={debtData.amount}
-          onChange={(e) => updateField('amount', e.target.value)}
-          placeholder="0.00"
+          onChange={(e) => {
+            const value = e.target.value
+            // Round to 2 decimal places if it's a valid number
+            if (value && !isNaN(parseFloat(value))) {
+              const rounded = Math.round(parseFloat(value) * 100) / 100
+              updateField('amount', rounded.toString())
+            } else {
+              updateField('amount', value)
+            }
+          }}
+          placeholder="0"
           className="text-sm h-10 min-w-0"
         />
       </div>
