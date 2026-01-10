@@ -3,6 +3,7 @@
 import { getUser } from '@/lib/supabase'
 import { inviteService } from '@/services/invite.service'
 import { debtService } from '@/services/debt.service'
+import { debtTransactionService } from '@/services/debt-transaction.service'
 import { userService } from '@/services/user.service'
 import { groupService } from '@/services/group.service'
 import { redirect } from 'next/navigation'
@@ -160,5 +161,117 @@ export async function searchGroupMembers(groupId: number, query: string) {
       error: error instanceof Error ? error.message : 'Failed to search members',
       members: [],
     }
+  }
+}
+
+// Debt Transaction Actions
+
+export async function createDebtTransaction(data: {
+  debtId: number
+  type: 'drop' | 'modify'
+  proposedAmount?: number
+  proposedDescription?: string
+  reason?: string
+}) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    const transaction = await debtTransactionService.createTransaction({
+      debtId: data.debtId,
+      type: data.type,
+      requesterId: user.id,
+      proposedAmount: data.proposedAmount,
+      proposedDescription: data.proposedDescription,
+      reason: data.reason,
+    })
+    revalidatePath('/dashboard')
+    revalidatePath('/debt-transactions')
+    revalidatePath(`/debts/${data.debtId}`)
+    return { success: true, transaction }
+  } catch (error) {
+    console.error('Create debt transaction error:', error)
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to create transaction',
+    }
+  }
+}
+
+export async function respondToDebtTransaction(
+  transactionId: number,
+  approve: boolean
+) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    const result = await debtTransactionService.respondToTransaction({
+      transactionId,
+      userId: user.id,
+      approve,
+    })
+    revalidatePath('/dashboard')
+    revalidatePath('/debt-transactions')
+    return { success: true, ...result }
+  } catch (error) {
+    console.error('Respond to debt transaction error:', error)
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to respond to transaction',
+    }
+  }
+}
+
+export async function cancelDebtTransaction(transactionId: number) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    const transaction = await debtTransactionService.cancelTransaction(
+      transactionId,
+      user.id
+    )
+    revalidatePath('/dashboard')
+    revalidatePath('/debt-transactions')
+    return { success: true, transaction }
+  } catch (error) {
+    console.error('Cancel debt transaction error:', error)
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to cancel transaction',
+    }
+  }
+}
+
+export async function getPendingTransactionCount() {
+  const user = await getUser()
+
+  if (!user) {
+    return { count: 0 }
+  }
+
+  try {
+    const count = await debtTransactionService.getPendingCountForUser(user.id)
+    return { count }
+  } catch (error) {
+    console.error('Get pending transaction count error:', error)
+    return { count: 0 }
   }
 }

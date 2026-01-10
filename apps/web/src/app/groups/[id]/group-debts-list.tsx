@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +30,7 @@ type GroupDebtsListProps = {
   onUpdateStatus: (debtId: number, newStatus: string) => Promise<void>
 }
 
-type FilterStatus = 'all' | 'pending' | 'paid' | 'not_paying'
+type FilterStatus = 'all' | 'pending' | 'paid'
 
 export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebtsListProps) {
   const [filter, setFilter] = useState<FilterStatus>('all')
@@ -43,7 +44,6 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
     all: debts.length,
     pending: debts.filter(d => d.status === 'pending').length,
     paid: debts.filter(d => d.status === 'paid').length,
-    not_paying: debts.filter(d => d.status === 'not_paying').length,
   }
 
   return (
@@ -91,30 +91,23 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
           >
             Paid ({statusCounts.paid})
           </button>
-          <button
-            onClick={() => setFilter('not_paying')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              filter === 'not_paying'
-                ? 'bg-rose-500/50 text-white'
-                : 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300'
-            )}
-          >
-            Not Paying ({statusCounts.not_paying})
-          </button>
         </div>
 
         {/* Debts list */}
         <div className="space-y-3">
           {filteredDebts.length === 0 ? (
             <div className="rounded-md border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-              {filter === 'all' ? 'No debts in this group yet.' : `No ${filter === 'not_paying' ? 'not paying' : filter} debts.`}
+              {filter === 'all' ? 'No debts in this group yet.' : `No ${filter} debts.`}
             </div>
           ) : (
             filteredDebts.map((debt) => {
               const isLender = currentUser?.id === debt.lender.id
               return (
-                <div key={debt.id} className="rounded-lg border bg-background p-4 shadow-sm">
+                <Link
+                  key={debt.id}
+                  href={`/debts/${debt.id}`}
+                  className="block rounded-lg border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <div className="font-medium">
@@ -145,10 +138,9 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
                       className={cn(
                         debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
                         debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                        debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
                       )}
                     >
-                      {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                      {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
                     </Badge>
 
                     <select
@@ -158,10 +150,9 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
                     >
                       <option value="pending">Pending</option>
                       <option value="paid">Paid</option>
-                      <option value="not_paying">Not Paying</option>
                     </select>
                   </div>
-                </div>
+                </Link>
               )
             })
           )}

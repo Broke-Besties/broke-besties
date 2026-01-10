@@ -40,6 +40,12 @@ export async function SiteHeader({ className }: { className?: string }) {
             >
               Invites
             </Link>
+            <Link
+              href="/debts"
+              className="rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground"
+            >
+              Debts
+            </Link>
           </nav>
         </div>
 

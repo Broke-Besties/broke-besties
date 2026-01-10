@@ -1,5 +1,6 @@
 import { getUser } from "@/lib/supabase";
 import { debtService } from "@/services/debt.service";
+import { debtTransactionService } from "@/services/debt-transaction.service";
 import { receiptService } from "@/services/receipt.service";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
@@ -38,10 +39,15 @@ export default async function DebtDetailPage({
 
     const receipts = await receiptService.getGroupReceipts(debt.groupId, user.id);
 
+    // Fetch pending transactions for this debt
+    const transactions = await debtTransactionService.getDebtTransactions(debtId, user.id);
+    console.log('transactions', transactions);
+
     return (
       <DebtDetailClient
         debt={debtWithReceipt || debt}
         receipts={receipts}
+        transactions={transactions}
         currentUserId={user.id}
       />
     );
