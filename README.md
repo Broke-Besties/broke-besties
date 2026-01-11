@@ -23,6 +23,7 @@ cd apps/web
 pnpm supabase init
 pnpm supabase start
 
+update .env with the newly created variables (example sample.env)
 # Seed the database
 npx prisma db seed
 
