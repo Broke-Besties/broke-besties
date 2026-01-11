@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { createInvite, createDebt, createDebts, updateDebtStatus, getRecentFriends, searchFriendsForInvite, addFriendToGroup, cancelInvite } from './actions'
 import { DebtFormItem } from './debt-form-item'
 import { GroupDebtsList } from './group-debts-list'
+import { GroupDebtChart } from './group-debt-chart'
 
 type Member = {
   id: number
@@ -438,6 +439,12 @@ export default function GroupDetailPageClient({
           </CardContent>
         </Card>
       </div>
+
+      <GroupDebtChart
+        members={group.members}
+        debts={debts}
+        currentUserId={currentUser?.id}
+      />
 
       <GroupDebtsList
         debts={debts}
