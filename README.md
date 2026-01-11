@@ -15,11 +15,11 @@ Broke Besties is a mobile app (React Native), and web dashboard (Next.js) with a
 ## Quick Start
 
 ```bash
+# Set up local Supabase
+cd apps/web
 # Install
 pnpm install
 
-# Set up local Supabase
-cd apps/web
 pnpm supabase init
 pnpm supabase start
 
