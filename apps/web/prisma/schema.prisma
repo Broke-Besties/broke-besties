@@ -27,6 +27,8 @@ model User {
   debtTransactions          DebtTransaction[]             @relation("TransactionRequester")
   lentRecurringPayments     RecurringPayment[]           @relation("RecurringPaymentLender")
   recurringPaymentBorrowers RecurringPaymentBorrower[]
+  sentFriendRequests        Friend[]                     @relation("FriendRequester")
+  receivedFriendRequests    Friend[]                     @relation("FriendRecipient")
 }
 
 model Group {
@@ -113,7 +115,7 @@ model Tab {
   amount      Float
   description String
   personName  String
-  status      String   @default("pending")
+  status      String   @default("borrowing")
   userId      String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -178,4 +180,21 @@ model RecurringPaymentBorrower {
   @@unique([userId, recurringPaymentId])
   @@index([userId])
   @@index([recurringPaymentId])
+}
+
+model Friend {
+  id          Int      @id @default(autoincrement())
+  requesterId String
+  recipientId String
+  status      String   @default("pending") // "pending" or "accepted"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   User     @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("FriendRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, recipientId])
+  @@index([requesterId])
+  @@index([recipientId])
+  @@index([status])
 }

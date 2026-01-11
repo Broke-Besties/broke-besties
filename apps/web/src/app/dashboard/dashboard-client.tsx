@@ -168,7 +168,7 @@ export default function DashboardPageClient({
   const borrowingDebts = debts.filter(
     (debt) => debt.borrower.id === currentUser?.id
   );
-  const pendingTabs = tabs.filter((tab) => tab.status === "pending");
+  const activeTabs = tabs.filter((tab) => tab.status === "lending" || tab.status === "borrowing");
   const pendingDebts = debts.filter((debt) => debt.status === "pending");
 
   const calculateTotal = (debtList: Debt[]) => {
@@ -322,18 +322,18 @@ export default function DashboardPageClient({
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold tracking-tight">Your Tabs</h2>
             <p className="text-sm text-muted-foreground">
-              Money you owe outside the platform
+              Money you lend or borrow outside the platform
             </p>
           </div>
           <Button onClick={() => router.push("/tabs")}>View all</Button>
         </div>
 
-        {pendingTabs.length === 0 ? (
+        {activeTabs.length === 0 ? (
           <Card className="border-dashed">
             <CardHeader>
               <CardTitle>No tabs yet</CardTitle>
               <CardDescription>
-                Track what you owe to people outside the platform.
+                Track money you lend or borrow outside the platform.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -342,12 +342,14 @@ export default function DashboardPageClient({
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {pendingTabs.map((tab) => (
+            {activeTabs.map((tab) => (
               <Card key={tab.id}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{tab.personName}</CardTitle>
-                    <Badge variant="secondary">Pending</Badge>
+                    <Badge variant={tab.status === "lending" ? "default" : "secondary"}>
+                      {tab.status === "lending" ? "Owes you" : "You owe"}
+                    </Badge>
                   </div>
                   <CardDescription className="text-xl font-semibold text-foreground">
                     ${tab.amount.toFixed(2)}

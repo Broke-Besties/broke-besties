@@ -6,6 +6,7 @@ import { debtService } from '@/services/debt.service'
 import { debtTransactionService } from '@/services/debt-transaction.service'
 import { userService } from '@/services/user.service'
 import { groupService } from '@/services/group.service'
+import { friendService } from '@/services/friend.service'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -25,6 +26,26 @@ export async function createInvite(groupId: number, invitedEmail: string) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create invite',
+    }
+  }
+}
+
+export async function cancelInvite(groupId: number, inviteId: number) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    await inviteService.cancelInvite(user.id, inviteId)
+    revalidatePath(`/groups/${groupId}`)
+    return { success: true }
+  } catch (error) {
+    console.error('Cancel invite error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to cancel invite',
     }
   }
 }
@@ -273,5 +294,102 @@ export async function getPendingTransactionCount() {
   } catch (error) {
     console.error('Get pending transaction count error:', error)
     return { count: 0 }
+  }
+}
+
+// Friend Invite Actions
+
+export async function getRecentFriends(groupId: number) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    // Get recent friends
+    const friends = await friendService.getRecentFriends(user.id, 5)
+    
+    // Get current group members to exclude them
+    const group = await groupService.getGroupById(groupId, user.id)
+    const memberIds = new Set(group.members.map((m: { user: { id: string } }) => m.user.id))
+    
+    // Filter out friends who are already members
+    const availableFriends = friends.filter(f => !memberIds.has(f.friend.id))
+    
+    return {
+      success: true,
+      friends: availableFriends.map(f => ({
+        id: f.id,
+        userId: f.friend.id,
+        name: f.friend.name,
+        email: f.friend.email,
+      })),
+    }
+  } catch (error) {
+    console.error('Get recent friends error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get friends',
+      friends: [],
+    }
+  }
+}
+
+export async function searchFriendsForInvite(groupId: number, query: string) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    // Search friends by name or email
+    const friends = await friendService.searchFriends(user.id, query)
+    
+    // Get current group members to exclude them
+    const group = await groupService.getGroupById(groupId, user.id)
+    const memberIds = new Set(group.members.map((m: { user: { id: string } }) => m.user.id))
+    
+    // Filter out friends who are already members
+    const availableFriends = friends.filter(f => !memberIds.has(f.friend.id))
+    
+    return {
+      success: true,
+      friends: availableFriends.map(f => ({
+        id: f.id,
+        userId: f.friend.id,
+        name: f.friend.name,
+        email: f.friend.email,
+      })),
+    }
+  } catch (error) {
+    console.error('Search friends error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search friends',
+      friends: [],
+    }
+  }
+}
+
+export async function addFriendToGroup(groupId: number, friendUserId: string) {
+  const user = await getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  try {
+    // Add friend directly to the group (no invite required)
+    const member = await inviteService.createInviteAsFriend(user.id, groupId, friendUserId)
+    revalidatePath(`/groups/${groupId}`)
+    return { success: true, member }
+  } catch (error) {
+    console.error('Add friend to group error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add friend to group',
+    }
   }
 }

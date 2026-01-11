@@ -14,7 +14,7 @@ export default async function DashboardPage() {
 
   const debts = await debtService.getUserDebts(user.id, { status: 'pending' })
   const groups = await groupService.getUserGroups(user.id)
-  const tabs = await tabService.getUserTabs(user.id, { status: 'pending' })
+  const tabs = await tabService.getUserTabs(user.id, { status: 'borrowing' })
 
   return (
     <DashboardPageClient

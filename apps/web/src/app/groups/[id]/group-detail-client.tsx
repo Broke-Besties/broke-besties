@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createInvite, createDebt, createDebts, updateDebtStatus } from './actions'
+import { createInvite, createDebt, createDebts, updateDebtStatus, getRecentFriends, searchFriendsForInvite, addFriendToGroup, cancelInvite } from './actions'
 import { DebtFormItem } from './debt-form-item'
 import { GroupDebtsList } from './group-debts-list'
 
@@ -27,8 +27,10 @@ type Member = {
 type Invite = {
   id: number
   invitedEmail: string
+  invitedBy: string
   status: string
   sender: {
+    id: string
     email: string
   }
 }
@@ -77,6 +79,15 @@ export default function GroupDetailPageClient({
   const [showDebtModal, setShowDebtModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting, setInviting] = useState(false)
+  
+  // Friend invite state
+  const [inviteTab, setInviteTab] = useState<'friends' | 'email'>('friends')
+  const [friendSearch, setFriendSearch] = useState('')
+  const [recentFriends, setRecentFriends] = useState<Array<{ id: number; userId: string; name: string; email: string }>>([])
+  const [searchResults, setSearchResults] = useState<Array<{ id: number; userId: string; name: string; email: string }>>([])
+  const [loadingFriends, setLoadingFriends] = useState(false)
+  const [searchingFriends, setSearchingFriends] = useState(false)
+  const [cancellingInviteId, setCancellingInviteId] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
   const [debtForms, setDebtForms] = useState([{
     amount: '',
@@ -91,6 +102,84 @@ export default function GroupDetailPageClient({
   useEffect(() => {
     setDebts(initialDebts)
   }, [initialDebts])
+
+  // Load recent friends when invite modal opens
+  useEffect(() => {
+    if (showInviteModal) {
+      setLoadingFriends(true)
+      getRecentFriends(groupId)
+        .then((result) => {
+          if (result.success) {
+            setRecentFriends(result.friends)
+          }
+        })
+        .finally(() => setLoadingFriends(false))
+    }
+  }, [showInviteModal, groupId])
+
+  // Search friends with debounce
+  useEffect(() => {
+    if (!friendSearch.trim()) {
+      setSearchResults([])
+      return
+    }
+
+    const timer = setTimeout(() => {
+      setSearchingFriends(true)
+      searchFriendsForInvite(groupId, friendSearch)
+        .then((result) => {
+          if (result.success) {
+            setSearchResults(result.friends)
+          }
+        })
+        .finally(() => setSearchingFriends(false))
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [friendSearch, groupId])
+
+  const handleAddFriend = async (friendUserId: string) => {
+    setInviting(true)
+    setError('')
+
+    try {
+      const result = await addFriendToGroup(groupId, friendUserId)
+
+      if (!result.success) {
+        setError(result.error || 'Failed to add friend to group')
+        return
+      }
+
+      setShowInviteModal(false)
+      setFriendSearch('')
+      setInviteTab('friends')
+      router.refresh()
+    } catch {
+      setError('An error occurred while adding friend to group')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  const handleCancelInvite = async (inviteId: number) => {
+    setCancellingInviteId(inviteId)
+    setError('')
+
+    try {
+      const result = await cancelInvite(groupId, inviteId)
+
+      if (!result.success) {
+        setError(result.error || 'Failed to cancel invite')
+        return
+      }
+
+      router.refresh()
+    } catch {
+      setError('An error occurred while cancelling the invite')
+    } finally {
+      setCancellingInviteId(null)
+    }
+  }
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -318,16 +407,29 @@ export default function GroupDetailPageClient({
             ) : (
               group.invites.map((invite) => (
                 <div key={invite.id} className="flex items-center justify-between rounded-md border bg-background p-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{invite.invitedEmail}</div>
                     <div className="text-xs text-muted-foreground">Invited by {invite.sender.email}</div>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
-                  >
-                    Pending
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
+                    >
+                      Pending
+                    </Badge>
+                    {currentUser?.id === invite.invitedBy && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={cancellingInviteId === invite.id}
+                        onClick={() => handleCancelInvite(invite.id)}
+                      >
+                        {cancellingInviteId === invite.id ? 'Cancelling…' : 'Cancel'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))
             )}
@@ -349,35 +451,157 @@ export default function GroupDetailPageClient({
               <DialogTitle>Invite member</DialogTitle>
             </DialogHeader>
             <div className="px-6 pb-6">
-              <form onSubmit={handleInvite} className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="inviteEmail">Email address</Label>
-                  <Input
-                    id="inviteEmail"
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="member@example.com"
-                  />
+              {/* Tab Switcher */}
+              <div className="mb-4 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={inviteTab === 'friends' ? 'default' : 'outline'}
+                  onClick={() => setInviteTab('friends')}
+                >
+                  Friends
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={inviteTab === 'email' ? 'default' : 'outline'}
+                  onClick={() => setInviteTab('email')}
+                >
+                  Email
+                </Button>
+              </div>
+
+              {/* Friends Tab */}
+              {inviteTab === 'friends' && (
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="friendSearch">Search friends</Label>
+                    <Input
+                      id="friendSearch"
+                      type="text"
+                      value={friendSearch}
+                      onChange={(e) => setFriendSearch(e.target.value)}
+                      placeholder="Search by name or email..."
+                    />
+                  </div>
+
+                  <div className="max-h-64 space-y-2 overflow-y-auto">
+                    {loadingFriends ? (
+                      <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                        Loading friends...
+                      </div>
+                    ) : friendSearch.trim() ? (
+                      // Show search results
+                      searchingFriends ? (
+                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                          Searching...
+                        </div>
+                      ) : searchResults.length === 0 ? (
+                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                          No friends found matching your search.
+                        </div>
+                      ) : (
+                        searchResults.map((friend) => (
+                          <div
+                            key={friend.id}
+                            className="flex items-center justify-between rounded-md border bg-background p-3"
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate font-medium">{friend.name}</div>
+                              <div className="text-xs text-muted-foreground">{friend.email}</div>
+                            </div>
+                            <Button
+                              size="sm"
+                              disabled={inviting}
+                              onClick={() => handleAddFriend(friend.userId)}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        ))
+                      )
+                    ) : (
+                      // Show recent friends
+                      recentFriends.length === 0 ? (
+                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                          No friends available to add. Add friends or use the Email tab to invite by email.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-medium text-muted-foreground">Recent friends</div>
+                          {recentFriends.map((friend) => (
+                            <div
+                              key={friend.id}
+                              className="flex items-center justify-between rounded-md border bg-background p-3"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">{friend.name}</div>
+                                <div className="text-xs text-muted-foreground">{friend.email}</div>
+                              </div>
+                              <Button
+                                size="sm"
+                                disabled={inviting}
+                                onClick={() => handleAddFriend(friend.userId)}
+                              >
+                                Add
+                              </Button>
+                            </div>
+                          ))}
+                        </>
+                      )
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowInviteModal(false)
+                        setFriendSearch('')
+                        setInviteTab('friends')
+                        setError('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </DialogFooter>
                 </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setShowInviteModal(false)
-                      setInviteEmail('')
-                      setError('')
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={inviting}>
-                    {inviting ? 'Sending…' : 'Send invite'}
-                  </Button>
-                </DialogFooter>
-              </form>
+              )}
+
+              {/* Email Tab */}
+              {inviteTab === 'email' && (
+                <form onSubmit={handleInvite} className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="inviteEmail">Email address</Label>
+                    <Input
+                      id="inviteEmail"
+                      type="email"
+                      required
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="member@example.com"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowInviteModal(false)
+                        setInviteEmail('')
+                        setInviteTab('friends')
+                        setError('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={inviting}>
+                      {inviting ? 'Sending…' : 'Send invite'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              )}
             </div>
           </DialogContent>
         </div>

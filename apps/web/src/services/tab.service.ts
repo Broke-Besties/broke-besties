@@ -1,10 +1,12 @@
 import { prisma } from '@/lib/prisma'
+import { TabPolicy } from '@/policies/tab.policy'
 
 type CreateTabParams = {
   amount: number
   description: string
   personName: string
   userId: string
+  status?: 'lending' | 'borrowing'
 }
 
 type UpdateTabParams = {
@@ -23,7 +25,7 @@ export class TabService {
    * Create a new tab
    */
   async createTab(params: CreateTabParams) {
-    const { amount, description, personName, userId } = params
+    const { amount, description, personName, userId, status = 'borrowing' } = params
 
     if (!amount || amount <= 0) {
       throw new Error('Valid amount is required')
@@ -37,13 +39,17 @@ export class TabService {
       throw new Error('Person name is required')
     }
 
+    if (!TabPolicy.isValidStatus(status)) {
+      throw new Error('Invalid status value')
+    }
+
     const tab = await prisma.tab.create({
       data: {
         amount,
         description: description.trim(),
         personName: personName.trim(),
         userId,
-        status: 'pending',
+        status,
       },
     })
 
@@ -86,7 +92,7 @@ export class TabService {
       throw new Error('Tab not found')
     }
 
-    if (tab.userId !== userId) {
+    if (!TabPolicy.canView(userId, tab)) {
       throw new Error("You don't have permission to view this tab")
     }
 
@@ -107,7 +113,7 @@ export class TabService {
       throw new Error('Tab not found')
     }
 
-    if (existingTab.userId !== userId) {
+    if (!TabPolicy.canUpdate(userId, existingTab)) {
       throw new Error("You don't have permission to update this tab")
     }
 
@@ -135,6 +141,9 @@ export class TabService {
     }
 
     if (status !== undefined) {
+      if (!TabPolicy.isValidStatus(status)) {
+        throw new Error('Invalid status value')
+      }
       updateData.status = status
     }
 
@@ -158,7 +167,7 @@ export class TabService {
       throw new Error('Tab not found')
     }
 
-    if (existingTab.userId !== userId) {
+    if (!TabPolicy.canDelete(userId, existingTab)) {
       throw new Error("You don't have permission to delete this tab")
     }
 
