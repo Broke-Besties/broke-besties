@@ -4,8 +4,11 @@ import { useState, useMemo } from 'react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+
+type StatusFilter = 'all' | 'pending' | 'paid'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -49,27 +52,27 @@ type BalanceEntry = {
   amount: number
 }
 
-// Color palette for the chart
+// Muted color palette that matches the app's theme
 const COLORS = [
-  'rgba(239, 68, 68, 0.8)',   // red
-  'rgba(34, 197, 94, 0.8)',   // green
-  'rgba(59, 130, 246, 0.8)',  // blue
-  'rgba(168, 85, 247, 0.8)',  // purple
-  'rgba(249, 115, 22, 0.8)',  // orange
-  'rgba(236, 72, 153, 0.8)',  // pink
-  'rgba(20, 184, 166, 0.8)',  // teal
-  'rgba(234, 179, 8, 0.8)',   // yellow
+  'hsl(215 20% 55% / 0.7)',   // muted slate
+  'hsl(220 15% 45% / 0.7)',   // darker slate
+  'hsl(200 18% 50% / 0.7)',   // muted blue-gray
+  'hsl(180 12% 55% / 0.7)',   // muted teal-gray
+  'hsl(240 10% 50% / 0.7)',   // muted purple-gray
+  'hsl(160 15% 50% / 0.7)',   // muted sage
+  'hsl(210 25% 60% / 0.7)',   // soft blue
+  'hsl(190 20% 55% / 0.7)',   // soft cyan
 ]
 
 const BORDER_COLORS = [
-  'rgba(239, 68, 68, 1)',
-  'rgba(34, 197, 94, 1)',
-  'rgba(59, 130, 246, 1)',
-  'rgba(168, 85, 247, 1)',
-  'rgba(249, 115, 22, 1)',
-  'rgba(236, 72, 153, 1)',
-  'rgba(20, 184, 166, 1)',
-  'rgba(234, 179, 8, 1)',
+  'hsl(215 20% 45%)',
+  'hsl(220 15% 35%)',
+  'hsl(200 18% 40%)',
+  'hsl(180 12% 45%)',
+  'hsl(240 10% 40%)',
+  'hsl(160 15% 40%)',
+  'hsl(210 25% 50%)',
+  'hsl(190 20% 45%)',
 ]
 
 export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChartProps) {
@@ -77,6 +80,8 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(() => {
     return new Set(members.map(m => m.user.id))
   })
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
 
   const toggleMember = (userId: string) => {
     setSelectedMemberIds(prev => {
@@ -98,11 +103,18 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
     setSelectedMemberIds(new Set())
   }
 
+  // Status counts for filter badges
+  const statusCounts = useMemo(() => ({
+    all: debts.length,
+    pending: debts.filter(d => d.status === 'pending').length,
+    paid: debts.filter(d => d.status === 'paid').length,
+  }), [debts])
+
   // Calculate net balances between selected members
   const balances = useMemo(() => {
-    // Only consider pending debts involving selected members
+    // Filter debts by status and selected members
     const relevantDebts = debts.filter(
-      d => d.status === 'pending' &&
+      d => (statusFilter === 'all' || d.status === statusFilter) &&
            selectedMemberIds.has(d.lender.id) &&
            selectedMemberIds.has(d.borrower.id)
     )
@@ -153,7 +165,7 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
 
     // Sort by amount descending
     return entries.sort((a, b) => b.amount - a.amount)
-  }, [debts, selectedMemberIds])
+  }, [debts, selectedMemberIds, statusFilter])
 
   // Chart data
   const chartData = useMemo(() => {
@@ -212,27 +224,70 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
     <Card>
       <CardHeader>
         <CardTitle>Debt Overview</CardTitle>
-        <CardDescription>Who owes who in this group (pending debts only)</CardDescription>
+        <CardDescription>Who owes who in this group</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Status filter */}
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Filter by status</span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                statusFilter === 'all'
+                  ? 'bg-primary/90 text-primary-foreground'
+                  : 'bg-muted hover:bg-muted/70'
+              )}
+            >
+              All ({statusCounts.all})
+            </button>
+            <button
+              onClick={() => setStatusFilter('pending')}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                statusFilter === 'pending'
+                  ? 'bg-yellow-500/50 text-white'
+                  : 'bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300'
+              )}
+            >
+              Pending ({statusCounts.pending})
+            </button>
+            <button
+              onClick={() => setStatusFilter('paid')}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                statusFilter === 'paid'
+                  ? 'bg-emerald-500/50 text-white'
+                  : 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300'
+              )}
+            >
+              Paid ({statusCounts.paid})
+            </button>
+          </div>
+        </div>
+
         {/* Member filter */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Filter by members</span>
-            <div className="flex gap-2">
-              <button
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={selectAll}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="h-7 px-2 text-xs"
               >
                 Select all
-              </button>
-              <span className="text-muted-foreground">|</span>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={selectNone}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="h-7 px-2 text-xs"
               >
                 Clear
-              </button>
+              </Button>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -244,7 +299,7 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
                   key={member.id}
                   onClick={() => toggleMember(member.user.id)}
                   className={cn(
-                    'rounded-full px-3 py-1 text-sm font-medium transition-colors',
+                    'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
                     isSelected
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/70'
@@ -267,7 +322,9 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
         {balances.length > 0 && (
           <div className="space-y-2 border-t pt-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">Total outstanding</span>
+              <span className="font-medium">
+                {statusFilter === 'all' ? 'Total' : statusFilter === 'pending' ? 'Total outstanding' : 'Total paid'}
+              </span>
               <span className="font-semibold">${totalOwed.toFixed(2)}</span>
             </div>
             <div className="space-y-1">
@@ -285,7 +342,7 @@ export function GroupDebtChart({ members, debts, currentUserId }: GroupDebtChart
 
         {balances.length === 0 && selectedMemberIds.size > 0 && (
           <div className="border-t pt-4 text-center text-sm text-muted-foreground">
-            No pending debts between selected members.
+            No {statusFilter === 'all' ? '' : statusFilter + ' '}debts between selected members.
           </div>
         )}
 
