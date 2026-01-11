@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  sendFriendRequest,
+  sendFriendRequestByEmail,
   acceptFriendRequest,
   rejectFriendRequest,
   removeFriend,
@@ -70,10 +70,8 @@ export default function FriendsPageClient({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [processingId, setProcessingId] = useState<number | null>(null);
-  const [searchEmail, setSearchEmail] = useState("");
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchedUser, setSearchedUser] = useState<User | null>(null);
-  const [searchError, setSearchError] = useState("");
+  const [email, setEmail] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
   const router = useRouter();
 
   const handleAccept = async (requestId: number) => {
@@ -168,43 +166,19 @@ export default function FriendsPageClient({
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleAddFriend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchEmail.trim()) return;
+    if (!email.trim()) return;
 
-    setSearchLoading(true);
-    setSearchError("");
-    setSearchedUser(null);
-
-    try {
-      const res = await fetch(
-        `/api/users/search?email=${encodeURIComponent(searchEmail.trim())}`
-      );
-      const data = await res.json();
-
-      if (!res.ok) {
-        setSearchError(data.error || "User not found");
-        return;
-      }
-
-      setSearchedUser(data.user);
-    } catch {
-      setSearchError("An error occurred while searching");
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleSendRequest = async (recipientId: string) => {
-    setSearchLoading(true);
-    setSearchError("");
+    setAddLoading(true);
+    setError("");
 
     try {
-      const result = await sendFriendRequest(recipientId);
+      const result = await sendFriendRequestByEmail(email.trim());
 
       if (!result.success) {
-        setSearchError(result.error || "Failed to send request");
-        setSearchLoading(false);
+        setError(result.error || "Failed to add friend");
+        setAddLoading(false);
         return;
       }
 
@@ -219,13 +193,12 @@ export default function FriendsPageClient({
         setSuccess("Friend request sent!");
       }
 
-      setSearchedUser(null);
-      setSearchEmail("");
+      setEmail("");
       setTimeout(() => setSuccess(""), 3000);
     } catch {
-      setSearchError("An error occurred");
+      setError("An error occurred");
     } finally {
-      setSearchLoading(false);
+      setAddLoading(false);
     }
   };
 
@@ -441,45 +414,22 @@ export default function FriendsPageClient({
           <CardHeader>
             <CardTitle>Add a Friend</CardTitle>
             <CardDescription>
-              Search for a user by their email address to send a friend request.
+              Enter their email address to send a friend request.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <form onSubmit={handleSearch} className="flex gap-2">
+          <CardContent>
+            <form onSubmit={handleAddFriend} className="flex gap-2">
               <Input
                 type="email"
-                placeholder="Enter email address..."
-                value={searchEmail}
-                onChange={(e) => setSearchEmail(e.target.value)}
+                placeholder="friend@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="flex-1"
               />
-              <Button type="submit" disabled={searchLoading || !searchEmail.trim()}>
-                {searchLoading ? "Searching..." : "Search"}
+              <Button type="submit" disabled={addLoading || !email.trim()}>
+                {addLoading ? "Adding..." : "Add Friend"}
               </Button>
             </form>
-
-            {searchError && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {searchError}
-              </div>
-            )}
-
-            {searchedUser && (
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg">{searchedUser.name}</CardTitle>
-                    <CardDescription>{searchedUser.email}</CardDescription>
-                  </div>
-                  <Button
-                    onClick={() => handleSendRequest(searchedUser.id)}
-                    disabled={searchLoading}
-                  >
-                    {searchLoading ? "Sending..." : "Send Request"}
-                  </Button>
-                </CardHeader>
-              </Card>
-            )}
           </CardContent>
         </Card>
       )}

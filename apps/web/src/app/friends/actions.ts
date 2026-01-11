@@ -2,18 +2,31 @@
 
 import { getUser } from "@/lib/supabase";
 import { friendService } from "@/services/friend.service";
+import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-export async function sendFriendRequest(recipientId: string) {
+export async function sendFriendRequestByEmail(email: string) {
   const user = await getUser();
 
   if (!user) {
     redirect("/login");
   }
 
+  if (!email?.trim()) {
+    return { success: false, error: "Email is required" };
+  }
+
   try {
-    const result = await friendService.sendFriendRequest(user.id, recipientId);
+    const recipient = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+
+    if (!recipient) {
+      return { success: false, error: "User not found" };
+    }
+
+    const result = await friendService.sendFriendRequest(user.id, recipient.id);
     revalidatePath("/friends");
     return {
       success: true,
