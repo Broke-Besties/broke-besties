@@ -128,7 +128,7 @@ async function main() {
       data: {
         amount: 25.0,
         description: "Coffee run",
-        status: "settled",
+        status: "pending",
         lenderId: mainUser.id,
         borrowerId: alice.id,
         groupId: officeGroup.id,
