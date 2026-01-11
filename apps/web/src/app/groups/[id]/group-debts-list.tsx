@@ -17,10 +17,12 @@ type Debt = {
   createdAt: Date | string
   lender: {
     id: string
+    name: string
     email: string
   }
   borrower: {
     id: string
+    name: string
     email: string
   }
 }
@@ -104,6 +106,8 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
           ) : (
             filteredDebts.map((debt) => {
               const isLender = currentUser?.id === debt.lender.id
+              const isBorrower = currentUser?.id === debt.borrower.id
+              const isInvolved = isLender || isBorrower
               return (
                 <div
                   key={debt.id}
@@ -115,11 +119,17 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
                       <div className="font-medium">
                         {isLender ? (
                           <span>
-                            <span className="text-emerald-600 dark:text-emerald-400">You lent to</span> {debt.borrower.email}
+                            <span className="text-emerald-600 dark:text-emerald-400">You lent to</span> {debt.borrower.name || debt.borrower.email}
+                          </span>
+                        ) : isBorrower ? (
+                          <span>
+                            <span className="text-rose-600 dark:text-rose-400">You borrowed from</span> {debt.lender.name || debt.lender.email}
                           </span>
                         ) : (
                           <span>
-                            <span className="text-rose-600 dark:text-rose-400">You borrowed from</span> {debt.lender.email}
+                            <span className="text-muted-foreground">{debt.lender.name || debt.lender.email}</span>
+                            {' → '}
+                            <span className="text-muted-foreground">{debt.borrower.name || debt.borrower.email}</span>
                           </span>
                         )}
                       </div>
@@ -127,7 +137,7 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
                     </div>
 
                     <div className="shrink-0 text-right">
-                      <div className="text-lg font-semibold">${debt.amount.toFixed(2)}</div>
+                      <div className={cn("text-lg font-semibold", !isInvolved && "text-muted-foreground")}>${debt.amount.toFixed(2)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {new Date(debt.createdAt).toLocaleDateString()}
                       </div>

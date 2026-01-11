@@ -227,7 +227,7 @@ async function main() {
     `Created ${debtsAsBorrower.length} debts where main user is borrower`
   );
 
-  // Create some debts between other users
+  // Create some debts between other users (not involving mainUser)
   const otherDebts = await Promise.all([
     prisma.debt.create({
       data: {
@@ -247,6 +247,56 @@ async function main() {
         lenderId: charlie.id,
         borrowerId: diana.id,
         groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 42.5,
+        description: "Cleaning supplies",
+        status: "pending",
+        lenderId: bob.id,
+        borrowerId: alice.id,
+        groupId: roommatesGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 150.0,
+        description: "Casino night buy-in",
+        status: "pending",
+        lenderId: diana.id,
+        borrowerId: charlie.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 18.0,
+        description: "Office snacks",
+        status: "pending",
+        lenderId: alice.id,
+        borrowerId: charlie.id,
+        groupId: officeGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 65.0,
+        description: "Pool party drinks",
+        status: "settled",
+        lenderId: charlie.id,
+        borrowerId: diana.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 22.0,
+        description: "Takeout order",
+        status: "settled",
+        lenderId: bob.id,
+        borrowerId: alice.id,
+        groupId: roommatesGroup.id,
       },
     }),
   ]);

@@ -43,10 +43,12 @@ type Debt = {
   createdAt: Date | string
   lender: {
     id: string
+    name: string
     email: string
   }
   borrower: {
     id: string
+    name: string
     email: string
   }
 }
