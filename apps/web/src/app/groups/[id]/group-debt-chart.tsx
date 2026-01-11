@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,9 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "paid";
+type ViewFilter = "all" | "owe" | "owed";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -86,34 +87,30 @@ export function GroupDebtChart({
   debts,
   currentUserId,
 }: GroupDebtChartProps) {
-  // Selected member IDs for filtering
-  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(
-    () => {
-      return new Set(members.map((m) => m.user.id));
-    }
-  );
-  // Status filter
+  // Status filter (pending/paid/all)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+  // View filter (all debts / what I owe / what I'm owed)
+  const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
+  // Selected lenders and borrowers for advanced filtering
+  const [selectedLenders, setSelectedLenders] = useState<string[]>(() =>
+    members.map((m) => m.user.id)
+  );
+  const [selectedBorrowers, setSelectedBorrowers] = useState<string[]>(() =>
+    members.map((m) => m.user.id)
+  );
 
-  const toggleMember = (userId: string) => {
-    setSelectedMemberIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(userId)) {
-        next.delete(userId);
-      } else {
-        next.add(userId);
-      }
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    setSelectedMemberIds(new Set(members.map((m) => m.user.id)));
-  };
-
-  const selectNone = () => {
-    setSelectedMemberIds(new Set());
-  };
+  // Member options for dropdowns
+  const memberOptions = useMemo(
+    () =>
+      members.map((m) => ({
+        value: m.user.id,
+        label:
+          m.user.id === currentUserId
+            ? `${m.user.name || m.user.email} (you)`
+            : m.user.name || m.user.email,
+      })),
+    [members, currentUserId]
+  );
 
   // Status counts for filter badges
   const statusCounts = useMemo(
@@ -125,14 +122,44 @@ export function GroupDebtChart({
     [debts]
   );
 
-  // Calculate net balances between selected members
+  // Calculate amounts for quick view buttons
+  const viewAmounts = useMemo(() => {
+    if (!currentUserId) return { owe: 0, owed: 0 };
+
+    const pendingDebts = debts.filter((d) => d.status === "pending");
+    const owe = pendingDebts
+      .filter((d) => d.borrower.id === currentUserId)
+      .reduce((sum, d) => sum + d.amount, 0);
+    const owed = pendingDebts
+      .filter((d) => d.lender.id === currentUserId)
+      .reduce((sum, d) => sum + d.amount, 0);
+
+    return { owe, owed };
+  }, [debts, currentUserId]);
+
+  // Calculate net balances based on all filters
   const balances = useMemo(() => {
-    // Filter debts by status and selected members
-    const relevantDebts = debts.filter(
+    // Apply status filter
+    let relevantDebts = debts.filter(
+      (d) => statusFilter === "all" || d.status === statusFilter
+    );
+
+    // Apply view filter (quick buttons)
+    if (viewFilter === "owe" && currentUserId) {
+      relevantDebts = relevantDebts.filter(
+        (d) => d.borrower.id === currentUserId
+      );
+    } else if (viewFilter === "owed" && currentUserId) {
+      relevantDebts = relevantDebts.filter(
+        (d) => d.lender.id === currentUserId
+      );
+    }
+
+    // Apply lender/borrower dropdown filters
+    relevantDebts = relevantDebts.filter(
       (d) =>
-        (statusFilter === "all" || d.status === statusFilter) &&
-        selectedMemberIds.has(d.lender.id) &&
-        selectedMemberIds.has(d.borrower.id)
+        selectedLenders.includes(d.lender.id) &&
+        selectedBorrowers.includes(d.borrower.id)
     );
 
     // Build a map of net balances: key = "fromId->toId", value = amount owed
@@ -184,7 +211,7 @@ export function GroupDebtChart({
 
     // Sort by amount descending
     return entries.sort((a, b) => b.amount - a.amount);
-  }, [debts, selectedMemberIds, statusFilter]);
+  }, [debts, statusFilter, viewFilter, currentUserId, selectedLenders, selectedBorrowers]);
 
   // Chart data
   const chartData = useMemo(() => {
@@ -252,9 +279,51 @@ export function GroupDebtChart({
         <CardDescription>Who owes who in this group</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Quick view buttons */}
+        {currentUserId && (
+          <div className="space-y-2">
+            <span className="text-sm font-medium">Quick view</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setViewFilter("all")}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewFilter === "all"
+                    ? "bg-primary/90 text-primary-foreground"
+                    : "bg-muted hover:bg-muted/70"
+                )}
+              >
+                All debts
+              </button>
+              <button
+                onClick={() => setViewFilter("owe")}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewFilter === "owe"
+                    ? "bg-rose-200/60 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200"
+                    : "bg-rose-100/50 text-rose-800 hover:bg-rose-200/50 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/30"
+                )}
+              >
+                What I owe (${viewAmounts.owe.toFixed(2)})
+              </button>
+              <button
+                onClick={() => setViewFilter("owed")}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewFilter === "owed"
+                    ? "bg-emerald-200/60 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200"
+                    : "bg-emerald-100/50 text-emerald-800 hover:bg-emerald-200/50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+                )}
+              >
+                What I&apos;m owed (${viewAmounts.owed.toFixed(2)})
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Status filter */}
         <div className="space-y-2">
-          <span className="text-sm font-medium">Filter by status</span>
+          <span className="text-sm font-medium">Status</span>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setStatusFilter("all")}
@@ -292,49 +361,25 @@ export function GroupDebtChart({
           </div>
         </div>
 
-        {/* Member filter */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Filter by members</span>
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={selectAll}
-                className="h-7 px-2 text-xs"
-              >
-                Select all
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={selectNone}
-                className="h-7 px-2 text-xs"
-              >
-                Clear
-              </Button>
-            </div>
+        {/* Lender/Borrower dropdowns */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <span className="text-sm font-medium">Lenders</span>
+            <MultiSelect
+              options={memberOptions}
+              selected={selectedLenders}
+              onChange={setSelectedLenders}
+              placeholder="Select lenders..."
+            />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {members.map((member) => {
-              const isSelected = selectedMemberIds.has(member.user.id);
-              const isCurrentUser = member.user.id === currentUserId;
-              return (
-                <button
-                  key={member.id}
-                  onClick={() => toggleMember(member.user.id)}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                    isSelected
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-muted/70"
-                  )}
-                >
-                  {member.user.name || member.user.email}
-                  {isCurrentUser && " (you)"}
-                </button>
-              );
-            })}
+          <div className="space-y-2">
+            <span className="text-sm font-medium">Borrowers</span>
+            <MultiSelect
+              options={memberOptions}
+              selected={selectedBorrowers}
+              onChange={setSelectedBorrowers}
+              placeholder="Select borrowers..."
+            />
           </div>
         </div>
 
@@ -374,16 +419,16 @@ export function GroupDebtChart({
           </div>
         )}
 
-        {balances.length === 0 && selectedMemberIds.size > 0 && (
+        {balances.length === 0 && (selectedLenders.length > 0 || selectedBorrowers.length > 0) && (
           <div className="border-t pt-4 text-center text-sm text-muted-foreground">
-            No {statusFilter === "all" ? "" : statusFilter + " "}debts between
-            selected members.
+            No {statusFilter === "all" ? "" : statusFilter + " "}debts match
+            your filters.
           </div>
         )}
 
-        {selectedMemberIds.size === 0 && (
+        {selectedLenders.length === 0 && selectedBorrowers.length === 0 && (
           <div className="border-t pt-4 text-center text-sm text-muted-foreground">
-            Select members to see their debt relationships.
+            Select lenders or borrowers to see debt relationships.
           </div>
         )}
       </CardContent>
