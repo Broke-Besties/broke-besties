@@ -272,6 +272,69 @@ export class FriendService {
 
     return friendship;
   }
+
+  /**
+   * Get most recent accepted friends (ordered by updatedAt desc)
+   */
+  async getRecentFriends(userId: string, limit: number = 5) {
+    const friendships = await prisma.friend.findMany({
+      where: {
+        status: "accepted",
+        OR: [{ requesterId: userId }, { recipientId: userId }],
+      },
+      include: {
+        requester: true,
+        recipient: true,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+      take: limit,
+    });
+
+    // Map to friend user objects
+    return friendships.map((f) => ({
+      ...f,
+      friend: f.requesterId === userId ? f.recipient : f.requester,
+    }));
+  }
+
+  /**
+   * Search accepted friends by name or email
+   */
+  async searchFriends(userId: string, query: string) {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    const searchQuery = query.trim().toLowerCase();
+
+    const friendships = await prisma.friend.findMany({
+      where: {
+        status: "accepted",
+        OR: [{ requesterId: userId }, { recipientId: userId }],
+      },
+      include: {
+        requester: true,
+        recipient: true,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
+
+    // Filter by name or email match and map to friend user objects
+    return friendships
+      .map((f) => ({
+        ...f,
+        friend: f.requesterId === userId ? f.recipient : f.requester,
+      }))
+      .filter(
+        (f) =>
+          f.friend.name.toLowerCase().includes(searchQuery) ||
+          f.friend.email.toLowerCase().includes(searchQuery)
+      );
+  }
 }
 
 export const friendService = new FriendService();

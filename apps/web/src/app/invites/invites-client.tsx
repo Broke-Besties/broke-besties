@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { acceptInvite } from './actions'
+import { acceptInvite, rejectInvite } from './actions'
 
 type Invite = {
   id: number
@@ -32,11 +32,12 @@ type InvitesPageClientProps = {
 export default function InvitesPageClient({ initialInvites }: InvitesPageClientProps) {
   const [invites, setInvites] = useState<Invite[]>(initialInvites)
   const [error, setError] = useState('')
-  const [processingId, setProcessingId] = useState<number | null>(null)
+  const [acceptingId, setAcceptingId] = useState<number | null>(null)
+  const [rejectingId, setRejectingId] = useState<number | null>(null)
   const router = useRouter()
 
   const handleAccept = async (inviteId: number) => {
-    setProcessingId(inviteId)
+    setAcceptingId(inviteId)
     setError('')
 
     try {
@@ -44,14 +45,36 @@ export default function InvitesPageClient({ initialInvites }: InvitesPageClientP
 
       if (!result.success) {
         setError(result.error || 'Failed to accept invite')
-        setProcessingId(null)
+        setAcceptingId(null)
         return
       }
 
       router.push(`/groups/${result.group?.id}`)
     } catch (err) {
       setError('An error occurred while accepting the invite')
-      setProcessingId(null)
+      setAcceptingId(null)
+    }
+  }
+
+  const handleReject = async (inviteId: number) => {
+    setRejectingId(inviteId)
+    setError('')
+
+    try {
+      const result = await rejectInvite(inviteId)
+
+      if (!result.success) {
+        setError(result.error || 'Failed to reject invite')
+        setRejectingId(null)
+        return
+      }
+
+      // Remove the rejected invite from the list
+      setInvites(invites.filter(invite => invite.id !== inviteId))
+    } catch (err) {
+      setError('An error occurred while rejecting the invite')
+    } finally {
+      setRejectingId(null)
     }
   }
 
@@ -104,12 +127,21 @@ export default function InvitesPageClient({ initialInvites }: InvitesPageClientP
                 <div className="text-sm text-muted-foreground">
                   Invited {new Date(invite.createdAt).toLocaleDateString()}
                 </div>
-                <Button
-                  onClick={() => handleAccept(invite.id)}
-                  disabled={processingId === invite.id}
-                >
-                  {processingId === invite.id ? 'Accepting…' : 'Accept invite'}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleReject(invite.id)}
+                    disabled={acceptingId === invite.id || rejectingId === invite.id}
+                  >
+                    {rejectingId === invite.id ? 'Rejecting…' : 'Reject'}
+                  </Button>
+                  <Button
+                    onClick={() => handleAccept(invite.id)}
+                    disabled={acceptingId === invite.id || rejectingId === invite.id}
+                  >
+                    {acceptingId === invite.id ? 'Accepting…' : 'Accept'}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
