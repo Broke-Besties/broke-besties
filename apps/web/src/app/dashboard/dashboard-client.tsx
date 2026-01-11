@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+import { Doughnut } from "react-chartjs-2";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,31 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { updateDebtStatus, updateTabStatus } from "./actions";
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+// Blue/slate color palette
+const CHART_COLORS = [
+  "hsl(210 45% 70%)",
+  "hsl(210 35% 60%)",
+  "hsl(215 30% 50%)",
+  "hsl(220 25% 40%)",
+  "hsl(215 20% 35%)",
+  "hsl(205 40% 65%)",
+  "hsl(200 30% 55%)",
+  "hsl(225 20% 45%)",
+];
+
+const CHART_BORDER_COLORS = [
+  "hsl(210 45% 60%)",
+  "hsl(210 35% 50%)",
+  "hsl(215 30% 40%)",
+  "hsl(220 25% 30%)",
+  "hsl(215 20% 25%)",
+  "hsl(205 40% 55%)",
+  "hsl(200 30% 45%)",
+  "hsl(225 20% 35%)",
+];
 
 type Debt = {
   id: number;
@@ -75,6 +102,7 @@ export default function DashboardPageClient({
   const [groups] = useState<Group[]>(initialGroups);
   const [tabs, setTabs] = useState<Tab[]>(initialTabs);
   const [error, setError] = useState("");
+  const [chartView, setChartView] = useState<"owed" | "owing">("owed");
   const router = useRouter();
 
   const formatShortDate = (value: Date | string) => {
@@ -175,6 +203,109 @@ export default function DashboardPageClient({
     return debtList.reduce((sum, debt) => sum + debt.amount, 0);
   };
 
+  // Chart data based on selected view
+  const { chartData, chartDescriptions } = useMemo(() => {
+    const relevantDebts =
+      chartView === "owed"
+        ? lendingDebts.filter((d) => d.status === "pending")
+        : borrowingDebts.filter((d) => d.status === "pending");
+
+    if (relevantDebts.length === 0) {
+      return {
+        chartData: {
+          labels: [chartView === "owed" ? "No one owes you" : "You owe no one"],
+          datasets: [
+            {
+              data: [1],
+              backgroundColor: ["rgba(156, 163, 175, 0.3)"],
+              borderColor: ["rgba(156, 163, 175, 0.5)"],
+              borderWidth: 1,
+            },
+          ],
+        },
+        chartDescriptions: [] as string[][],
+      };
+    }
+
+    // Group by person with descriptions
+    const personData = new Map<string, { amount: number; descriptions: string[] }>();
+    for (const debt of relevantDebts) {
+      const person =
+        chartView === "owed" ? debt.borrower.email : debt.lender.email;
+      const existing = personData.get(person) || { amount: 0, descriptions: [] };
+      existing.amount += debt.amount;
+      if (debt.description) {
+        existing.descriptions.push(debt.description);
+      } else if (debt.group?.name) {
+        existing.descriptions.push(debt.group.name);
+      }
+      personData.set(person, existing);
+    }
+
+    const entries = Array.from(personData.entries()).sort(
+      (a, b) => b[1].amount - a[1].amount
+    );
+
+    return {
+      chartData: {
+        labels: entries.map(([person]) => person),
+        datasets: [
+          {
+            data: entries.map(([, data]) => data.amount),
+            backgroundColor: entries.map(
+              (_, i) => CHART_COLORS[i % CHART_COLORS.length]
+            ),
+            borderColor: entries.map(
+              (_, i) => CHART_BORDER_COLORS[i % CHART_BORDER_COLORS.length]
+            ),
+            borderWidth: 2,
+          },
+        ],
+      },
+      chartDescriptions: entries.map(([, data]) => data.descriptions),
+    };
+  }, [chartView, lendingDebts, borrowingDebts]);
+
+  const chartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          callbacks: {
+            title: (context: any) => context[0]?.label || "",
+            label: (context: any) => {
+              const value = context.parsed;
+              const total = context.dataset.data.reduce(
+                (a: number, b: number) => a + b,
+                0
+              );
+              const percentage = ((value / total) * 100).toFixed(1);
+              return `$${value.toFixed(2)} (${percentage}%)`;
+            },
+            afterLabel: (context: any) => {
+              const descriptions = chartDescriptions[context.dataIndex];
+              if (!descriptions || descriptions.length === 0) return "";
+              // Show up to 2 descriptions, truncated with bullets
+              const truncate = (s: string, len: number) =>
+                s.length > len ? s.slice(0, len) + "..." : s;
+              const shown = descriptions.slice(0, 2).map((d) => `• ${truncate(d, 25)}`);
+              if (descriptions.length > 2) {
+                shown.push(`  +${descriptions.length - 2} more`);
+              }
+              return shown;
+            },
+          },
+        },
+      },
+      cutout: "60%",
+    }),
+    [chartDescriptions]
+  );
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -192,22 +323,58 @@ export default function DashboardPageClient({
         </div>
       )}
 
-      {/* Debts Summary */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4">
-          <p className="text-sm text-emerald-700 dark:text-emerald-300">
-            You are owed
-          </p>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            +${calculateTotal(lendingDebts).toFixed(2)}
-          </p>
+      {/* Debts Summary with Chart */}
+      <div className="space-y-4">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => setChartView("owed")}
+            className={cn(
+              "rounded-xl p-4 text-left transition-all",
+              chartView === "owed"
+                ? "bg-emerald-500/20 border-2 border-emerald-500/40 ring-2 ring-emerald-500/20"
+                : "bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/15"
+            )}
+          >
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">
+              You are owed
+            </p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              +${calculateTotal(lendingDebts).toFixed(2)}
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setChartView("owing")}
+            className={cn(
+              "rounded-xl p-4 text-left transition-all",
+              chartView === "owing"
+                ? "bg-rose-500/20 border-2 border-rose-500/40 ring-2 ring-rose-500/20"
+                : "bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15"
+            )}
+          >
+            <p className="text-sm text-rose-700 dark:text-rose-300">You owe</p>
+            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+              -${calculateTotal(borrowingDebts).toFixed(2)}
+            </p>
+          </button>
         </div>
-        <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4">
-          <p className="text-sm text-rose-700 dark:text-rose-300">You owe</p>
-          <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-            -${calculateTotal(borrowingDebts).toFixed(2)}
-          </p>
-        </div>
+
+        {/* Doughnut Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {chartView === "owed" ? "Who owes you" : "Who you owe"}
+            </CardTitle>
+            <CardDescription>Pending debts breakdown</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-48">
+              <Doughnut data={chartData} options={chartOptions} />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Debts Leaderboard */}
