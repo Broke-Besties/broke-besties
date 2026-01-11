@@ -12,8 +12,10 @@ import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle }
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createInvite, createDebt, createDebts, updateDebtStatus, getRecentFriends, searchFriendsForInvite, addFriendToGroup, cancelInvite } from './actions'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DebtFormItem } from './debt-form-item'
 import { GroupDebtsList } from './group-debts-list'
+import { GroupDebtChart } from './group-debt-chart'
 
 type Member = {
   id: number
@@ -43,10 +45,12 @@ type Debt = {
   createdAt: Date | string
   lender: {
     id: string
+    name: string
     email: string
   }
   borrower: {
     id: string
+    name: string
     email: string
   }
 }
@@ -75,6 +79,7 @@ export default function GroupDetailPageClient({
   const [group] = useState<Group>(initialGroup)
   const [debts, setDebts] = useState<Debt[]>(initialDebts)
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState('overview')
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showDebtModal, setShowDebtModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -370,78 +375,95 @@ export default function GroupDetailPageClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex-row items-start justify-between space-y-0">
-            <div className="space-y-1">
-              <CardTitle>Members</CardTitle>
-              <CardDescription>{group.members.length} total</CardDescription>
-            </div>
-            <Badge variant="secondary">{group.members.length}</Badge>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {group.members.map((member) => (
-              <div key={member.id} className="flex items-center justify-between rounded-md border bg-background p-3">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{member.user.name}</div>
-                  <div className="text-xs text-muted-foreground">{member.user.email}</div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="members">Members</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader className="flex-row items-start justify-between space-y-0">
-            <div className="space-y-1">
-              <CardTitle>Pending invites</CardTitle>
-              <CardDescription>{group.invites.length} outstanding</CardDescription>
-            </div>
-            <Badge variant="secondary">{group.invites.length}</Badge>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {group.invites.length === 0 ? (
-              <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
-                No pending invites.
-              </div>
-            ) : (
-              group.invites.map((invite) => (
-                <div key={invite.id} className="flex items-center justify-between rounded-md border bg-background p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{invite.invitedEmail}</div>
-                    <div className="text-xs text-muted-foreground">Invited by {invite.sender.email}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
-                    >
-                      Pending
-                    </Badge>
-                    {currentUser?.id === invite.invitedBy && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        disabled={cancellingInviteId === invite.id}
-                        onClick={() => handleCancelInvite(invite.id)}
-                      >
-                        {cancellingInviteId === invite.id ? 'Cancelling…' : 'Cancel'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="overview" className="space-y-6">
+          <GroupDebtChart
+            members={group.members}
+            debts={debts}
+            currentUserId={currentUser?.id}
+          />
 
-      <GroupDebtsList
-        debts={debts}
-        currentUser={currentUser}
-        onUpdateStatus={handleUpdateStatus}
-      />
+          <GroupDebtsList
+            debts={debts}
+            currentUser={currentUser}
+            onUpdateStatus={handleUpdateStatus}
+          />
+        </TabsContent>
+
+        <TabsContent value="members" className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="flex-row items-start justify-between space-y-0">
+                <div className="space-y-1">
+                  <CardTitle>Members</CardTitle>
+                  <CardDescription>{group.members.length} total</CardDescription>
+                </div>
+                <Badge variant="secondary">{group.members.length}</Badge>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {group.members.map((member) => (
+                  <div key={member.id} className="flex items-center justify-between rounded-md border bg-background p-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{member.user.name}</div>
+                      <div className="text-xs text-muted-foreground">{member.user.email}</div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex-row items-start justify-between space-y-0">
+                <div className="space-y-1">
+                  <CardTitle>Pending invites</CardTitle>
+                  <CardDescription>{group.invites.length} outstanding</CardDescription>
+                </div>
+                <Badge variant="secondary">{group.invites.length}</Badge>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {group.invites.length === 0 ? (
+                  <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
+                    No pending invites.
+                  </div>
+                ) : (
+                  group.invites.map((invite) => (
+                    <div key={invite.id} className="flex items-center justify-between rounded-md border bg-background p-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{invite.invitedEmail}</div>
+                        <div className="text-xs text-muted-foreground">Invited by {invite.sender.email}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
+                        >
+                          Pending
+                        </Badge>
+                        {currentUser?.id === invite.invitedBy && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            disabled={cancellingInviteId === invite.id}
+                            onClick={() => handleCancelInvite(invite.id)}
+                          >
+                            {cancellingInviteId === invite.id ? 'Cancelling…' : 'Cancel'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {showInviteModal && (
         <div className="fixed inset-0 z-50">
