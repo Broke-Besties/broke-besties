@@ -18,14 +18,16 @@ Broke Besties is a mobile app (React Native), and web dashboard (Next.js) with a
 # Install
 pnpm install
 
-# Set up environment variables (Supabase + Google API key)
-# Copy .env.example to .env in /apps/web and /apps/mobile
+# Set up local Supabase
+cd apps/web
+pnpm supabase init
+pnpm supabase start
 
-# Database
-cd apps/web && pnpm prisma db push
+# Seed the database
+npx prisma db seed
 
 # Run web
-cd apps/web && pnpm dev
+pnpm dev
 
 # Run mobile (in another terminal)
 cd apps/mobile && pnpm start
