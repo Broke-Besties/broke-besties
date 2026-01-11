@@ -28,7 +28,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./apps/web
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Apply database migrations
         working-directory: ./apps/web
