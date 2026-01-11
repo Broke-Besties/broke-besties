@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { updateDebtStatus } from '@/app/dashboard/actions'
 import type { User } from '@supabase/supabase-js'
@@ -245,91 +245,90 @@ export default function DebtsPageClient({
             const otherPerson = direction === 'lending' ? debt.borrower : debt.lender
 
             return (
-              <Link
+              <Card
                 key={debt.id}
-                href={`/debts/${debt.id}`}
-                className="block"
+                className="cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+                onClick={() => router.push(`/debts/${debt.id}`)}
               >
-                <Card className="transition-all hover:shadow-md hover:-translate-y-0.5">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      {/* Left side - Info */}
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                            direction === 'lending'
-                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                              : 'bg-rose-500/10 text-rose-700 dark:text-rose-400'
-                          )}>
-                            {direction === 'lending' ? 'Lending' : 'Borrowing'}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              'text-xs',
-                              debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                              debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                            )}
-                          >
-                            {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                          </Badge>
-                        </div>
-
-                        <p className="font-medium truncate">
-                          {direction === 'lending' ? 'To: ' : 'From: '}
-                          {otherPerson.email}
-                        </p>
-
-                        {debt.description && (
-                          <p className="text-sm text-muted-foreground truncate">
-                            {debt.description}
-                          </p>
-                        )}
-
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          {debt.group && (
-                            <span className="truncate">
-                              {debt.group.name}
-                            </span>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Left side - Info */}
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                          direction === 'lending'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                            : 'bg-rose-500/10 text-rose-700 dark:text-rose-400'
+                        )}>
+                          {direction === 'lending' ? 'Lending' : 'Borrowing'}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-xs',
+                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
                           )}
-                          <span>
-                            {new Date(debt.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
+                        >
+                          {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
+                        </Badge>
                       </div>
 
-                      {/* Right side - Amount & Action */}
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className={cn(
-                            'text-xl font-semibold',
-                            direction === 'lending'
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-rose-600 dark:text-rose-400'
-                          )}>
-                            {direction === 'lending' ? '+' : '-'}${debt.amount.toFixed(2)}
-                          </p>
-                        </div>
+                      <p className="font-medium truncate">
+                        {direction === 'lending' ? 'To: ' : 'From: '}
+                        {otherPerson.email}
+                      </p>
 
-                        <select
-                          value={debt.status}
-                          onChange={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleUpdateStatus(debt.id, e.target.value)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-8 rounded-md border bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="paid">Paid</option>
-                        </select>
+                      {debt.description && (
+                        <p className="text-sm text-muted-foreground truncate">
+                          {debt.description}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        {debt.group && (
+                          <span className="truncate">
+                            {debt.group.name}
+                          </span>
+                        )}
+                        <span>
+                          {new Date(debt.createdAt).toLocaleDateString()}
+                        </span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </Link>
+
+                    {/* Right side - Amount & Action */}
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className={cn(
+                          'text-xl font-semibold',
+                          direction === 'lending'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        )}>
+                          {direction === 'lending' ? '+' : '-'}${debt.amount.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={debt.status}
+                          onValueChange={(value) => handleUpdateStatus(debt.id, value)}
+                        >
+                          <SelectTrigger size="sm" className="w-24">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="paid">Paid</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )
           })}
         </div>
