@@ -52,6 +52,12 @@ export async function SiteHeader({ className }: { className?: string }) {
             >
               Debts
             </Link>
+            <Link
+              href="/recurring-payments"
+              className="rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground"
+            >
+              Recurring Payments
+            </Link>
           </nav>
         </div>
 

@@ -67,8 +67,8 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               filter === 'all'
-                ? 'bg-primary/90 text-primary-foreground'
-                : 'bg-muted hover:bg-muted/70'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:text-foreground'
             )}
           >
             All ({statusCounts.all})
@@ -78,8 +78,8 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               filter === 'pending'
-                ? 'bg-yellow-500/50 text-white'
-                : 'bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300'
+                ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
+                : 'bg-muted text-muted-foreground hover:text-foreground'
             )}
           >
             Pending ({statusCounts.pending})
@@ -89,8 +89,8 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               filter === 'paid'
-                ? 'bg-emerald-500/50 text-white'
-                : 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300'
+                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                : 'bg-muted text-muted-foreground hover:text-foreground'
             )}
           >
             Paid ({statusCounts.paid})
