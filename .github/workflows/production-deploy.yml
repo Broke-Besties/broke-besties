@@ -37,6 +37,12 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx prisma migrate deploy
 
+      - name: Pull Vercel Environment Information
+        working-directory: ./apps/web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel pull --yes --environment=production --token="${VERCEL_TOKEN}"
+
       - name: Deploy to Vercel
         working-directory: ./apps/web
         env:
