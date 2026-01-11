@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { createClient } from "@supabase/supabase-js";
 import "dotenv/config";
 
 const adapter = new PrismaPg({
@@ -7,6 +8,66 @@ const adapter = new PrismaPg({
 });
 
 const prisma = new PrismaClient({ adapter });
+
+// Create Supabase admin client for creating auth users
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+// Helper function to create a user in Supabase auth (trigger creates User record)
+async function createAuthUser(
+  email: string,
+  name: string,
+  password: string = "password123"
+): Promise<string> {
+  // Check if user already exists in auth
+  const { data: existingUsers } = await supabase.auth.admin.listUsers();
+  const existingUser = existingUsers?.users?.find((u) => u.email === email);
+
+  if (existingUser) {
+    console.log(`Auth user already exists: ${email}`);
+    return existingUser.id;
+  }
+
+  // Create user in Supabase auth - the trigger will create the User record
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      name,
+      full_name: name,
+    },
+  });
+
+  if (error) {
+    throw new Error(`Failed to create auth user ${email}: ${error.message}`);
+  }
+
+  console.log(`Created auth user: ${email} (${data.user.id})`);
+  return data.user.id;
+}
+
+// Helper to wait for trigger to create User record
+async function waitForUser(
+  userId: string,
+  maxRetries: number = 10
+): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`User ${userId} not found after ${maxRetries} retries`);
+}
+
 async function main() {
   const seedUserEmail = process.env.SEED_USER_EMAIL;
   if (!seedUserEmail) {
@@ -15,40 +76,32 @@ async function main() {
 
   console.log(`Seeding database with main user email: ${seedUserEmail}`);
 
-  // Create main user (the one who signs up)
-  const mainUser = await prisma.user.upsert({
-    where: { email: seedUserEmail },
-    update: {},
-    create: {
-      email: seedUserEmail,
-      name: "Main User",
-    },
+  // Create main user in Supabase auth (trigger creates User record)
+  const mainUserId = await createAuthUser(seedUserEmail, "Main User");
+  await waitForUser(mainUserId);
+  const mainUser = await prisma.user.findUniqueOrThrow({
+    where: { id: mainUserId },
   });
-  console.log(`Created main user: ${mainUser.name} (${mainUser.email})`);
+  console.log(`Main user ready: ${mainUser.name} (${mainUser.email})`);
 
-  // Create seed users
-  const seedUsers = await Promise.all([
-    prisma.user.upsert({
-      where: { email: "alice@example.com" },
-      update: {},
-      create: { email: "alice@example.com", name: "Alice Johnson" },
-    }),
-    prisma.user.upsert({
-      where: { email: "bob@example.com" },
-      update: {},
-      create: { email: "bob@example.com", name: "Bob Smith" },
-    }),
-    prisma.user.upsert({
-      where: { email: "charlie@example.com" },
-      update: {},
-      create: { email: "charlie@example.com", name: "Charlie Brown" },
-    }),
-    prisma.user.upsert({
-      where: { email: "diana@example.com" },
-      update: {},
-      create: { email: "diana@example.com", name: "Diana Prince" },
-    }),
-  ]);
+  // Create seed users in Supabase auth
+  const seedUserData = [
+    { email: "alice@example.com", name: "Alice Johnson" },
+    { email: "bob@example.com", name: "Bob Smith" },
+    { email: "charlie@example.com", name: "Charlie Brown" },
+    { email: "diana@example.com", name: "Diana Prince" },
+  ];
+
+  const seedUserIds = await Promise.all(
+    seedUserData.map((u) => createAuthUser(u.email, u.name))
+  );
+
+  // Wait for all User records to be created by trigger
+  await Promise.all(seedUserIds.map((id) => waitForUser(id)));
+
+  const seedUsers = await Promise.all(
+    seedUserIds.map((id) => prisma.user.findUniqueOrThrow({ where: { id } }))
+  );
   const [alice, bob, charlie, diana] = seedUsers;
   console.log(`Created ${seedUsers.length} seed users`);
 
