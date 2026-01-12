@@ -42,6 +42,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [currentReceiptId, setCurrentReceiptId] = useState<string | null>(null)
   const [debtForms, setDebtForms] = useState<Array<{
     amount: string
     description: string
@@ -49,6 +50,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     borrower: { id: string; name: string; email: string } | null
   }>>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
+  const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -105,12 +107,17 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         },
       }))
       setDebtForms(forms)
+      setCurrentDebtIndex(0) // Reset to first debt
     }
   }, [messages])
 
   // Handle paste events for images
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
+      if (!groupId) {
+        return
+      }
+
       const items = e.clipboardData?.items
       if (!items) return
 
@@ -119,7 +126,21 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           e.preventDefault()
           const file = item.getAsFile()
           if (file) {
-            handleImageFile(file)
+            // Inline the validation logic to avoid adding handleImageFile to dependencies
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+            if (!validTypes.includes(file.type)) {
+              setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+              return
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+              setError('File too large. Maximum size is 10MB')
+              return
+            }
+
+            const previewUrl = URL.createObjectURL(file)
+            setPendingImage({ url: previewUrl, file })
+            setError('')
           }
           break
         }
@@ -164,7 +185,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     e.target.value = ''
   }
 
-  const uploadImage = async (file: File): Promise<{ signedUrl: string }> => {
+  const uploadImage = async (file: File): Promise<{ signedUrl: string; receiptId: string }> => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('groupId', groupId)
@@ -180,7 +201,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
 
     const data = await response.json()
-    return { signedUrl: data.data.signedUrl }
+    return { signedUrl: data.data.signedUrl, receiptId: data.data.id }
   }
 
   const clearPendingImage = () => {
@@ -188,6 +209,51 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       URL.revokeObjectURL(pendingImage.url)
       setPendingImage(null)
     }
+    // Don't clear currentReceiptId here, need it later to create debts
+  }
+
+  const deleteCurrentReceipt = async () => {
+    if (currentReceiptId) {
+      try {
+        await fetch(`/api/receipts/${currentReceiptId}`, {
+          method: 'DELETE',
+        })
+      } catch (error) {
+        console.error('Error deleting receipt:', error)
+      }
+      setCurrentReceiptId(null)
+    }
+  }
+
+  const addNewDebt = () => {
+    setDebtForms([...debtForms, {
+      amount: '',
+      description: '',
+      borrowerId: '',
+      borrower: null,
+    }])
+    setCurrentDebtIndex(debtForms.length)
+  }
+
+  const removeDebt = (index: number) => {
+    if (debtForms.length === 1) return
+    const newDebts = debtForms.filter((_, i) => i !== index)
+    setDebtForms(newDebts)
+    if (currentDebtIndex >= newDebts.length) {
+      setCurrentDebtIndex(newDebts.length - 1)
+    }
+  }
+
+  const updateDebtForm = (index: number, data: typeof debtForms[0]) => {
+    const newDebts = [...debtForms]
+    newDebts[index] = data
+    setDebtForms(newDebts)
+  }
+
+  const handleCancelDebts = async () => {
+    await deleteCurrentReceipt()
+    setDebtForms([])
+    setCurrentDebtIndex(0)
   }
 
   const handleCreateDebts = async () => {
@@ -195,6 +261,23 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     setError('')
 
     try {
+      // Validate all debts have required fields
+      for (let i = 0; i < debtForms.length; i++) {
+        const debt = debtForms[i]
+        if (!debt.borrowerId) {
+          setError(`Debt ${i + 1}: Please select a borrower`)
+          setIsCreatingDebts(false)
+          setCurrentDebtIndex(i)
+          return
+        }
+        if (!debt.amount || parseFloat(debt.amount) <= 0) {
+          setError(`Debt ${i + 1}: Please enter a valid amount`)
+          setIsCreatingDebts(false)
+          setCurrentDebtIndex(i)
+          return
+        }
+      }
+
       // Create each debt individually
       for (const debt of debtForms) {
         const result = await createDebt({
@@ -202,6 +285,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           description: debt.description || undefined,
           borrowerId: debt.borrowerId,
           groupId: parseInt(groupId),
+          receiptId: currentReceiptId || undefined,
         })
 
         if (!result.success) {
@@ -218,8 +302,10 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         id: Date.now().toString(),
       }])
 
-      // Clear debt forms
+      // Clear debt forms, receipt ID, and reset index
       setDebtForms([])
+      setCurrentReceiptId(null)
+      setCurrentDebtIndex(0)
 
       // Refresh the page data
       router.refresh()
@@ -242,6 +328,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
 
     let uploadedImageUrl: string | null = null
+    let receiptId: string | null = null
 
     // Upload pending image if there is one
     if (pendingImage) {
@@ -249,6 +336,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       try {
         const result = await uploadImage(pendingImage.file)
         uploadedImageUrl = result.signedUrl
+        receiptId = result.receiptId
+        setCurrentReceiptId(receiptId)
         // Note: We only need the URL now, ReceiptTool will fetch the image itself
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
@@ -288,6 +377,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           messages: langchainMessages,
           groupId: parseInt(groupId),
           imageUrl: uploadedImageUrl,
+          receiptId: receiptId,
         }),
       })
 
@@ -311,7 +401,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
             parsedDebts = parsed.debts
           }
         }
-      } catch (err) {
+      } catch {
         // Not JSON, treat as regular message
       }
 
@@ -399,28 +489,85 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                     </div>
                     {message.debts && debtForms.length > 0 && index === messages.length - 1 && (
                       <div className="mt-3 space-y-3 -mx-1 sm:mx-0">
-                        {debtForms.map((debt, debtIndex) => (
-                          <div key={debtIndex} className="px-1 sm:px-0">
-                            <div className="p-2 sm:p-3 bg-background/50 rounded border">
-                              <div className="text-xs font-semibold mb-2">Debt {debtIndex + 1}</div>
-                              <DebtFormItem
-                                debtData={debt}
-                                groupId={parseInt(groupId)}
-                                currentUserId={user?.id}
-                                onChange={(data) => {
-                                  const newForms = [...debtForms]
-                                  newForms[debtIndex] = data
-                                  setDebtForms(newForms)
-                                }}
-                              />
+                        <div className="px-1 sm:px-0">
+                          <div className="p-3 sm:p-4 bg-background/50 rounded border">
+                            <div className="text-xs font-semibold mb-3">
+                              {debtForms.length > 1 && ` (${currentDebtIndex + 1} of ${debtForms.length})`}
+                              {currentReceiptId && (
+                                <span className="ml-2 text-muted-foreground font-normal">
+                                  Receipt ID: {currentReceiptId.substring(0, 8)}...
+                                </span>
+                              )}
+                            </div>
+                            <DebtFormItem
+                              debtData={debtForms[currentDebtIndex]}
+                              groupId={parseInt(groupId)}
+                              currentUserId={user?.id}
+                              onChange={(data) => updateDebtForm(currentDebtIndex, data)}
+                            />
+                            
+                            {/* Navigation for multiple debts */}
+                            {debtForms.length > 1 && (
+                              <div className="flex items-center justify-between rounded-md border bg-muted/30 p-2 mt-3">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))}
+                                  disabled={currentDebtIndex === 0}
+                                >
+                                  ← Prev
+                                </Button>
+                                <span className="text-sm text-muted-foreground">
+                                  Debt {currentDebtIndex + 1} of {debtForms.length}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setCurrentDebtIndex(Math.min(debtForms.length - 1, currentDebtIndex + 1))}
+                                  disabled={currentDebtIndex === debtForms.length - 1}
+                                >
+                                  Next →
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* Add/Remove debt buttons */}
+                            <div className="flex gap-2 mt-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addNewDebt}
+                                className="flex-1"
+                              >
+                                + Add another debt
+                              </Button>
+                              {debtForms.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeDebt(currentDebtIndex)}
+                                >
+                                  Remove
+                                </Button>
+                              )}
                             </div>
                           </div>
-                        ))}
+                        </div>
+
+                        {/* Action buttons */}
                         <div className="flex gap-2 px-1 sm:px-0">
-                          <Button size="sm" onClick={handleCreateDebts} disabled={isCreatingDebts || debtForms.some(d => !d.borrowerId)}>
+                          <Button 
+                            size="sm" 
+                            onClick={handleCreateDebts} 
+                            disabled={isCreatingDebts || debtForms.some(d => !d.borrowerId || !d.amount || parseFloat(d.amount) <= 0)}
+                          >
                             {isCreatingDebts ? 'Creating...' : `Create ${debtForms.length} Debt${debtForms.length > 1 ? 's' : ''}`}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => setDebtForms([])}>
+                          <Button size="sm" variant="outline" onClick={handleCancelDebts}>
                             Cancel
                           </Button>
                         </div>

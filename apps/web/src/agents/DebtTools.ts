@@ -4,13 +4,14 @@ import { z } from "zod";
 
 // Define your tools
 export const createDebt = tool(
-  async ({ userId, amount, description, borrowerId, groupId }) => {
+  async ({ userId, amount, description, borrowerId, groupId, receiptId }) => {
     const debt = await debtService.createDebt({
       lenderId: userId,
       amount,
       description,
       borrowerId,
       groupId,
+      receiptId,
     });
     return `Debt created successfully. ${debt}`;
   },
@@ -23,6 +24,7 @@ export const createDebt = tool(
       description: z.string().describe("The description of the debt"),
       borrowerId: z.string().describe("The ID of the borrower"),
       groupId: z.number().describe("The ID of the group"),
+      receiptId: z.string().optional().describe("The ID of the receipt (if any)"),
     }),
   }
 );

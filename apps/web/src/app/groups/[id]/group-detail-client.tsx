@@ -101,6 +101,9 @@ export default function GroupDetailPageClient({
     borrower: null as { id: string; name: string; email: string } | null,
   }])
   const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
+  const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const router = useRouter()
 
   // Sync debts state with initialDebts when it changes (after refresh)
@@ -209,6 +212,30 @@ export default function GroupDetailPageClient({
     }
   }
 
+  const handleReceiptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Invalid file type. Only JPEG, PNG, and WebP are allowed')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File too large. Maximum size is 10MB')
+      return
+    }
+
+    setReceiptFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setReceiptPreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+    setError('')
+  }
+
   const handleCreateDebts = async (e: React.FormEvent) => {
     e.preventDefault()
     setCreating(true)
@@ -232,12 +259,36 @@ export default function GroupDetailPageClient({
         }
       }
 
+      // Upload receipt if there is one
+      let receiptId: string | undefined
+      if (receiptFile) {
+        setUploadingReceipt(true)
+        const formData = new FormData()
+        formData.append('file', receiptFile)
+        formData.append('groupId', groupId.toString())
+
+        const uploadResponse = await fetch('/api/receipts/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json()
+          throw new Error(errorData.error || 'Failed to upload receipt')
+        }
+
+        const uploadData = await uploadResponse.json()
+        receiptId = uploadData.data.id
+        setUploadingReceipt(false)
+      }
+
       // Prepare data for all debts
       const debtsToCreate = debtForms.map(debt => ({
         amount: parseFloat(debt.amount),
         description: debt.description || undefined,
         borrowerId: debt.borrowerId,
         groupId,
+        receiptId,
       }))
 
       // Use single or batch create based on number of debts
@@ -260,6 +311,8 @@ export default function GroupDetailPageClient({
         borrower: null,
       }])
       setCurrentDebtIndex(0)
+      setReceiptFile(null)
+      setReceiptPreview(null)
       setCreating(false)
 
       // Refresh the page to show new debts
@@ -646,6 +699,29 @@ export default function GroupDetailPageClient({
                   currentUserId={currentUser?.id}
                   onChange={(data) => updateDebtForm(currentDebtIndex, data)}
                 />
+
+                {/* Receipt Upload (shown only for first debt) */}
+                {currentDebtIndex === 0 && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="receipt">Receipt (optional)</Label>
+                    <input
+                      id="receipt"
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={handleReceiptFileSelect}
+                      className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+                    />
+                    {receiptPreview && (
+                      <div className="mt-2 rounded-md border bg-muted/50 p-2">
+                        <img
+                          src={receiptPreview}
+                          alt="Receipt preview"
+                          className="h-32 w-auto object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {debtForms.length > 1 && (
                   <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">

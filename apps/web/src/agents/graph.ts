@@ -7,9 +7,6 @@ import {
 } from "@langchain/langgraph";
 import { mainLLMNode } from "./MainLLMNode";
 import { extractReceiptTextTool } from "./ReceiptTool";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { BaseMessage } from "@langchain/core/messages";
-import { readDebtsFromGroup } from "./DebtTools";
 import { listNamesInGroupTool } from "./UserTool";
 
 const AgentStateAnnotation = Annotation.Root({
@@ -17,35 +14,47 @@ const AgentStateAnnotation = Annotation.Root({
   userId: Annotation<string>,
   groupId: Annotation<number>,
   imageUrl: Annotation<string | undefined>,
+  receiptId: Annotation<string | undefined>,
   description: Annotation<string | undefined>,
+  receiptText: Annotation<string | undefined>,
+  groupMembers: Annotation<string | undefined>,
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;
 
-const toolNode = new ToolNode([
-  extractReceiptTextTool,
-  readDebtsFromGroup,
-  listNamesInGroupTool,
-]);
+// Pre-execute all tools before calling the agent
+async function prepareContextNode(
+  state: AgentState
+): Promise<Partial<AgentState>> {
+  console.log("[Prepare Context] === Starting context preparation ===");
 
-function shouldContinue(state: AgentState): "tools" | typeof END {
-  const lastMessage = state.messages[state.messages.length - 1] as BaseMessage;
+  let receiptText: string | undefined;
 
-  if (
-    "tool_calls" in lastMessage &&
-    Array.isArray(lastMessage.tool_calls) &&
-    lastMessage.tool_calls.length > 0
-  ) {
-    return "tools";
+  // Execute receipt OCR if imageUrl exists (Gemini call #1)
+  if (state.imageUrl) {
+    console.log("[Prepare Context] Extracting receipt text...");
+    receiptText = await extractReceiptTextTool.invoke({ imageUrl: state.imageUrl });
+    console.log("[Prepare Context] Receipt text extracted");
   }
 
-  return END;
+  // Fetch group members (no Gemini call)
+  console.log("[Prepare Context] Fetching group members...");
+  const groupMembers = await listNamesInGroupTool.invoke({
+    userId: state.userId,
+    groupId: state.groupId,
+  });
+  console.log("[Prepare Context] Group members fetched");
+
+  return {
+    receiptText,
+    groupMembers,
+  };
 }
 
 export const agent = new StateGraph(AgentStateAnnotation)
+  .addNode("prepareContext", prepareContextNode)
   .addNode("agent", mainLLMNode)
-  .addNode("tools", toolNode)
-  .addEdge(START, "agent")
-  .addConditionalEdges("agent", shouldContinue)
-  .addEdge("tools", "agent")
+  .addEdge(START, "prepareContext")
+  .addEdge("prepareContext", "agent")
+  .addEdge("agent", END)
   .compile();
