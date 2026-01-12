@@ -133,7 +133,7 @@ export default function RecurringPaymentsClient({
             Manage your recurring payments and subscriptions
           </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>Create Recurring Payment</Button>
+        <Button onClick={() => setShowCreateModal(true)}>Create</Button>
       </div>
 
       {error && (

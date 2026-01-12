@@ -103,6 +103,21 @@ export default function RecurringFormItem({
     setBorrowers(updated)
   }
 
+  const splitEvenly = () => {
+    const totalAmount = parseFloat(amount) || 0
+    const numBorrowers = borrowers.length
+    const percentagePerBorrower = numBorrowers > 0 ? 100 / numBorrowers : 0
+    const dollarPerBorrower = numBorrowers > 0 ? totalAmount / numBorrowers : 0
+
+    const updated = borrowers.map(borrower => ({
+      ...borrower,
+      splitPercentage: Math.round(percentagePerBorrower * 10000) / 10000,
+      dollarAmount: Math.round(dollarPerBorrower * 100) / 100,
+    }))
+
+    setBorrowers(updated)
+  }
+
   const resetForm = () => {
     setAmount('')
     setDescription('')
@@ -287,6 +302,16 @@ export default function RecurringFormItem({
                     Total: {Math.round(totalPercentage * 10000) / 10000}% {isPercentageValid ? '✓' : '(must be 100%)'}
                   </div>
                 </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={splitEvenly}
+                  className="w-full"
+                  disabled={borrowers.length === 0}
+                >
+                  Split Evenly
+                </Button>
 
                 <div className="grid gap-4">
                   {borrowers.map((borrower, index) => (
