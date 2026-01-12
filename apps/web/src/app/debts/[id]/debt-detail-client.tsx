@@ -83,6 +83,7 @@ type DebtDetailClientProps = {
   receipts: Receipt[];
   transactions: DebtTransaction[];
   currentUserId: string;
+  receiptImageUrl: string | null;
 };
 
 export default function DebtDetailClient({
@@ -90,14 +91,21 @@ export default function DebtDetailClient({
   receipts: initialReceipts,
   transactions,
   currentUserId,
+  receiptImageUrl,
 }: DebtDetailClientProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  console.log('[Debt Detail Client] Receipt data:', {
+    hasReceipt: !!debt.receipt,
+    receiptId: debt.receipt?.id,
+    hasReceiptImageUrl: !!receiptImageUrl,
+    receiptImageUrl: receiptImageUrl?.substring(0, 50) + '...'
+  });
 
   // Transaction modal state
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -401,56 +409,67 @@ export default function DebtDetailClient({
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {debt.description && (
-            <div>
-              <Label className="text-muted-foreground">Description</Label>
-              <p className="mt-1">{debt.description}</p>
-            </div>
-          )}
-          {debt.group && (
-            <div>
-              <Label className="text-muted-foreground">Group</Label>
-              <p className="mt-1">{debt.group.name}</p>
-            </div>
-          )}
-          <div>
-            <Label className="text-muted-foreground">Created</Label>
-            <p className="mt-1">
-              {new Date(debt.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-          {debt.receipt && (
-            <div>
-              <Label className="text-muted-foreground">Linked Receipt</Label>
-              <div className="mt-1 rounded-md border bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">
-                  Receipt ID: {debt.receipt.id.substring(0, 8)}...
+        <CardContent>
+          <div className="flex gap-6">
+            {/* Left side - Debt details */}
+            <div className="flex-1 space-y-4">
+              {debt.description && (
+                <div>
+                  <Label className="text-muted-foreground">Description</Label>
+                  <p className="mt-1">{debt.description}</p>
                 </div>
-                {debt.receipt.rawText && (
-                  <pre className="mt-2 whitespace-pre-wrap text-xs">
-                    {debt.receipt.rawText.substring(0, 100)}
-                    {debt.receipt.rawText.length > 100 ? "..." : ""}
-                  </pre>
+              )}
+              {debt.group && (
+                <div>
+                  <Label className="text-muted-foreground">Group</Label>
+                  <p className="mt-1">{debt.group.name}</p>
+                </div>
+              )}
+              <div>
+                <Label className="text-muted-foreground">Created</Label>
+                <p className="mt-1">
+                  {new Date(debt.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+
+              {/* Request Change Button */}
+              {!pendingTransaction && (
+                <div className="pt-4 border-t">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowTransactionModal(true)}
+                  >
+                    Request Change
+                  </Button>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Request to modify or delete this debt. Both parties must agree.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Right side - Receipt */}
+            {debt.receipt && (
+              <div className="flex-shrink-0">
+                {receiptImageUrl ? (
+                  <img
+                    src={receiptImageUrl}
+                    alt="Receipt"
+                    className="mt-1 w-64 h-64 object-contain rounded-md"
+                  />
+                ) : (
+                  <div className="mt-1 w-64 rounded-md border border-dashed bg-muted/50 p-4 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Receipt image could not be loaded
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Receipt ID: {debt.receipt.id.substring(0, 8)}...
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Request Change Button */}
-          {!pendingTransaction && (
-            <div className="pt-4 border-t">
-              <Button
-                variant="secondary"
-                onClick={() => setShowTransactionModal(true)}
-              >
-                Request Change
-              </Button>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Request to modify or delete this debt. Both parties must agree.
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -520,49 +539,31 @@ export default function DebtDetailClient({
         </Card>
       )}
 
-      {/* Receipts Section */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Upload Receipt */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload receipt</CardTitle>
-            <CardDescription>
-              Upload a receipt for this debt (will be linked automatically)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="file">Receipt image</Label>
+      {/* Upload Receipt */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Upload receipt</CardTitle>
+          <CardDescription>
+            Upload a receipt for this debt (will be linked automatically)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label htmlFor="file">Receipt image</Label>
+            <div className="flex gap-2">
               <input
                 ref={fileInputRef}
                 id="file"
                 type="file"
                 accept="image/jpeg,image/jpg,image/png,image/webp"
                 onChange={handleFileSelect}
-                className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+                className="block flex-1 text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
               />
-            </div>
-
-            {previewUrl && (
-              <div className="space-y-2">
-                <Label>Preview</Label>
-                <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-muted">
-                  <img
-                    src={previewUrl}
-                    alt="Receipt preview"
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-2">
               <Button
                 onClick={handleUpload}
                 disabled={!selectedFile || uploading}
-                className="flex-1"
               >
-                {uploading ? "Processing…" : "Upload & parse"}
+                {uploading ? "Uploading…" : "Upload"}
               </Button>
               {selectedFile && (
                 <Button
@@ -574,51 +575,22 @@ export default function DebtDetailClient({
                 </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Receipts List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Receipts ({receipts.length})</CardTitle>
-            <CardDescription>
-              All uploaded receipts for this group
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {receipts.length === 0 ? (
-              <div className="flex h-48 items-center justify-center rounded-md border border-dashed">
-                <p className="text-sm text-muted-foreground">
-                  No receipts uploaded yet
-                </p>
+          {previewUrl && (
+            <div className="space-y-2">
+              <Label>Preview</Label>
+              <div className="relative aspect-video w-64 h-64 overflow-hidden rounded-md border bg-muted">
+                <img
+                  src={previewUrl}
+                  alt="Receipt preview"
+                  className="h-64 w-64 object-contain"
+                />
               </div>
-            ) : (
-              <div className="space-y-3">
-                {receipts.map((receipt) => (
-                  <div
-                    key={receipt.id}
-                    className="rounded-lg border bg-muted/50 p-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(receipt.createdAt).toLocaleString()}
-                        </div>
-                        {receipt.rawText && (
-                          <pre className="mt-2 whitespace-pre-wrap text-xs">
-                            {receipt.rawText.substring(0, 150)}
-                            {receipt.rawText.length > 150 ? "..." : ""}
-                          </pre>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Transaction Request Modal */}
       {showTransactionModal && (

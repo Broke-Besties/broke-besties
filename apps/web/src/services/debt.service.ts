@@ -7,6 +7,7 @@ type CreateDebtParams = {
   lenderId: string
   borrowerId: string
   groupId: number
+  receiptId?: string | null
 }
 
 type UpdateDebtParams = {
@@ -26,7 +27,7 @@ export class DebtService {
    * Create a new debt
    */
   async createDebt(params: CreateDebtParams) {
-    const { amount, description, lenderId, borrowerId, groupId } = params
+    const { amount, description, lenderId, borrowerId, groupId, receiptId } = params
 
     // Validation
     if (!amount || amount <= 0) {
@@ -69,6 +70,7 @@ export class DebtService {
         borrowerId,
         groupId,
         status: 'pending',
+        receiptId: receiptId || null,
       },
       include: {
         lender: {

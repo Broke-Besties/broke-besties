@@ -55,6 +55,7 @@ export async function createDebt(data: {
   description?: string
   borrowerId: string
   groupId: number
+  receiptId?: string
 }) {
   const user = await getUser()
 
@@ -69,6 +70,7 @@ export async function createDebt(data: {
       lenderId: user.id,
       borrowerId: data.borrowerId,
       groupId: data.groupId,
+      receiptId: data.receiptId,
     })
     if (data.groupId) {
       revalidatePath(`/groups/${data.groupId}`)
@@ -89,6 +91,7 @@ export async function createDebts(debts: Array<{
   description?: string
   borrowerId: string
   groupId: number
+  receiptId?: string
 }>) {
   const user = await getUser()
 
@@ -105,6 +108,7 @@ export async function createDebts(debts: Array<{
           lenderId: user.id,
           borrowerId: data.borrowerId,
           groupId: data.groupId,
+          receiptId: data.receiptId,
         })
       )
     )

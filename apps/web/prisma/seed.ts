@@ -33,6 +33,19 @@ async function createAuthUser(
 
   if (existingUser) {
     console.log(`Auth user already exists: ${email}`);
+    
+    // Ensure User record exists in database (in case trigger didn't fire)
+    await prisma.user.upsert({
+      where: { id: existingUser.id },
+      update: {},
+      create: {
+        id: existingUser.id,
+        email: existingUser.email!,
+        name: name,
+      },
+    });
+    console.log(`Ensured User record exists in database for: ${email}`);
+    
     return existingUser.id;
   }
 

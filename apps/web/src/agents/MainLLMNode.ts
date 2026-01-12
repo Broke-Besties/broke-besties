@@ -1,15 +1,12 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { AgentState } from "./graph";
-import { extractReceiptTextTool } from "./ReceiptTool";
-import { readDebtsFromGroup } from "./DebtTools";
-import { listNamesInGroupTool } from "./UserTool";
 
 const model = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
   apiKey: process.env.GOOGLE_API_KEY,
   temperature: 0,
-}).bindTools([extractReceiptTextTool, readDebtsFromGroup, listNamesInGroupTool]);
+});
 
 export async function mainLLMNode(
   state: AgentState
@@ -17,51 +14,56 @@ export async function mainLLMNode(
   console.log("[Agent LLM] === Starting LLM node ===");
   console.log("[Agent LLM] Group ID:", state.groupId);
   console.log("[Agent LLM] User ID:", state.userId);
-  console.log("[Agent LLM] Image URL:", state.imageUrl || "none");
+  console.log("[Agent LLM] Has receipt text:", !!state.receiptText);
+  console.log("[Agent LLM] Has group members:", !!state.groupMembers);
   console.log("[Agent LLM] Current message count:", state.messages.length);
 
-  let contextMessage = `You are a function-calling debt management assistant. 
-  If the user's message is a greeting or unrelated to debts, respond normally and do not use tools.
-  Otherwise, you MUST use tools to complete tasks.`;
+  let contextMessage = `You are a debt management assistant that processes receipts and debt entries.
+If the user's message is a greeting or unrelated to debts, respond normally.
+Otherwise, analyze the provided data and output the debts JSON.
 
-  if (state.imageUrl) {
+Context:
+- User ID: ${state.userId}
+- Group ID: ${state.groupId}`;
+
+  if (state.description) {
+    contextMessage += `
+- Description: ${state.description}`;
+  }
+
+  if (state.groupMembers) {
     contextMessage += `
 
-TASK: Process receipt image at ${state.imageUrl}
+GROUP MEMBERS (id: name):
+${state.groupMembers}`;
+  }
 
-REQUIRED ACTIONS (you must call these tools):
-1. First, call extract_receipt_text tool with imageUrl parameter
-2. After getting receipt data, call list_names_in_group if user mentioned names
-3. Finally, output the debts JSON
+  if (state.receiptText) {
+    contextMessage += `
 
-User message may contain names and items. Example:
-- User: "albert owes me lorem"
-- You MUST call: extract_receipt_text(imageUrl="${state.imageUrl}")
-- Tool returns: "Lorem 1.1..."
-- You MUST call: list_names_in_group(userId="${state.userId}", groupId=${state.groupId})
-- Tool returns: user IDs
-- You output: {"debtsReady":true,"debts":[...]}
+RECEIPT TEXT (extracted via OCR):
+${state.receiptText}
 
-START BY CALLING extract_receipt_text NOW.`;
+TASK: Parse this receipt and match items to people mentioned in the user's message.
+- User may mention names and items (e.g., "albert owes me for the pizza")
+- Match names to the group members list above
+- Extract amounts from the receipt text
+- Create debt entries for each person/item pair`;
   } else {
     contextMessage += `
 
-TASK: Create manual debt entry
-
-Ask user for who owes money, amount, and description if not provided.
-Use list_names_in_group tool to get user IDs.
-Output the debt JSON when ready.`;
+TASK: Create manual debt entry based on user's message.
+- User should provide who owes money, amount, and description
+- Match names to the group members list above
+- If information is missing, ask the user for clarification`;
   }
 
   contextMessage += `
 
-Output format: {"debtsReady":true,"debts":[{"borrowerName":"Name","borrowerId":"id","amount":10.5,"description":"item"}]}
+OUTPUT FORMAT (respond ONLY with this JSON structure):
+{"debtsReady":true,"debts":[{"borrowerName":"Name","borrowerId":"id","amount":10.5,"description":"item"}]}
 
-Context: userId=${state.userId}, groupId=${state.groupId}`;
-
-  if (state.description) {
-    contextMessage += `, description=${state.description}`;
-  }
+If you need more information from the user, respond with plain text (not JSON) asking for clarification.`;
 
   const processedMessages: BaseMessage[] = [...state.messages];
 
@@ -77,7 +79,6 @@ Context: userId=${state.userId}, groupId=${state.groupId}`;
 
   console.log("[Agent LLM] Response received");
   console.log("[Agent LLM] Response type:", response.constructor.name);
-  console.log("[Agent LLM] Has tool calls:", !!(response as any).tool_calls?.length);
 
   return {
     messages: [response],
