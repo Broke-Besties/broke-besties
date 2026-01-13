@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Home,
@@ -72,9 +73,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <div className="flex items-center gap-3 p-2">
           <Link
             href="/"
-            className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+            className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg overflow-hidden"
           >
-            <span className="font-bold text-sm">BB</span>
+            <Image
+              src="/mascotwaving.png"
+              alt="Broke Besties"
+              width={36}
+              height={36}
+              className="object-cover"
+            />
           </Link>
           <div className="flex flex-1 items-center justify-between gap-2 overflow-hidden group-data-[state=expanded]:opacity-100 opacity-0 transition-opacity">
             <span className="font-semibold whitespace-nowrap">
