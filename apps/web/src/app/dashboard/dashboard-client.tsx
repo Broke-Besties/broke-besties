@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import NumberFlow from "@number-flow/react";
-import { TrendingUp, TrendingDown, Repeat, Calendar } from "lucide-react";
+import { TrendingUp, TrendingDown, Repeat, Calendar, Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,27 +21,27 @@ import { updateTabStatus } from "./actions";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// Blue/slate color palette
+// Contrasting color palette
 const CHART_COLORS = [
-  "hsl(210 45% 70%)",
-  "hsl(210 35% 60%)",
-  "hsl(215 30% 50%)",
-  "hsl(220 25% 40%)",
-  "hsl(215 20% 35%)",
-  "hsl(205 40% 65%)",
-  "hsl(200 30% 55%)",
-  "hsl(225 20% 45%)",
+  "hsl(210 70% 55%)",  // Blue
+  "hsl(340 65% 55%)",  // Pink
+  "hsl(45 85% 55%)",   // Yellow/Gold
+  "hsl(160 50% 45%)",  // Teal
+  "hsl(270 50% 55%)",  // Purple
+  "hsl(25 80% 55%)",   // Orange
+  "hsl(190 60% 45%)",  // Cyan
+  "hsl(0 65% 55%)",    // Red
 ];
 
 const CHART_BORDER_COLORS = [
-  "hsl(210 45% 60%)",
-  "hsl(210 35% 50%)",
-  "hsl(215 30% 40%)",
-  "hsl(220 25% 30%)",
-  "hsl(215 20% 25%)",
-  "hsl(205 40% 55%)",
-  "hsl(200 30% 45%)",
-  "hsl(225 20% 35%)",
+  "hsl(210 70% 45%)",
+  "hsl(340 65% 45%)",
+  "hsl(45 85% 45%)",
+  "hsl(160 50% 35%)",
+  "hsl(270 50% 45%)",
+  "hsl(25 80% 45%)",
+  "hsl(190 60% 35%)",
+  "hsl(0 65% 45%)",
 ];
 
 type Debt = {
@@ -53,10 +53,12 @@ type Debt = {
   lender: {
     id: string;
     email: string;
+    name: string | null;
   };
   borrower: {
     id: string;
     email: string;
+    name: string | null;
   };
   group: {
     id: number;
@@ -266,8 +268,8 @@ export default function DashboardPageClient({
     // Group by person with descriptions
     const personData = new Map<string, { amount: number; descriptions: string[] }>();
     for (const debt of relevantDebts) {
-      const person =
-        chartView === "owed" ? debt.borrower.email : debt.lender.email;
+      const personObj = chartView === "owed" ? debt.borrower : debt.lender;
+      const person = personObj.name || personObj.email;
       const existing = personData.get(person) || { amount: 0, descriptions: [] };
       existing.amount += debt.amount;
       if (debt.description) {
@@ -308,7 +310,15 @@ export default function DashboardPageClient({
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: false,
+          display: true,
+          position: "right" as const,
+          labels: {
+            boxWidth: 12,
+            padding: 8,
+            font: {
+              size: 11,
+            },
+          },
         },
         tooltip: {
           callbacks: {
@@ -345,24 +355,30 @@ export default function DashboardPageClient({
     <div className="space-y-8">
       {/* Welcome Section */}
       <div
-        className="flex items-center gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
+        className="flex items-center justify-between gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
         style={{ animationDelay: "0ms", animationFillMode: "both" }}
       >
-        <Image
-          src="/mascot/mascot.png"
-          alt="Mascot"
-          width={100}
-          height={100}
-          className="shrink-0"
-        />
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Welcome back, {userName}!
-          </h1>
-          <p className="text-muted-foreground">
-            Here&apos;s an overview of your debts and recurring payments
-          </p>
+        <div className="flex items-center gap-6">
+          <Image
+            src="/mascot/mascot.png"
+            alt="Mascot"
+            width={100}
+            height={100}
+            className="shrink-0"
+          />
+          <div className="space-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              Welcome back, {userName}!
+            </h1>
+            <p className="text-muted-foreground">
+              Here&apos;s an overview of your debts and recurring payments
+            </p>
+          </div>
         </div>
+        <Button onClick={() => router.push("/debts/new")}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add debt
+        </Button>
       </div>
 
       {error && (
@@ -379,9 +395,7 @@ export default function DashboardPageClient({
           onClick={() => setChartView("owed")}
           className={cn(
             "relative rounded-xl p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
-            chartView === "owed"
-              ? "bg-emerald-500/20 border-2 border-emerald-500/40 ring-2 ring-emerald-500/20"
-              : "bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/15"
+            chartView === "owed" ? "green-box-active" : "green-box"
           )}
           style={{ animationDelay: "100ms", animationFillMode: "both" }}
         >
@@ -403,9 +417,7 @@ export default function DashboardPageClient({
           onClick={() => setChartView("owing")}
           className={cn(
             "relative rounded-xl p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
-            chartView === "owing"
-              ? "bg-rose-500/20 border-2 border-rose-500/40 ring-2 ring-rose-500/20"
-              : "bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15"
+            chartView === "owing" ? "red-box-active" : "red-box"
           )}
           style={{ animationDelay: "150ms", animationFillMode: "both" }}
         >
