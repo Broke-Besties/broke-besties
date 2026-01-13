@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Home,
+  LayoutDashboard,
   Users,
   Receipt,
   UserPlus,
@@ -14,6 +14,7 @@ import {
   UserRoundPlus,
   Pin,
   PinOff,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -35,12 +36,13 @@ interface AppSidebarProps {
 }
 
 const navLinks = [
-  { href: "/", label: "Dashboard", icon: Home },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/groups", label: "Groups", icon: Users },
   { href: "/tabs", label: "Tabs", icon: Receipt },
   { href: "/friends", label: "Friends", icon: UserPlus },
   { href: "/debts", label: "Debts", icon: CreditCard },
   { href: "/recurring-payments", label: "Recurring", icon: RefreshCw },
+  { href: "/ai", label: "AI", icon: Sparkles },
 ];
 
 function SidebarPinButton() {
@@ -76,7 +78,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg overflow-hidden"
           >
             <Image
-              src="/mascotwaving.png"
+              src="/mascot/waving.png"
               alt="Broke Besties"
               width={36}
               height={36}

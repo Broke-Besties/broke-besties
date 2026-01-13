@@ -349,7 +349,7 @@ export default function DashboardPageClient({
         style={{ animationDelay: "0ms", animationFillMode: "both" }}
       >
         <Image
-          src="/mascot.png"
+          src="/mascot/mascot.png"
           alt="Mascot"
           width={100}
           height={100}
