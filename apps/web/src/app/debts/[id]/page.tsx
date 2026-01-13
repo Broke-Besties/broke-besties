@@ -38,7 +38,10 @@ export default async function DebtDetailPage({
       },
     });
 
-    const receipts = await receiptService.getGroupReceipts(debt.groupId, user.id);
+    // Only fetch receipts if debt has a group
+    const receipts = debt.groupId
+      ? await receiptService.getGroupReceipts(debt.groupId, user.id)
+      : [];
 
     // Fetch pending transactions for this debt
     const transactions = await debtTransactionService.getDebtTransactions(debtId, user.id);

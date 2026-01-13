@@ -46,7 +46,7 @@ type Transaction = {
     group: {
       id: number
       name: string
-    }
+    } | null
   }
   requester: {
     id: string

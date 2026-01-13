@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, TrendingUp, TrendingDown, Scale, Bell, Search, CheckCircle2, Pencil, Trash2 } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Scale, Bell, Search, CheckCircle2, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -54,6 +54,7 @@ type DebtsPageClientProps = {
 type ViewFilter = 'all' | 'lending' | 'borrowing'
 type StatusFilter = 'all' | 'pending' | 'paid'
 type ModalType = 'create' | 'paid' | 'modify' | 'delete' | null
+type SortOrder = 'desc' | 'asc'
 
 export default function DebtsPageClient({
   initialDebts,
@@ -64,6 +65,7 @@ export default function DebtsPageClient({
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [activeModal, setActiveModal] = useState<ModalType>(null)
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
   const router = useRouter()
@@ -106,10 +108,16 @@ export default function DebtsPageClient({
     })
   }
 
-  // Sort by date (most recent first)
-  filteredDebts = [...filteredDebts].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  )
+  // Sort by date
+  filteredDebts = [...filteredDebts].sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime()
+    const dateB = new Date(b.createdAt).getTime()
+    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB
+  })
+
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')
+  }
 
   const getDebtDirection = (debt: Debt) => {
     return debt.lender.id === currentUser.id ? 'lending' : 'borrowing'
@@ -300,7 +308,19 @@ export default function DebtsPageClient({
                 <TableHead>Person</TableHead>
                 <TableHead className="hidden sm:table-cell">Description</TableHead>
                 <TableHead className="hidden md:table-cell">Group</TableHead>
-                <TableHead className="hidden sm:table-cell">Date</TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  <button
+                    onClick={toggleSortOrder}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    Date
+                    {sortOrder === 'desc' ? (
+                      <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUp className="h-3 w-3" />
+                    )}
+                  </button>
+                </TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
