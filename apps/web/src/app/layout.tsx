@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Overpass, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
+import Link from "next/link";
 import "./globals.css";
-import { SiteHeader } from "@/components/site-header";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import { AppLoading } from "@/components/app-loading";
+import { LogoutButton } from "@/components/logout-button";
 import { getUser } from "@/lib/supabase";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const overpass = Overpass({
+  variable: "--font-overpass",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -18,7 +23,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Broke Besties",
-  description: "Split expenses with friends: groups, invites, debts, and balances.",
+  description:
+    "Split expenses with friends: groups, invites, debts, and balances.",
 };
 
 export default async function RootLayout({
@@ -31,17 +37,46 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${overpass.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="min-h-screen bg-background text-foreground">
-          <SiteHeader user={user} />
-          <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-x-0 -top-10 h-44 bg-gradient-to-b from-primary/10 to-transparent blur-2xl" />
+        <SidebarProvider defaultOpen={false}>
+          {user && <AppSidebar user={user} />}
+          <SidebarInset>
+            <header
+              className={`sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60 ${
+                user ? "md:px-8 md:ml-52 md:mr-52" : "md:px-8 max-w-5xl mx-auto w-full"
+              }`}
+            >
+              <span className="text-lg font-semibold">Broke Besties</span>
+              <div className="flex items-center gap-2">
+                {user ? (
+                  <>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href="/profile">Profile</Link>
+                    </Button>
+                    <LogoutButton />
+                  </>
+                ) : (
+                  <>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href="/login">Log in</Link>
+                    </Button>
+                    <Button asChild size="sm">
+                      <Link href="/signup">Sign up</Link>
+                    </Button>
+                  </>
+                )}
+              </div>
+            </header>
+            <main
+              className={`flex-1 overflow-auto p-4 ${
+                user ? "md:py-6 md:px-8 md:ml-52 md:mr-52" : "md:py-6 md:px-8 max-w-5xl mx-auto w-full"
+              }`}
+            >
               <Suspense fallback={<AppLoading />}>{children}</Suspense>
-            </div>
-          </main>
-        </div>
+            </main>
+          </SidebarInset>
+        </SidebarProvider>
       </body>
     </html>
   );
