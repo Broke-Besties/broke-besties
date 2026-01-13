@@ -47,7 +47,7 @@ export default async function RootLayout({
                 user ? "md:px-8 md:ml-52 md:mr-52" : "md:px-8 max-w-5xl mx-auto w-full"
               }`}
             >
-              <span className="text-lg font-semibold">Broke Besties</span>
+              <Link href="/" className="text-lg font-semibold">Broke Besties</Link>
               <div className="flex items-center gap-2">
                 {user ? (
                   <>

@@ -375,7 +375,7 @@ export default function DashboardPageClient({
             </p>
           </div>
         </div>
-        <Button onClick={() => router.push("/debts/new")}>
+        <Button onClick={() => router.push("/debts")}>
           <Plus className="h-4 w-4 mr-2" />
           Add debt
         </Button>
