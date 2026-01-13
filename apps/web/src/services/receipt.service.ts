@@ -4,13 +4,13 @@ import { ReceiptPolicy } from "@/policies";
 
 export class ReceiptService {
   /**
-   * Upload receipt image to Supabase storage and parse it with AI
+   * Upload receipt image to Supabase storage and optionally link to debts
+   * If no debtIds provided, creates a pending receipt (for AI flow)
    */
   async uploadAndParseReceipt(
     file: File,
-    groupId: number,
     userId: string,
-    debtId?: number
+    debtIds?: number[]
   ) {
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
@@ -18,20 +18,26 @@ export class ReceiptService {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Check if user can create receipt (policy handles the DB call)
-    if (!await ReceiptPolicy.canCreate(userId, groupId)) {
-      throw new Error("Group not found or access denied");
+    // If debtIds provided, check permissions
+    if (debtIds && debtIds.length > 0) {
+      if (!(await ReceiptPolicy.canCreate(userId, debtIds))) {
+        throw new Error(
+          "Access denied - you must be lender or borrower on all specified debts"
+        );
+      }
     }
 
-    // Create receipt record first to get the ID
+    // Create receipt record, optionally linking to debts
     const receipt = await prisma.receipt.create({
-      data: {
-        groupId,
-      },
+      data:
+        debtIds && debtIds.length > 0
+          ? { debts: { connect: debtIds.map((id) => ({ id })) } }
+          : {},
     });
 
     try {
-      const storagePath = `group/${groupId}/receipts/${receipt.id}`;
+      // Flat storage path: receipts/{receiptId}
+      const storagePath = `receipts/${receipt.id}`;
 
       const { error: uploadError } = await supabase.storage
         .from("receipts")
@@ -57,22 +63,53 @@ export class ReceiptService {
       console.log("[Receipt Upload] Successfully uploaded to Supabase");
       console.log("[Receipt Upload] Presigned URL:", signedUrlData.signedUrl);
 
-      // If debtId is provided, link the receipt to the debt
-      if (debtId) {
-        await prisma.debt.update({
-          where: { id: debtId },
-          data: { receiptId: receipt.id },
-        });
-      }
-
       return {
         id: receipt.id,
         signedUrl: signedUrlData.signedUrl,
       };
     } catch (error) {
-      await prisma.receipt.delete({ where: { id: receipt.id } }).catch(() => {});
+      await prisma.receipt
+        .delete({ where: { id: receipt.id } })
+        .catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Link an existing receipt to debts
+   */
+  async linkReceiptToDebts(
+    receiptId: string,
+    debtIds: number[],
+    userId: string
+  ) {
+    // Verify receipt exists
+    const receipt = await prisma.receipt.findUnique({
+      where: { id: receiptId },
+    });
+
+    if (!receipt) {
+      throw new Error("Receipt not found");
+    }
+
+    // Verify user has access to all debts
+    if (!(await ReceiptPolicy.canCreate(userId, debtIds))) {
+      throw new Error(
+        "Access denied - you must be lender or borrower on all specified debts"
+      );
+    }
+
+    // Link receipt to debts
+    await prisma.receipt.update({
+      where: { id: receiptId },
+      data: {
+        debts: {
+          connect: debtIds.map((id) => ({ id })),
+        },
+      },
+    });
+
+    return { success: true };
   }
 
   /**
@@ -84,9 +121,11 @@ export class ReceiptService {
         id: receiptId,
       },
       include: {
-        group: {
-          include: {
-            members: true,
+        debts: {
+          select: {
+            id: true,
+            lenderId: true,
+            borrowerId: true,
           },
         },
       },
@@ -96,8 +135,9 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    // Check permission using the fetched receipt object
-    if (!ReceiptPolicy.canView(userId, receipt)) {
+    // For pending receipts (no debts), allow the uploader to view
+    // For linked receipts, check if user is lender/borrower on any debt
+    if (receipt.debts.length > 0 && !ReceiptPolicy.canView(userId, receipt)) {
       throw new Error("Access denied");
     }
 
@@ -105,33 +145,61 @@ export class ReceiptService {
   }
 
   /**
-   * Get all receipts for a group
+   * Get all receipts for a specific debt
    */
-  async getGroupReceipts(groupId: number, userId: string) {
-    // Check if user can list group receipts (policy handles the DB call)
-    if (!await ReceiptPolicy.canListGroupReceipts(userId, groupId)) {
-      throw new Error("Group not found or access denied");
+  async getReceiptsForDebt(debtId: number, userId: string) {
+    // First verify user has access to the debt
+    const debt = await prisma.debt.findFirst({
+      where: {
+        id: debtId,
+        OR: [{ lenderId: userId }, { borrowerId: userId }],
+      },
+      include: {
+        receipts: true,
+      },
+    });
+
+    if (!debt) {
+      throw new Error("Debt not found or access denied");
     }
 
-    return prisma.receipt.findMany({
-      where: { groupId },
-      orderBy: { createdAt: "desc" },
-    });
+    return debt.receipts;
   }
 
   /**
    * Delete receipt from storage and database
    */
   async deleteReceipt(receiptId: string, userId: string) {
-    const receipt = await this.getReceiptById(receiptId, userId);
+    const receipt = await prisma.receipt.findFirst({
+      where: { id: receiptId },
+      include: {
+        debts: {
+          select: {
+            id: true,
+            lenderId: true,
+            borrowerId: true,
+          },
+        },
+      },
+    });
+
+    if (!receipt) {
+      throw new Error("Receipt not found");
+    }
+
+    // For pending receipts or receipts the user has access to
+    if (receipt.debts.length > 0 && !ReceiptPolicy.canDelete(userId, receipt)) {
+      throw new Error("Access denied");
+    }
+
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Find the file in storage (try common extensions)
-    const storagePath = `group/${receipt.groupId}/receipts/${receiptId}`;
+    // Flat storage path: receipts/{receiptId}
+    const storagePath = `receipts/${receiptId}`;
     await supabase.storage.from("receipts").remove([storagePath]);
 
     // Delete from database

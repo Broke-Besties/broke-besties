@@ -248,3 +248,40 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Red box variants */
+  .red-box {
+    @apply bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15;
+  }
+  .red-box-active {
+    @apply bg-rose-500/20 border-2 border-rose-500/40 ring-2 ring-rose-500/20;
+  }
+
+  /* Green box variants */
+  .green-box {
+    @apply bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/15;
+  }
+  .green-box-active {
+    @apply bg-emerald-500/20 border-2 border-emerald-500/40 ring-2 ring-emerald-500/20;
+  }
+
+  /* Yellow box variants */
+  .yellow-box {
+    @apply bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/15;
+  }
+  .yellow-box-active {
+    @apply bg-amber-500/20 border-2 border-amber-500/40 ring-2 ring-amber-500/20;
+  }
+
+  /* Secondary lighter variants for badges/status */
+  .green-badge {
+    @apply bg-emerald-500/5 text-emerald-600 dark:text-emerald-400;
+  }
+  .red-badge {
+    @apply bg-rose-500/5 text-rose-600 dark:text-rose-400;
+  }
+  .yellow-badge {
+    @apply bg-amber-500/5 text-amber-600 dark:text-amber-400;
+  }
+}

@@ -1,76 +1,81 @@
-import { prisma } from '@/lib/prisma'
-import { DebtPolicy } from '@/policies'
+import { prisma } from "@/lib/prisma";
+import { DebtPolicy } from "@/policies";
 
 type CreateDebtParams = {
-  amount: number
-  description?: string | null
-  lenderId: string
-  borrowerId: string
-  groupId: number
-  receiptId?: string | null
-}
+  amount: number;
+  description?: string | null;
+  lenderId: string;
+  borrowerId: string;
+  groupId?: number | null;
+  receiptIds?: string[];
+};
 
 type UpdateDebtParams = {
-  amount?: number
-  description?: string
-  status?: string
-}
+  amount?: number;
+  description?: string;
+  status?: string;
+};
 
 type GetDebtsFilters = {
-  type?: 'lending' | 'borrowing' | null
-  groupId?: number | null
-  status?: string | null
-}
+  type?: "lending" | "borrowing" | null;
+  status?: string | null;
+};
 
 export class DebtService {
   /**
    * Create a new debt
    */
   async createDebt(params: CreateDebtParams) {
-    const { amount, description, lenderId, borrowerId, groupId, receiptId } = params
+    const { amount, description, lenderId, borrowerId, groupId, receiptIds } =
+      params;
 
     // Validation
     if (!amount || amount <= 0) {
-      throw new Error('Valid amount is required')
+      throw new Error("Valid amount is required");
     }
 
     if (!borrowerId) {
-      throw new Error('Borrower ID is required')
-    }
-
-    if (!groupId) {
-      throw new Error('Group ID is required')
+      throw new Error("Borrower ID is required");
     }
 
     // Prevent creating a debt to yourself
     if (borrowerId === lenderId) {
-      throw new Error('Cannot create a debt to yourself')
+      throw new Error("Cannot create a debt to yourself");
     }
 
     // Verify borrower exists
     const borrower = await prisma.user.findUnique({
       where: { id: borrowerId },
-    })
+    });
 
     if (!borrower) {
-      throw new Error('Borrower not found')
+      throw new Error("Borrower not found");
     }
 
-    // Verify both users are members of the group (policy handles the check)
-    if (!await DebtPolicy.areBothGroupMembers(lenderId, borrowerId, groupId)) {
-      throw new Error('Both lender and borrower must be group members')
+    // If receiptIds are provided, verify they exist
+    if (receiptIds && receiptIds.length > 0) {
+      const existingReceipts = await prisma.receipt.findMany({
+        where: { id: { in: receiptIds } },
+        select: { id: true },
+      });
+      if (existingReceipts.length !== receiptIds.length) {
+        throw new Error("One or more receipts not found");
+      }
     }
 
-    // Create the debt
+    // Create the debt with optional receipt connections
     const debt = await prisma.debt.create({
       data: {
         amount,
         description: description || null,
         lenderId,
         borrowerId,
-        groupId,
-        status: 'pending',
-        receiptId: receiptId || null,
+        groupId: groupId || null,
+        status: "pending",
+        receipts:
+          receiptIds && receiptIds.length > 0
+            ? { connect: receiptIds.map((id) => ({ id })) }
+            : undefined,
       },
       include: {
         lender: {
@@ -82,57 +87,55 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
-    })
+    });
 
-    return debt
+    return debt;
   }
 
   /**
    * Get all debts for a user with optional filters
    */
   async getUserDebts(userId: string, filters: GetDebtsFilters = {}) {
-    const { type, groupId, status } = filters
+    const { type, status } = filters;
 
     // Build the where clause
     const where: any = {
       OR: [{ lenderId: userId }, { borrowerId: userId }],
-    }
+    };
 
     // Apply filters
-    if (type === 'lending') {
-      where.OR = [{ lenderId: userId }]
-    } else if (type === 'borrowing') {
-      where.OR = [{ borrowerId: userId }]
-    }
-
-    if (groupId) {
-      where.groupId = groupId
+    if (type === "lending") {
+      where.OR = [{ lenderId: userId }];
+    } else if (type === "borrowing") {
+      where.OR = [{ borrowerId: userId }];
     }
 
     if (status) {
-      where.status = status
+      where.status = status;
     }
 
     const debts = await prisma.debt.findMany({
       where,
       include: {
         lender: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         borrower: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
-    })
+    });
 
-    return debts
+    return debts;
   }
 
   /**
@@ -144,10 +147,10 @@ export class DebtService {
       where: {
         userId_groupId: { userId, groupId },
       },
-    })
+    });
 
     if (!membership) {
-      throw new Error('You must be a member of the group to view its debts')
+      throw new Error("You must be a member of the group to view its debts");
     }
 
     const debts = await prisma.debt.findMany({
@@ -162,13 +165,14 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
-    })
+    });
 
-    return debts
+    return debts;
   }
 
   /**
@@ -187,59 +191,65 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
-    })
+    });
 
     if (!debt) {
-      throw new Error('Debt not found')
+      throw new Error("Debt not found");
     }
 
     // Check permission using the fetched debt object
     if (!DebtPolicy.canView(userId, debt)) {
-      throw new Error("You don't have permission to view this debt")
+      throw new Error("You don't have permission to view this debt");
     }
 
-    return debt
+    return debt;
   }
 
   /**
    * Update a debt
    */
   async updateDebt(debtId: number, userId: string, updates: UpdateDebtParams) {
-    const { amount, description, status } = updates
+    const { amount, description, status } = updates;
 
     // Check permission and get debt info (policy handles the fetch)
-    const { canUpdate, isLender, debt: existingDebt } = await DebtPolicy.canUpdate(userId, debtId)
+    const {
+      canUpdate,
+      isLender,
+      debt: existingDebt,
+    } = await DebtPolicy.canUpdate(userId, debtId);
 
     if (!canUpdate || !existingDebt) {
-      throw new Error("You don't have permission to update this debt")
+      throw new Error("You don't have permission to update this debt");
     }
 
     // Build update data
-    const updateData: any = {}
+    const updateData: any = {};
 
     // Only lender can update amount and description
     if (amount !== undefined || description !== undefined) {
       if (!isLender) {
-        throw new Error('Only the lender can update amount and description')
+        throw new Error("Only the lender can update amount and description");
       }
       if (amount !== undefined) {
         if (amount <= 0) {
-          throw new Error('Amount must be positive')
+          throw new Error("Amount must be positive");
         }
-        updateData.amount = amount
+        updateData.amount = amount;
       }
       if (description !== undefined) {
-        updateData.description = description
+        updateData.description = description;
       }
     }
 
-    // Both lender and borrower can update status
     if (status !== undefined) {
-      updateData.status = status
+      if (status !== "pending") {
+        throw new Error("Cannot set status to anything other than pending");
+      }
+      updateData.status = status;
     }
 
-    // Update the debt
     const debt = await prisma.debt.update({
       where: { id: debtId },
       data: updateData,
@@ -253,10 +263,11 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
-    })
+    });
 
-    return debt
+    return debt;
   }
 
   /**
@@ -264,16 +275,14 @@ export class DebtService {
    */
   async deleteDebt(debtId: number, userId: string) {
     // Check if user can delete (policy handles the fetch)
-    if (!await DebtPolicy.canDelete(userId, debtId)) {
-      throw new Error('Only the lender can delete this debt')
+    if (!(await DebtPolicy.canDelete(userId, debtId))) {
+      throw new Error("Only the lender can delete this debt");
     }
 
     await prisma.debt.delete({
       where: { id: debtId },
-    })
+    });
   }
 }
 
-
-
-export const debtService = new DebtService()
+export const debtService = new DebtService();

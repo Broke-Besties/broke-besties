@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 
 type CreateTransactionParams = {
   debtId: number
-  type: 'drop' | 'modify'
+  type: 'drop' | 'modify' | 'confirm_paid'
   requesterId: string
   proposedAmount?: number
   proposedDescription?: string
@@ -195,6 +195,12 @@ export class DebtTransactionService {
           await tx.debt.update({
             where: { id: transaction.debtId },
             data: debtUpdate,
+          })
+        } else if (transaction.type === 'confirm_paid') {
+          // Mark the debt as paid
+          await tx.debt.update({
+            where: { id: transaction.debtId },
+            data: { status: 'paid' },
           })
         }
 
