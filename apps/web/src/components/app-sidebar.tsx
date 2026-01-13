@@ -9,8 +9,6 @@ import {
   UserPlus,
   CreditCard,
   RefreshCw,
-  User,
-  LogOut,
   LogIn,
   UserRoundPlus,
 } from "lucide-react";
@@ -25,9 +23,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
+  SidebarRail,
 } from "@/components/ui/sidebar";
-import { LogoutButton } from "./logout-button";
 
 interface AppSidebarProps {
   user?: { id: string; email?: string } | null;
@@ -51,7 +48,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   };
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="group/sidebar-hover">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -95,45 +92,30 @@ export function AppSidebar({ user }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
-        <SidebarSeparator />
-        <SidebarMenu>
-          {user ? (
-            <>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Profile">
-                  <Link href="/profile">
-                    <User />
-                    <span>Profile</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <LogoutButton variant="sidebar" />
-              </SidebarMenuItem>
-            </>
-          ) : (
-            <>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Log in">
-                  <Link href="/login">
-                    <LogIn />
-                    <span>Log in</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Sign up">
-                  <Link href="/signup">
-                    <UserRoundPlus />
-                    <span>Sign up</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </>
-          )}
-        </SidebarMenu>
-      </SidebarFooter>
+      {!user && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Log in">
+                <Link href="/login">
+                  <LogIn />
+                  <span>Log in</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Sign up">
+                <Link href="/signup">
+                  <UserRoundPlus />
+                  <span>Sign up</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
+
+      <SidebarRail />
     </Sidebar>
   );
 }
