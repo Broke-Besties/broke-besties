@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import NumberFlow from "@number-flow/react";
-import { Sparkles, TrendingUp, TrendingDown, Scale, Users, Search, ArrowUp, ArrowDown } from "lucide-react";
+import { Sparkles, TrendingUp, TrendingDown, Scale, Users, Search, SlidersHorizontal } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,7 @@ import { DebtDetailDialog } from "@/app/debts/debt-detail-dialog";
 import { ConfirmPaidModal } from "@/app/debts/confirm-paid-modal";
 import { ModifyDebtModal } from "@/app/debts/modify-debt-modal";
 import { DeleteDebtModal } from "@/app/debts/delete-debt-modal";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -111,6 +112,10 @@ type Debt = {
     name: string;
     email: string;
   };
+  group: {
+    id: number;
+    name: string;
+  } | null;
 };
 
 type Group = {
@@ -147,8 +152,24 @@ export default function GroupDetailPageClient({
   const [viewFilter, setViewFilter] = useState<"all" | "lending" | "borrowing">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"date" | "amount">("date");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [chartView, setChartView] = useState<"owed" | "owing">("owed");
+  const [selectedLenders, setSelectedLenders] = useState<string[]>(() =>
+    group.members.map((m) => m.user.id)
+  );
+  const [selectedBorrowers, setSelectedBorrowers] = useState<string[]>(() =>
+    group.members.map((m) => m.user.id)
+  );
+  const [showFiltersDialog, setShowFiltersDialog] = useState(false);
+
+  // Temporary filter state for dialog
+  const [tempViewFilter, setTempViewFilter] = useState(viewFilter);
+  const [tempStatusFilter, setTempStatusFilter] = useState(statusFilter);
+  const [tempSortBy, setTempSortBy] = useState(sortBy);
+  const [tempSortOrder, setTempSortOrder] = useState(sortOrder);
+  const [tempSelectedLenders, setTempSelectedLenders] = useState(selectedLenders);
+  const [tempSelectedBorrowers, setTempSelectedBorrowers] = useState(selectedBorrowers);
 
   // Debt detail dialog and modal state
   const [detailDialogDebt, setDetailDialogDebt] = useState<Debt | null>(null);
@@ -439,6 +460,19 @@ export default function GroupDetailPageClient({
     (debt) => debt.borrowerId && debt.amount && parseFloat(debt.amount) > 0
   );
 
+  // Member options for multi-select
+  const memberOptions = useMemo(
+    () =>
+      group.members.map((m) => ({
+        value: m.user.id,
+        label:
+          m.user.id === currentUser?.id
+            ? `${m.user.name || m.user.email} (you)`
+            : m.user.name || m.user.email,
+      })),
+    [group.members, currentUser?.id]
+  );
+
   // Calculate totals for cards
   const lendingDebts = debts.filter((debt) => debt.lender.id === currentUser?.id);
   const borrowingDebts = debts.filter((debt) => debt.borrower.id === currentUser?.id);
@@ -466,29 +500,66 @@ export default function GroupDetailPageClient({
       result = result.filter((d) => d.status === statusFilter);
     }
 
+    // Apply lender/borrower multi-select filters
+    result = result.filter(
+      (d) =>
+        selectedLenders.includes(d.lender.id) &&
+        selectedBorrowers.includes(d.borrower.id)
+    );
+
     // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((debt) => {
-        const otherPerson = debt.lender.id === currentUser?.id ? debt.borrower : debt.lender;
         return (
-          otherPerson.name?.toLowerCase().includes(query) ||
-          otherPerson.email.toLowerCase().includes(query) ||
+          debt.lender.name?.toLowerCase().includes(query) ||
+          debt.lender.email.toLowerCase().includes(query) ||
+          debt.borrower.name?.toLowerCase().includes(query) ||
+          debt.borrower.email.toLowerCase().includes(query) ||
           debt.description?.toLowerCase().includes(query)
         );
       });
     }
 
-    // Sort by date
+    // Sort by date or amount
     return [...result].sort((a, b) => {
+      if (sortBy === "amount") {
+        return sortOrder === "desc" ? b.amount - a.amount : a.amount - b.amount;
+      }
       const dateA = new Date(a.createdAt).getTime();
       const dateB = new Date(b.createdAt).getTime();
       return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
     });
-  }, [debts, viewFilter, statusFilter, searchQuery, sortOrder, currentUser?.id]);
+  }, [debts, viewFilter, statusFilter, searchQuery, sortBy, sortOrder, currentUser?.id, selectedLenders, selectedBorrowers]);
 
-  const toggleSortOrder = () => {
-    setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"));
+  const openFiltersDialog = () => {
+    setTempViewFilter(viewFilter);
+    setTempStatusFilter(statusFilter);
+    setTempSortBy(sortBy);
+    setTempSortOrder(sortOrder);
+    setTempSelectedLenders(selectedLenders);
+    setTempSelectedBorrowers(selectedBorrowers);
+    setShowFiltersDialog(true);
+  };
+
+  const applyFilters = () => {
+    setViewFilter(tempViewFilter);
+    setStatusFilter(tempStatusFilter);
+    setSortBy(tempSortBy);
+    setSortOrder(tempSortOrder);
+    setSelectedLenders(tempSelectedLenders);
+    setSelectedBorrowers(tempSelectedBorrowers);
+    setShowFiltersDialog(false);
+  };
+
+  const resetFilters = () => {
+    const allMemberIds = group.members.map((m) => m.user.id);
+    setTempViewFilter("all");
+    setTempStatusFilter("all");
+    setTempSortBy("date");
+    setTempSortOrder("desc");
+    setTempSelectedLenders(allMemberIds);
+    setTempSelectedBorrowers(allMemberIds);
   };
 
   const handleAction = (action: "paid" | "modify" | "delete", debt: Debt) => {
@@ -758,60 +829,11 @@ export default function GroupDetailPageClient({
 
         <TabsContent value="debts" className="space-y-0 mt-4">
           <Card>
-            {/* Table Header with Filters and Search */}
-            <div className="border-b p-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                {/* Filters */}
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* View Filter */}
-                  <div className="flex gap-1 rounded-lg border bg-muted/50 p-1">
-                    {(["all", "lending", "borrowing"] as const).map((view) => (
-                      <button
-                        key={view}
-                        onClick={() => setViewFilter(view)}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                          viewFilter === view
-                            ? view === "lending"
-                              ? "green-badge"
-                              : view === "borrowing"
-                              ? "red-badge"
-                              : "bg-background shadow-sm"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {view === "all" && `All (${debts.length})`}
-                        {view === "lending" && `Lending (${lendingDebts.length})`}
-                        {view === "borrowing" && `Borrowing (${borrowingDebts.length})`}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Status Filter */}
-                  <div className="flex gap-1">
-                    {(["all", "pending", "paid"] as const).map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                          statusFilter === status
-                            ? status === "pending"
-                              ? "yellow-badge"
-                              : status === "paid"
-                              ? "green-badge"
-                              : "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
+            {/* Table Header with Search and Filters Button */}
+            <div className="border-b p-4">
+              <div className="flex items-center gap-3">
                 {/* Search */}
-                <div className="relative w-full sm:w-64">
+                <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="text"
@@ -821,6 +843,16 @@ export default function GroupDetailPageClient({
                     className="pl-9"
                   />
                 </div>
+
+                {/* Filters Button */}
+                <Button
+                  variant="outline"
+                  onClick={openFiltersDialog}
+                  className="gap-2"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                </Button>
               </div>
             </div>
 
@@ -829,7 +861,9 @@ export default function GroupDetailPageClient({
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground">No debts found</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {searchQuery || statusFilter !== "all" || viewFilter !== "all"
+                  {searchQuery || statusFilter !== "all" || viewFilter !== "all" ||
+                   selectedLenders.length < group.members.length ||
+                   selectedBorrowers.length < group.members.length
                     ? "Try adjusting your filters or search"
                     : "Create a debt to get started"}
                 </p>
@@ -841,19 +875,7 @@ export default function GroupDetailPageClient({
                     <TableHead>Lender</TableHead>
                     <TableHead>Borrower</TableHead>
                     <TableHead className="hidden md:table-cell">Description</TableHead>
-                    <TableHead className="hidden sm:table-cell">
-                      <button
-                        onClick={toggleSortOrder}
-                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                      >
-                        Date
-                        {sortOrder === "desc" ? (
-                          <ArrowDown className="h-3 w-3" />
-                        ) : (
-                          <ArrowUp className="h-3 w-3" />
-                        )}
-                      </button>
-                    </TableHead>
+                    <TableHead className="hidden sm:table-cell">Date</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1295,6 +1317,143 @@ export default function GroupDetailPageClient({
                 </DialogFooter>
               </form>
             </div>
+          </DialogContent>
+        </div>
+      )}
+
+      {/* Filters Dialog */}
+      {showFiltersDialog && (
+        <div className="fixed inset-0 z-50">
+          <DialogOverlay onClick={() => setShowFiltersDialog(false)} />
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Filters</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-6 px-6 py-4">
+              {/* View Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">View</Label>
+                <div className="flex gap-2">
+                  {(["all", "lending", "borrowing"] as const).map((view) => (
+                    <button
+                      key={view}
+                      onClick={() => setTempViewFilter(view)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempViewFilter === view
+                          ? view === "lending"
+                            ? "green-badge"
+                            : view === "borrowing"
+                            ? "red-badge"
+                            : "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {view === "all" && "All"}
+                      {view === "lending" && "Lending"}
+                      {view === "borrowing" && "Borrowing"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Status</Label>
+                <div className="flex gap-2">
+                  {(["all", "pending", "paid"] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setTempStatusFilter(status)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempStatusFilter === status
+                          ? status === "pending"
+                            ? "yellow-badge"
+                            : status === "paid"
+                            ? "green-badge"
+                            : "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lenders Multi-Select */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Lenders</Label>
+                <MultiSelect
+                  options={memberOptions}
+                  selected={tempSelectedLenders}
+                  onChange={setTempSelectedLenders}
+                  placeholder="Select lenders..."
+                />
+              </div>
+
+              {/* Borrowers Multi-Select */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Borrowers</Label>
+                <MultiSelect
+                  options={memberOptions}
+                  selected={tempSelectedBorrowers}
+                  onChange={setTempSelectedBorrowers}
+                  placeholder="Select borrowers..."
+                />
+              </div>
+
+              {/* Sort By */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Sort by</Label>
+                <div className="flex gap-2">
+                  {(["date", "amount"] as const).map((sort) => (
+                    <button
+                      key={sort}
+                      onClick={() => setTempSortBy(sort)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempSortBy === sort
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {sort === "date" ? "Date" : "Amount"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sort Order */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Sort order</Label>
+                <div className="flex gap-2">
+                  {(["desc", "asc"] as const).map((order) => (
+                    <button
+                      key={order}
+                      onClick={() => setTempSortOrder(order)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempSortOrder === order
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {order === "desc" ? (tempSortBy === "date" ? "Newest first" : "Highest first") : (tempSortBy === "date" ? "Oldest first" : "Lowest first")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <Button variant="outline" onClick={resetFilters}>
+                Reset
+              </Button>
+              <Button onClick={applyFilters}>Apply Filters</Button>
+            </DialogFooter>
           </DialogContent>
         </div>
       )}
