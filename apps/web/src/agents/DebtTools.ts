@@ -4,14 +4,14 @@ import { z } from "zod";
 
 // Define your tools
 export const createDebt = tool(
-  async ({ userId, amount, description, borrowerId, groupId, receiptId }) => {
+  async ({ userId, amount, description, borrowerId, groupId, receiptIds }) => {
     const debt = await debtService.createDebt({
       lenderId: userId,
       amount,
       description,
       borrowerId,
       groupId,
-      receiptId,
+      receiptIds,
     });
     return `Debt created successfully. ${debt}`;
   },
@@ -24,14 +24,14 @@ export const createDebt = tool(
       description: z.string().describe("The description of the debt"),
       borrowerId: z.string().describe("The ID of the borrower"),
       groupId: z.number().describe("The ID of the group"),
-      receiptId: z.string().optional().describe("The ID of the receipt (if any)"),
+      receiptIds: z.array(z.string()).optional().describe("The IDs of the receipts (if any)"),
     }),
   }
 );
 
 export const readDebtsFromGroup = tool(
   async ({ userId, groupId }) => {
-    const debts = await debtService.getUserDebts(userId, { groupId });
+    const debts = await debtService.getGroupDebts(groupId, userId);
 
     if (debts.length === 0) {
       return "No debts found in this group.";

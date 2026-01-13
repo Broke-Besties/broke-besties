@@ -14,19 +14,6 @@ export class DebtPolicy {
   }
 
   /**
-   * Check if user can create a debt in a group (must be member)
-   */
-  static async canCreate(userId: string, groupId: number): Promise<boolean> {
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        userId,
-        groupId,
-      },
-    });
-    return !!membership;
-  }
-
-  /**
    * Check if user can update a debt (must be lender or borrower)
    * Makes DB call to verify permission before update
    */
@@ -62,26 +49,5 @@ export class DebtPolicy {
     if (!debt) return false;
 
     return debt.lenderId === userId;
-  }
-
-  /**
-   * Check if both users are members of the group before creating a debt
-   * Makes DB call to verify membership
-   */
-  static async areBothGroupMembers(
-    lenderId: string,
-    borrowerId: string,
-    groupId: number
-  ): Promise<boolean> {
-    const members = await prisma.groupMember.findMany({
-      where: {
-        groupId,
-        userId: {
-          in: [lenderId, borrowerId],
-        },
-      },
-    });
-
-    return members.length === 2;
   }
 }

@@ -12,41 +12,43 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const groupIdStr = formData.get("groupId") as string;
-    const debtIdStr = formData.get("debtId") as string | null;
+    const debtIdsStr = formData.get("debtIds") as string;
 
     if (!file) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    if (!debtIdsStr) {
       return NextResponse.json(
-        { error: "No file provided" },
+        { error: "debtIds is required" },
         { status: 400 }
       );
     }
 
-    if (!groupIdStr) {
-      return NextResponse.json(
-        { error: "groupId is required" },
-        { status: 400 }
-      );
-    }
-
-    const groupId = parseInt(groupIdStr, 10);
-    if (isNaN(groupId)) {
-      return NextResponse.json(
-        { error: "Invalid groupId" },
-        { status: 400 }
-      );
-    }
-
-    // Optional debtId
-    let debtId: number | undefined;
-    if (debtIdStr) {
-      debtId = parseInt(debtIdStr, 10);
-      if (isNaN(debtId)) {
-        return NextResponse.json(
-          { error: "Invalid debtId" },
-          { status: 400 }
-        );
+    // Parse debtIds - can be comma-separated or JSON array
+    let debtIds: number[];
+    try {
+      if (debtIdsStr.startsWith("[")) {
+        debtIds = JSON.parse(debtIdsStr);
+      } else {
+        debtIds = debtIdsStr.split(",").map((id) => parseInt(id.trim(), 10));
       }
+
+      if (!Array.isArray(debtIds) || debtIds.length === 0) {
+        throw new Error("Invalid debtIds format");
+      }
+
+      if (debtIds.some((id) => isNaN(id))) {
+        throw new Error("Invalid debt ID in array");
+      }
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid debtIds format. Provide comma-separated IDs or JSON array",
+        },
+        { status: 400 }
+      );
     }
 
     // Validate file type
@@ -69,9 +71,8 @@ export async function POST(request: NextRequest) {
 
     const result = await receiptService.uploadAndParseReceipt(
       file,
-      groupId,
-      user.id,
-      debtId
+      debtIds,
+      user.id
     );
 
     return NextResponse.json({

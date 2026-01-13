@@ -39,7 +39,6 @@ model Group {
   members   GroupMember[]
   invites   GroupInvite[]
   debts     Debt[]
-  receipts  Receipt[]
 }
 
 model GroupMember {
@@ -81,33 +80,27 @@ model Debt {
   lenderId     String
   borrowerId   String
   groupId      Int?
-  receiptId    String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
   lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
   borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
   group        Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  receipt      Receipt?          @relation("DebtReceipt", fields: [receiptId], references: [id], onDelete: SetNull)
   transactions DebtTransaction[]
+  receipts     Receipt[]
 
   @@index([lenderId])
   @@index([borrowerId])
   @@index([groupId])
-  @@index([receiptId])
 }
 
 model Receipt {
-  id        String   @id @default(cuid())
-  groupId   Int
+  id        String    @id @default(cuid())
   rawText   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  debts     Debt[]   @relation("DebtReceipt")
-
-  @@index([groupId])
+  debts     Debt[]
 }
 
 model Tab {

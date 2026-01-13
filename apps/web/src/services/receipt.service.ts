@@ -4,34 +4,39 @@ import { ReceiptPolicy } from "@/policies";
 
 export class ReceiptService {
   /**
-   * Upload receipt image to Supabase storage and parse it with AI
+   * Upload receipt image to Supabase storage and link to debts
    */
-  async uploadAndParseReceipt(
-    file: File,
-    groupId: number,
-    userId: string,
-    debtId?: number
-  ) {
+  async uploadAndParseReceipt(file: File, debtIds: number[], userId: string) {
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Check if user can create receipt (policy handles the DB call)
-    if (!await ReceiptPolicy.canCreate(userId, groupId)) {
-      throw new Error("Group not found or access denied");
+    // Validate that at least one debt is provided
+    if (debtIds.length === 0) {
+      throw new Error("At least one debt ID is required");
     }
 
-    // Create receipt record first to get the ID
+    // Check if user can create receipt (must be lender/borrower on all debts)
+    if (!(await ReceiptPolicy.canCreate(userId, debtIds))) {
+      throw new Error(
+        "Access denied - you must be lender or borrower on all specified debts"
+      );
+    }
+
+    // Create receipt record and link to debts
     const receipt = await prisma.receipt.create({
       data: {
-        groupId,
+        debts: {
+          connect: debtIds.map((id) => ({ id })),
+        },
       },
     });
 
     try {
-      const storagePath = `group/${groupId}/receipts/${receipt.id}`;
+      // Flat storage path: receipts/{receiptId}
+      const storagePath = `receipts/${receipt.id}`;
 
       const { error: uploadError } = await supabase.storage
         .from("receipts")
@@ -57,20 +62,14 @@ export class ReceiptService {
       console.log("[Receipt Upload] Successfully uploaded to Supabase");
       console.log("[Receipt Upload] Presigned URL:", signedUrlData.signedUrl);
 
-      // If debtId is provided, link the receipt to the debt
-      if (debtId) {
-        await prisma.debt.update({
-          where: { id: debtId },
-          data: { receiptId: receipt.id },
-        });
-      }
-
       return {
         id: receipt.id,
         signedUrl: signedUrlData.signedUrl,
       };
     } catch (error) {
-      await prisma.receipt.delete({ where: { id: receipt.id } }).catch(() => {});
+      await prisma.receipt
+        .delete({ where: { id: receipt.id } })
+        .catch(() => {});
       throw error;
     }
   }
@@ -84,9 +83,11 @@ export class ReceiptService {
         id: receiptId,
       },
       include: {
-        group: {
-          include: {
-            members: true,
+        debts: {
+          select: {
+            id: true,
+            lenderId: true,
+            borrowerId: true,
           },
         },
       },
@@ -105,18 +106,25 @@ export class ReceiptService {
   }
 
   /**
-   * Get all receipts for a group
+   * Get all receipts for a specific debt
    */
-  async getGroupReceipts(groupId: number, userId: string) {
-    // Check if user can list group receipts (policy handles the DB call)
-    if (!await ReceiptPolicy.canListGroupReceipts(userId, groupId)) {
-      throw new Error("Group not found or access denied");
+  async getReceiptsForDebt(debtId: number, userId: string) {
+    // First verify user has access to the debt
+    const debt = await prisma.debt.findFirst({
+      where: {
+        id: debtId,
+        OR: [{ lenderId: userId }, { borrowerId: userId }],
+      },
+      include: {
+        receipts: true,
+      },
+    });
+
+    if (!debt) {
+      throw new Error("Debt not found or access denied");
     }
 
-    return prisma.receipt.findMany({
-      where: { groupId },
-      orderBy: { createdAt: "desc" },
-    });
+    return debt.receipts;
   }
 
   /**
@@ -124,14 +132,15 @@ export class ReceiptService {
    */
   async deleteReceipt(receiptId: string, userId: string) {
     const receipt = await this.getReceiptById(receiptId, userId);
+
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Find the file in storage (try common extensions)
-    const storagePath = `group/${receipt.groupId}/receipts/${receiptId}`;
+    // Flat storage path: receipts/{receiptId}
+    const storagePath = `receipts/${receiptId}`;
     await supabase.storage.from("receipts").remove([storagePath]);
 
     // Delete from database
