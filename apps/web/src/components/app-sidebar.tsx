@@ -11,6 +11,8 @@ import {
   RefreshCw,
   LogIn,
   UserRoundPlus,
+  Pin,
+  PinOff,
 } from "lucide-react";
 
 import {
@@ -23,8 +25,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
 interface AppSidebarProps {
   user?: { id: string; email?: string } | null;
@@ -39,6 +42,22 @@ const navLinks = [
   { href: "/recurring-payments", label: "Recurring", icon: RefreshCw },
 ];
 
+function SidebarPinButton() {
+  const { open, setOpen } = useSidebar();
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8 shrink-0 opacity-0 group-data-[state=expanded]:opacity-100 transition-opacity"
+      onClick={() => setOpen(!open)}
+      title={open ? "Unpin sidebar" : "Pin sidebar"}
+    >
+      {open ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+    </Button>
+  );
+}
+
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
 
@@ -48,25 +67,22 @@ export function AppSidebar({ user }: AppSidebarProps) {
   };
 
   return (
-    <Sidebar collapsible="icon" className="group/sidebar-hover">
+    <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <span className="font-bold text-sm">BB</span>
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">Broke Besties</span>
-                  <span className="text-xs text-muted-foreground">
-                    Split expenses
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 px-2 py-1">
+          <Link
+            href="/"
+            className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+          >
+            <span className="font-bold text-sm">BB</span>
+          </Link>
+          <div className="flex flex-1 items-center justify-between overflow-hidden group-data-[state=expanded]:opacity-100 opacity-0 transition-opacity">
+            <div className="flex flex-col gap-0.5 leading-none">
+              <span className="font-semibold">Broke Besties</span>
+            </div>
+            <SidebarPinButton />
+          </div>
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -75,11 +91,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <SidebarMenu>
               {navLinks.map((link) => (
                 <SidebarMenuItem key={link.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(link.href)}
-                    tooltip={link.label}
-                  >
+                  <SidebarMenuButton asChild isActive={isActive(link.href)}>
                     <Link href={link.href}>
                       <link.icon />
                       <span>{link.label}</span>
@@ -96,7 +108,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Log in">
+              <SidebarMenuButton asChild>
                 <Link href="/login">
                   <LogIn />
                   <span>Log in</span>
@@ -104,7 +116,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Sign up">
+              <SidebarMenuButton asChild>
                 <Link href="/signup">
                   <UserRoundPlus />
                   <span>Sign up</span>
@@ -114,8 +126,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </SidebarMenu>
         </SidebarFooter>
       )}
-
-      <SidebarRail />
     </Sidebar>
   );
 }

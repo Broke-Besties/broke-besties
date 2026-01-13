@@ -42,7 +42,7 @@ export default async function RootLayout({
         <SidebarProvider defaultOpen={false}>
           <AppSidebar user={user} />
           <SidebarInset>
-            <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60">
+            <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between bg-background/95 px-4 md:px-8 md:ml-52 md:mr-52 backdrop-blur supports-backdrop-filter:bg-background/60">
               <span className="text-lg font-semibold">Broke Besties</span>
               <div className="flex items-center gap-2">
                 {user ? (
@@ -64,7 +64,7 @@ export default async function RootLayout({
                 )}
               </div>
             </header>
-            <main className="flex-1 overflow-auto p-4 md:p-6">
+            <main className="flex-1 overflow-auto p-4 md:py-6 md:px-8 md:ml-52 md:mr-52">
               <Suspense fallback={<AppLoading />}>{children}</Suspense>
             </main>
           </SidebarInset>
