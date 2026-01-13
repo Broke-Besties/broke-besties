@@ -12,43 +12,38 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const debtIdsStr = formData.get("debtIds") as string;
+    const debtIdsStr = formData.get("debtIds") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!debtIdsStr) {
-      return NextResponse.json(
-        { error: "debtIds is required" },
-        { status: 400 }
-      );
-    }
+    // Parse debtIds - optional, can be comma-separated or JSON array
+    let debtIds: number[] | undefined;
+    if (debtIdsStr) {
+      try {
+        if (debtIdsStr.startsWith("[")) {
+          debtIds = JSON.parse(debtIdsStr);
+        } else {
+          debtIds = debtIdsStr.split(",").map((id) => parseInt(id.trim(), 10));
+        }
 
-    // Parse debtIds - can be comma-separated or JSON array
-    let debtIds: number[];
-    try {
-      if (debtIdsStr.startsWith("[")) {
-        debtIds = JSON.parse(debtIdsStr);
-      } else {
-        debtIds = debtIdsStr.split(",").map((id) => parseInt(id.trim(), 10));
-      }
+        if (!Array.isArray(debtIds)) {
+          throw new Error("Invalid debtIds format");
+        }
 
-      if (!Array.isArray(debtIds) || debtIds.length === 0) {
-        throw new Error("Invalid debtIds format");
+        if (debtIds.some((id) => isNaN(id))) {
+          throw new Error("Invalid debt ID in array");
+        }
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              "Invalid debtIds format. Provide comma-separated IDs or JSON array",
+          },
+          { status: 400 }
+        );
       }
-
-      if (debtIds.some((id) => isNaN(id))) {
-        throw new Error("Invalid debt ID in array");
-      }
-    } catch {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid debtIds format. Provide comma-separated IDs or JSON array",
-        },
-        { status: 400 }
-      );
     }
 
     // Validate file type
@@ -71,8 +66,8 @@ export async function POST(request: NextRequest) {
 
     const result = await receiptService.uploadAndParseReceipt(
       file,
-      debtIds,
-      user.id
+      user.id,
+      debtIds
     );
 
     return NextResponse.json({

@@ -4,34 +4,35 @@ import { ReceiptPolicy } from "@/policies";
 
 export class ReceiptService {
   /**
-   * Upload receipt image to Supabase storage and link to debts
+   * Upload receipt image to Supabase storage and optionally link to debts
+   * If no debtIds provided, creates a pending receipt (for AI flow)
    */
-  async uploadAndParseReceipt(file: File, debtIds: number[], userId: string) {
+  async uploadAndParseReceipt(
+    file: File,
+    userId: string,
+    debtIds?: number[]
+  ) {
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Validate that at least one debt is provided
-    if (debtIds.length === 0) {
-      throw new Error("At least one debt ID is required");
+    // If debtIds provided, check permissions
+    if (debtIds && debtIds.length > 0) {
+      if (!(await ReceiptPolicy.canCreate(userId, debtIds))) {
+        throw new Error(
+          "Access denied - you must be lender or borrower on all specified debts"
+        );
+      }
     }
 
-    // Check if user can create receipt (must be lender/borrower on all debts)
-    if (!(await ReceiptPolicy.canCreate(userId, debtIds))) {
-      throw new Error(
-        "Access denied - you must be lender or borrower on all specified debts"
-      );
-    }
-
-    // Create receipt record and link to debts
+    // Create receipt record, optionally linking to debts
     const receipt = await prisma.receipt.create({
-      data: {
-        debts: {
-          connect: debtIds.map((id) => ({ id })),
-        },
-      },
+      data:
+        debtIds && debtIds.length > 0
+          ? { debts: { connect: debtIds.map((id) => ({ id })) } }
+          : {},
     });
 
     try {
@@ -75,6 +76,43 @@ export class ReceiptService {
   }
 
   /**
+   * Link an existing receipt to debts
+   */
+  async linkReceiptToDebts(
+    receiptId: string,
+    debtIds: number[],
+    userId: string
+  ) {
+    // Verify receipt exists
+    const receipt = await prisma.receipt.findUnique({
+      where: { id: receiptId },
+    });
+
+    if (!receipt) {
+      throw new Error("Receipt not found");
+    }
+
+    // Verify user has access to all debts
+    if (!(await ReceiptPolicy.canCreate(userId, debtIds))) {
+      throw new Error(
+        "Access denied - you must be lender or borrower on all specified debts"
+      );
+    }
+
+    // Link receipt to debts
+    await prisma.receipt.update({
+      where: { id: receiptId },
+      data: {
+        debts: {
+          connect: debtIds.map((id) => ({ id })),
+        },
+      },
+    });
+
+    return { success: true };
+  }
+
+  /**
    * Get receipt by ID
    */
   async getReceiptById(receiptId: string, userId: string) {
@@ -97,8 +135,9 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    // Check permission using the fetched receipt object
-    if (!ReceiptPolicy.canView(userId, receipt)) {
+    // For pending receipts (no debts), allow the uploader to view
+    // For linked receipts, check if user is lender/borrower on any debt
+    if (receipt.debts.length > 0 && !ReceiptPolicy.canView(userId, receipt)) {
       throw new Error("Access denied");
     }
 
@@ -131,7 +170,27 @@ export class ReceiptService {
    * Delete receipt from storage and database
    */
   async deleteReceipt(receiptId: string, userId: string) {
-    const receipt = await this.getReceiptById(receiptId, userId);
+    const receipt = await prisma.receipt.findFirst({
+      where: { id: receiptId },
+      include: {
+        debts: {
+          select: {
+            id: true,
+            lenderId: true,
+            borrowerId: true,
+          },
+        },
+      },
+    });
+
+    if (!receipt) {
+      throw new Error("Receipt not found");
+    }
+
+    // For pending receipts or receipts the user has access to
+    if (receipt.debts.length > 0 && !ReceiptPolicy.canDelete(userId, receipt)) {
+      throw new Error("Access denied");
+    }
 
     // Use service role key to bypass RLS for storage operations
     const supabase = createClient(

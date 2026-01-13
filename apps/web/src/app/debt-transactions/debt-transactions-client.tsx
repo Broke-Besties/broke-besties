@@ -244,7 +244,7 @@ export default function DebtTransactionsClient({
                     <div>
                       Group:{' '}
                       <span className="font-medium text-foreground">
-                        {transaction.debt.group.name}
+                        {transaction.debt.group?.name}
                       </span>
                     </div>
                   </div>

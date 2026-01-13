@@ -24,7 +24,10 @@ export const createDebt = tool(
       description: z.string().describe("The description of the debt"),
       borrowerId: z.string().describe("The ID of the borrower"),
       groupId: z.number().describe("The ID of the group"),
-      receiptIds: z.array(z.string()).optional().describe("The IDs of the receipts (if any)"),
+      receiptIds: z
+        .array(z.string())
+        .optional()
+        .describe("The IDs of the receipts (if any)"),
     }),
   }
 );
@@ -37,16 +40,20 @@ export const readDebtsFromGroup = tool(
       return "No debts found in this group.";
     }
 
-    const formattedDebts = debts.map((debt: any, index: number) => {
-      const isLender = debt.lenderId === userId;
-      const otherParty = isLender ? debt.borrower.email : debt.lender.email;
-      const direction = isLender ? "lent to" : "borrowed from";
+    const formattedDebts = debts
+      .map((debt: any, index: number) => {
+        const isLender = debt.lenderId === userId;
+        const otherParty = isLender ? debt.borrower.email : debt.lender.email;
+        const direction = isLender ? "lent to" : "borrowed from";
 
-      return `${index + 1}. $${debt.amount.toFixed(2)} ${direction} ${otherParty}
+        return `${index + 1}. $${debt.amount.toFixed(
+          2
+        )} ${direction} ${otherParty}
    Description: ${debt.description || "No description"}
    Status: ${debt.status}
    Created: ${new Date(debt.createdAt).toLocaleDateString()}`;
-    }).join("\n\n");
+      })
+      .join("\n\n");
 
     return `Found ${debts.length} debt(s) in this group:\n\n${formattedDebts}`;
   },
