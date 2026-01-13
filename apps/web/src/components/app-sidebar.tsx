@@ -69,17 +69,17 @@ export function AppSidebar({ user }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
+        <div className="flex items-center gap-3 p-2">
           <Link
             href="/"
-            className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+            className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
           >
             <span className="font-bold text-sm">BB</span>
           </Link>
-          <div className="flex flex-1 items-center justify-between overflow-hidden group-data-[state=expanded]:opacity-100 opacity-0 transition-opacity">
-            <div className="flex flex-col gap-0.5 leading-none">
-              <span className="font-semibold">Broke Besties</span>
-            </div>
+          <div className="flex flex-1 items-center justify-between gap-2 overflow-hidden group-data-[state=expanded]:opacity-100 opacity-0 transition-opacity">
+            <span className="font-semibold whitespace-nowrap">
+              Broke Besties
+            </span>
             <SidebarPinButton />
           </div>
         </div>
