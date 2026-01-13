@@ -29,12 +29,17 @@ import {
   cancelDebtTransaction,
 } from "@/app/groups/[id]/actions";
 
+type Receipt = {
+  id: string;
+  rawText: string | null;
+  createdAt: Date | string;
+};
+
 type Debt = {
   id: number;
   amount: number;
   description: string | null;
   status: string;
-  receiptId: string | null;
   createdAt: Date | string;
   lender: {
     id: string;
@@ -48,17 +53,7 @@ type Debt = {
     id: number;
     name: string;
   } | null;
-  receipt?: {
-    id: string;
-    rawText: string | null;
-  } | null;
-};
-
-type Receipt = {
-  id: string;
-  groupId: number;
-  rawText: string | null;
-  createdAt: Date | string;
+  receipts?: Receipt[];
 };
 
 type DebtTransaction = {
@@ -83,7 +78,7 @@ type DebtDetailClientProps = {
   receipts: Receipt[];
   transactions: DebtTransaction[];
   currentUserId: string;
-  receiptImageUrl: string | null;
+  receiptImageUrls: { id: string; url: string }[];
 };
 
 export default function DebtDetailClient({
@@ -91,7 +86,7 @@ export default function DebtDetailClient({
   receipts: initialReceipts,
   transactions,
   currentUserId,
-  receiptImageUrl,
+  receiptImageUrls,
 }: DebtDetailClientProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -100,18 +95,20 @@ export default function DebtDetailClient({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  console.log('[Debt Detail Client] Receipt data:', {
-    hasReceipt: !!debt.receipt,
-    receiptId: debt.receipt?.id,
-    hasReceiptImageUrl: !!receiptImageUrl,
-    receiptImageUrl: receiptImageUrl?.substring(0, 50) + '...'
+  console.log("[Debt Detail Client] Receipt data:", {
+    receiptsCount: debt.receipts?.length || 0,
+    receiptImageUrlsCount: receiptImageUrls.length,
   });
 
   // Transaction modal state
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [transactionType, setTransactionType] = useState<"drop" | "modify">("drop");
+  const [transactionType, setTransactionType] = useState<"drop" | "modify">(
+    "drop"
+  );
   const [proposedAmount, setProposedAmount] = useState(debt.amount.toString());
-  const [proposedDescription, setProposedDescription] = useState(debt.description || "");
+  const [proposedDescription, setProposedDescription] = useState(
+    debt.description || ""
+  );
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -133,8 +130,10 @@ export default function DebtDetailClient({
       const result = await createDebtTransaction({
         debtId: debt.id,
         type: transactionType,
-        proposedAmount: transactionType === "modify" ? parseFloat(proposedAmount) : undefined,
-        proposedDescription: transactionType === "modify" ? proposedDescription : undefined,
+        proposedAmount:
+          transactionType === "modify" ? parseFloat(proposedAmount) : undefined,
+        proposedDescription:
+          transactionType === "modify" ? proposedDescription : undefined,
         reason: reason || undefined,
       });
 
@@ -159,7 +158,10 @@ export default function DebtDetailClient({
     setError("");
 
     try {
-      const result = await respondToDebtTransaction(pendingTransaction.id, approve);
+      const result = await respondToDebtTransaction(
+        pendingTransaction.id,
+        approve
+      );
 
       if (!result.success) {
         throw new Error(result.error);
@@ -229,8 +231,7 @@ export default function DebtDetailClient({
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("groupId", debt.group!.id.toString());
-      formData.append("debtId", debt.id.toString());
+      formData.append("debtIds", debt.id.toString());
 
       const response = await fetch("/api/receipts/upload", {
         method: "POST",
@@ -266,6 +267,11 @@ export default function DebtDetailClient({
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  // Helper to get image URL for a receipt
+  const getReceiptImageUrl = (receiptId: string) => {
+    return receiptImageUrls.find((r) => r.id === receiptId)?.url || null;
   };
 
   return (
@@ -339,9 +345,13 @@ export default function DebtDetailClient({
             )}
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Status:</span>{" "}
-              {pendingTransaction.lenderApproved ? "Lender approved" : "Lender pending"}
+              {pendingTransaction.lenderApproved
+                ? "Lender approved"
+                : "Lender pending"}
               {" / "}
-              {pendingTransaction.borrowerApproved ? "Borrower approved" : "Borrower pending"}
+              {pendingTransaction.borrowerApproved
+                ? "Borrower approved"
+                : "Borrower pending"}
             </div>
             <div className="flex gap-2">
               {userNeedsToApprove && (
@@ -442,31 +452,39 @@ export default function DebtDetailClient({
                     Request Change
                   </Button>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Request to modify or delete this debt. Both parties must agree.
+                    Request to modify or delete this debt. Both parties must
+                    agree.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Right side - Receipt */}
-            {debt.receipt && (
-              <div className="flex-shrink-0">
-                {receiptImageUrl ? (
-                  <img
-                    src={receiptImageUrl}
-                    alt="Receipt"
-                    className="mt-1 w-64 h-64 object-contain rounded-md"
-                  />
-                ) : (
-                  <div className="mt-1 w-64 rounded-md border border-dashed bg-muted/50 p-4 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Receipt image could not be loaded
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Receipt ID: {debt.receipt.id.substring(0, 8)}...
-                    </p>
-                  </div>
-                )}
+            {/* Right side - Receipts */}
+            {debt.receipts && debt.receipts.length > 0 && (
+              <div className="shrink-0 space-y-2">
+                <Label className="text-muted-foreground">Receipts</Label>
+                <div className="flex flex-wrap gap-2">
+                  {debt.receipts.map((receipt) => {
+                    const imageUrl = getReceiptImageUrl(receipt.id);
+                    return (
+                      <div key={receipt.id}>
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt="Receipt"
+                            className="w-32 h-32 object-contain rounded-md border"
+                          />
+                        ) : (
+                          <div className="w-32 h-32 rounded-md border border-dashed bg-muted/50 p-2 text-center flex items-center justify-center">
+                            <p className="text-xs text-muted-foreground">
+                              Receipt {receipt.id.substring(0, 6)}...
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -478,9 +496,7 @@ export default function DebtDetailClient({
         <Card>
           <CardHeader>
             <CardTitle>Transaction History</CardTitle>
-            <CardDescription>
-              All change requests for this debt
-            </CardDescription>
+            <CardDescription>All change requests for this debt</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -493,7 +509,9 @@ export default function DebtDetailClient({
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">
-                          {transaction.type === "drop" ? "Delete Request" : "Modify Request"}
+                          {transaction.type === "drop"
+                            ? "Delete Request"
+                            : "Modify Request"}
                         </span>
                         <Badge
                           variant="outline"
@@ -508,17 +526,20 @@ export default function DebtDetailClient({
                               "border-gray-500/30 bg-gray-500/10 text-gray-700 dark:text-gray-300"
                           )}
                         >
-                          {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
+                          {transaction.status.charAt(0).toUpperCase() +
+                            transaction.status.slice(1)}
                         </Badge>
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Requested by {transaction.requester.email}
                       </div>
-                      {transaction.type === "modify" && transaction.proposedAmount !== null && (
-                        <div className="text-sm">
-                          Proposed amount: ${transaction.proposedAmount.toFixed(2)}
-                        </div>
-                      )}
+                      {transaction.type === "modify" &&
+                        transaction.proposedAmount !== null && (
+                          <div className="text-sm">
+                            Proposed amount: $
+                            {transaction.proposedAmount.toFixed(2)}
+                          </div>
+                        )}
                       {transaction.reason && (
                         <div className="text-sm text-muted-foreground">
                           Reason: {transaction.reason}
@@ -619,7 +640,9 @@ export default function DebtDetailClient({
                   </Button>
                   <Button
                     type="button"
-                    variant={transactionType === "modify" ? "default" : "outline"}
+                    variant={
+                      transactionType === "modify" ? "default" : "outline"
+                    }
                     className="flex-1"
                     onClick={() => setTransactionType("modify")}
                   >
@@ -639,12 +662,13 @@ export default function DebtDetailClient({
                       min="0.01"
                       value={proposedAmount}
                       onChange={(e) => {
-                        const value = e.target.value
+                        const value = e.target.value;
                         if (value && !isNaN(parseFloat(value))) {
-                          const rounded = Math.round(parseFloat(value) * 100) / 100
-                          setProposedAmount(rounded.toString())
+                          const rounded =
+                            Math.round(parseFloat(value) * 100) / 100;
+                          setProposedAmount(rounded.toString());
                         } else {
-                          setProposedAmount(value)
+                          setProposedAmount(value);
                         }
                       }}
                     />
