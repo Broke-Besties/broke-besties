@@ -273,4 +273,15 @@ body {
   .yellow-box-active {
     @apply bg-amber-500/20 border-2 border-amber-500/40 ring-2 ring-amber-500/20;
   }
+
+  /* Secondary lighter variants for badges/status */
+  .green-badge {
+    @apply bg-emerald-500/5 text-emerald-600 dark:text-emerald-400;
+  }
+  .red-badge {
+    @apply bg-rose-500/5 text-rose-600 dark:text-rose-400;
+  }
+  .yellow-badge {
+    @apply bg-amber-500/5 text-amber-600 dark:text-amber-400;
+  }
 }

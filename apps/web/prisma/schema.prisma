@@ -80,14 +80,14 @@ model Debt {
   status       String            @default("pending")
   lenderId     String
   borrowerId   String
-  groupId      Int
+  groupId      Int?
   receiptId    String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
   lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
   borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
-  group        Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group        Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
   receipt      Receipt?          @relation("DebtReceipt", fields: [receiptId], references: [id], onDelete: SetNull)
   transactions DebtTransaction[]
 
@@ -128,7 +128,7 @@ model Tab {
 model DebtTransaction {
   id                  Int       @id @default(autoincrement())
   debtId              Int
-  type                String    // "drop" or "modify"
+  type                String    // "drop", "modify", or "confirm_paid"
   status              String    @default("pending") // "pending", "approved", "rejected", "cancelled"
 
   requesterId         String

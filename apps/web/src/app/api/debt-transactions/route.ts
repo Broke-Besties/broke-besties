@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (type !== 'drop' && type !== 'modify') {
+    if (type !== 'drop' && type !== 'modify' && type !== 'confirm_paid') {
       return NextResponse.json(
-        { error: 'type must be "drop" or "modify"' },
+        { error: 'type must be "drop", "modify", or "confirm_paid"' },
         { status: 400 }
       )
     }

@@ -6,7 +6,7 @@ type CreateDebtParams = {
   description?: string | null
   lenderId: string
   borrowerId: string
-  groupId: number
+  groupId?: number | null
   receiptId?: string | null
 }
 
@@ -38,10 +38,6 @@ export class DebtService {
       throw new Error('Borrower ID is required')
     }
 
-    if (!groupId) {
-      throw new Error('Group ID is required')
-    }
-
     // Prevent creating a debt to yourself
     if (borrowerId === lenderId) {
       throw new Error('Cannot create a debt to yourself')
@@ -56,9 +52,11 @@ export class DebtService {
       throw new Error('Borrower not found')
     }
 
-    // Verify both users are members of the group (policy handles the check)
-    if (!await DebtPolicy.areBothGroupMembers(lenderId, borrowerId, groupId)) {
-      throw new Error('Both lender and borrower must be group members')
+    // If groupId is provided, verify both users are members of the group
+    if (groupId) {
+      if (!await DebtPolicy.areBothGroupMembers(lenderId, borrowerId, groupId)) {
+        throw new Error('Both lender and borrower must be group members')
+      }
     }
 
     // Create the debt
@@ -68,7 +66,7 @@ export class DebtService {
         description: description || null,
         lenderId,
         borrowerId,
-        groupId,
+        groupId: groupId || null,
         status: 'pending',
         receiptId: receiptId || null,
       },
@@ -234,12 +232,13 @@ export class DebtService {
       }
     }
 
-    // Both lender and borrower can update status
     if (status !== undefined) {
+      if (status !== 'pending') {
+        throw new Error('Cannot set status to anything other than pending')
+      }
       updateData.status = status
     }
 
-    // Update the debt
     const debt = await prisma.debt.update({
       where: { id: debtId },
       data: updateData,

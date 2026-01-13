@@ -193,7 +193,7 @@ export async function searchGroupMembers(groupId: number, query: string) {
 
 export async function createDebtTransaction(data: {
   debtId: number
-  type: 'drop' | 'modify'
+  type: 'drop' | 'modify' | 'confirm_paid'
   proposedAmount?: number
   proposedDescription?: string
   reason?: string
