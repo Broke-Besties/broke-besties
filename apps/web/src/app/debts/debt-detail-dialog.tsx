@@ -63,7 +63,9 @@ export function DebtDetailDialog({
   if (!isOpen || !debt) return null
 
   const isLender = debt.lender.id === currentUserId
-  const direction = isLender ? 'lending' : 'borrowing'
+  const isBorrower = debt.borrower.id === currentUserId
+  const isInvolved = isLender || isBorrower
+  const direction = isLender ? 'lending' : isBorrower ? 'borrowing' : 'viewing'
   const otherPerson = isLender ? debt.borrower : debt.lender
 
   return (
@@ -77,13 +79,15 @@ export function DebtDetailDialog({
           <div className="flex items-start justify-between">
             <div>
               <DialogTitle className="text-2xl">
-                {direction === 'lending' ? '+' : '-'}${debt.amount.toFixed(2)}
+                {isInvolved ? (direction === 'lending' ? '+' : '-') : ''}${debt.amount.toFixed(2)}
               </DialogTitle>
               <DialogDescription className="mt-1">
                 {isLender ? (
-                  <>Lending to {otherPerson.name || otherPerson.email}</>
+                  <>You lent to {otherPerson.name || otherPerson.email}</>
+                ) : isBorrower ? (
+                  <>You borrowed from {otherPerson.name || otherPerson.email}</>
                 ) : (
-                  <>Borrowing from {otherPerson.name || otherPerson.email}</>
+                  <>{debt.lender.name || debt.lender.email} → {debt.borrower.name || debt.borrower.email}</>
                 )}
               </DialogDescription>
             </div>
@@ -106,21 +110,23 @@ export function DebtDetailDialog({
 
         <div className="px-6 pb-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="w-full">
+            <TabsList className={cn("w-full", !isInvolved && "hidden")}>
               <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
               <TabsTrigger value="actions" className="flex-1">Actions</TabsTrigger>
             </TabsList>
 
             <TabsContent value="details">
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                    direction === 'lending' ? 'green-badge' : 'red-badge'
-                  )}>
-                    {direction === 'lending' ? 'Lending' : 'Borrowing'}
-                  </span>
-                </div>
+                {isInvolved && (
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                      direction === 'lending' ? 'green-badge' : 'red-badge'
+                    )}>
+                      {direction === 'lending' ? 'Lending' : 'Borrowing'}
+                    </span>
+                  </div>
+                )}
 
                 {debt.description && (
                   <div>
@@ -129,13 +135,32 @@ export function DebtDetailDialog({
                   </div>
                 )}
 
-                <div>
-                  <Label className="text-muted-foreground text-xs">Person</Label>
-                  <p className="mt-1 text-sm">{otherPerson.name || otherPerson.email}</p>
-                  {otherPerson.name && (
-                    <p className="text-xs text-muted-foreground">{otherPerson.email}</p>
-                  )}
-                </div>
+                {isInvolved ? (
+                  <div>
+                    <Label className="text-muted-foreground text-xs">Person</Label>
+                    <p className="mt-1 text-sm">{otherPerson.name || otherPerson.email}</p>
+                    {otherPerson.name && (
+                      <p className="text-xs text-muted-foreground">{otherPerson.email}</p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">Lender</Label>
+                      <p className="mt-1 text-sm">{debt.lender.name || debt.lender.email}</p>
+                      {debt.lender.name && (
+                        <p className="text-xs text-muted-foreground">{debt.lender.email}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">Borrower</Label>
+                      <p className="mt-1 text-sm">{debt.borrower.name || debt.borrower.email}</p>
+                      {debt.borrower.name && (
+                        <p className="text-xs text-muted-foreground">{debt.borrower.email}</p>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 {debt.group && (
                   <div>
