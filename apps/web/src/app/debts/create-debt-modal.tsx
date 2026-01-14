@@ -52,6 +52,11 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   const [alertMessage, setAlertMessage] = useState('')
   const [alertDeadline, setAlertDeadline] = useState('')
 
+  // Receipt fields
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
+  const [uploadingReceipt, setUploadingReceipt] = useState(false)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Friend[]>([])
   const [recentFriends, setRecentFriends] = useState<Friend[]>([])
@@ -100,6 +105,30 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     return () => clearTimeout(timeoutId)
   }, [searchQuery, currentUserId])
 
+  const handleReceiptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Invalid file type. Only JPEG, PNG, and WebP are allowed')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File too large. Maximum size is 10MB')
+      return
+    }
+
+    setReceiptFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setReceiptPreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+    setError('')
+  }
+
   const handleSubmit = async () => {
     if (!borrower || !amount || parseFloat(amount) <= 0) {
       setError('Please select a borrower and enter a valid amount')
@@ -110,11 +139,39 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setError('')
 
     try {
+      // Upload receipt if there is one
+      let receiptId: string | undefined
+      if (receiptFile) {
+        setUploadingReceipt(true)
+        const formData = new FormData()
+        formData.append('file', receiptFile)
+        
+        // If there's a group, associate receipt with the group
+        if (selectedGroupId && selectedGroupId !== 'none') {
+          formData.append('groupId', selectedGroupId)
+        }
+
+        const uploadResponse = await fetch('/api/receipts/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json()
+          throw new Error(errorData.error || 'Failed to upload receipt')
+        }
+
+        const uploadData = await uploadResponse.json()
+        receiptId = uploadData.data.id
+        setUploadingReceipt(false)
+      }
+
       const result = await createStandaloneDebt({
         amount: parseFloat(amount),
         description: description || undefined,
         borrowerId: borrower.id,
         groupId: selectedGroupId && selectedGroupId !== 'none' ? parseInt(selectedGroupId) : undefined,
+        receiptIds: receiptId ? [receiptId] : undefined,
       })
 
       if (result.success && result.debt) {
@@ -154,6 +211,8 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setSelectedGroupId('')
     setAlertMessage('')
     setAlertDeadline('')
+    setReceiptFile(null)
+    setReceiptPreview(null)
     setSearchQuery('')
     setSearchResults([])
     setError('')
@@ -174,7 +233,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   return (
     <div className="fixed inset-0 z-50">
       <DialogOverlay onClick={handleClose} />
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add New Debt</DialogTitle>
           <DialogDescription>
@@ -182,7 +241,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 pb-4 space-y-4">
+        <div className="px-6 pb-4 space-y-4 overflow-y-auto">
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -313,6 +372,27 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
             </p>
           </div>
 
+          {/* Receipt Upload */}
+          <div className="space-y-2">
+            <Label htmlFor="receipt">Receipt (optional)</Label>
+            <input
+              id="receipt"
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              onChange={handleReceiptFileSelect}
+              className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+            />
+            {receiptPreview && (
+              <div className="mt-2 rounded-md border bg-muted/50 p-2">
+                <img
+                  src={receiptPreview}
+                  alt="Receipt preview"
+                  className="h-32 w-auto object-contain"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Alert Section */}
           <div className="space-y-4 pt-4 border-t">
             <Label className="text-base font-medium">Payment Reminder (optional)</Label>
@@ -340,11 +420,11 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={submitting}>
+          <Button variant="outline" onClick={handleClose} disabled={submitting || uploadingReceipt}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !borrower || !amount}>
-            {submitting ? 'Creating...' : 'Create Debt'}
+          <Button onClick={handleSubmit} disabled={submitting || uploadingReceipt || !borrower || !amount}>
+            {uploadingReceipt ? 'Uploading...' : submitting ? 'Creating...' : 'Create Debt'}
           </Button>
         </DialogFooter>
       </DialogContent>

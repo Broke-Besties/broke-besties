@@ -180,6 +180,20 @@ export class DebtTransactionService {
 
         // Apply the change to the debt
         if (transaction.type === 'drop') {
+          // Get debt with alert before deleting
+          const debtToDelete = await tx.debt.findUnique({
+            where: { id: transaction.debtId },
+            select: { alertId: true },
+          })
+          
+          // Deactivate associated alert if it exists
+          if (debtToDelete?.alertId) {
+            await tx.alert.update({
+              where: { id: debtToDelete.alertId },
+              data: { isActive: false },
+            })
+          }
+          
           await tx.debt.delete({
             where: { id: transaction.debtId },
           })
@@ -198,10 +212,19 @@ export class DebtTransactionService {
           })
         } else if (transaction.type === 'confirm_paid') {
           // Mark the debt as paid
-          await tx.debt.update({
+          const updatedDebt = await tx.debt.update({
             where: { id: transaction.debtId },
             data: { status: 'paid' },
+            include: { alert: true },
           })
+          
+          // Deactivate associated alert if it exists
+          if (updatedDebt.alertId) {
+            await tx.alert.update({
+              where: { id: updatedDebt.alertId },
+              data: { isActive: false },
+            })
+          }
         }
 
         return updatedTransaction

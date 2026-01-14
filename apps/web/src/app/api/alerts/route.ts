@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { alertService } from "@/services/alert.service";
 
+// GET /api/alerts - Get all active alerts for the current user (as borrower)
+export async function GET() {
+  try {
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const alerts = await alertService.getActiveAlertsForBorrower(user.id);
+    return NextResponse.json({ alerts });
+  } catch (error) {
+    console.error("Error fetching alerts:", error);
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 // POST /api/alerts - Create a new alert
 export async function POST(request: NextRequest) {
   try {

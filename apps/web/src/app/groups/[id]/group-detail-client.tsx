@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import {
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogOverlay,
@@ -127,6 +128,8 @@ export default function GroupDetailPageClient({
       description: "",
       borrowerId: "",
       borrower: null as { id: string; name: string; email: string } | null,
+      alertMessage: "",
+      alertDeadline: "",
     },
   ]);
   const [currentDebtIndex, setCurrentDebtIndex] = useState(0);
@@ -332,6 +335,38 @@ export default function GroupDetailPageClient({
         return;
       }
 
+      // Create alerts for debts that have alert fields
+      if (result.success) {
+        // Handle both single and multiple debts
+        const createdDebts = 'debts' in result && result.debts
+          ? result.debts
+          : 'debt' in result && result.debt
+            ? [result.debt]
+            : [];
+
+        for (let i = 0; i < createdDebts.length; i++) {
+          const debt = createdDebts[i];
+          const debtForm = debtForms[i];
+
+          if (debt && debtForm && (debtForm.alertMessage || debtForm.alertDeadline)) {
+            try {
+              await fetch('/api/alerts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  debtId: debt.id,
+                  message: debtForm.alertMessage || null,
+                  deadline: debtForm.alertDeadline || null,
+                }),
+              });
+            } catch (alertError) {
+              console.error('Failed to create alert:', alertError);
+              // Don't fail the whole operation if alert creation fails
+            }
+          }
+        }
+      }
+
       // Reset form and refresh
       setShowDebtModal(false);
       setDebtForms([
@@ -340,6 +375,8 @@ export default function GroupDetailPageClient({
           description: "",
           borrowerId: "",
           borrower: null,
+          alertMessage: "",
+          alertDeadline: "",
         },
       ]);
       setCurrentDebtIndex(0);
@@ -363,6 +400,8 @@ export default function GroupDetailPageClient({
         description: "",
         borrowerId: "",
         borrower: null,
+        alertMessage: "",
+        alertDeadline: "",
       },
     ]);
     setCurrentDebtIndex(debtForms.length);
@@ -758,128 +797,145 @@ export default function GroupDetailPageClient({
       {showDebtModal && (
         <div className="fixed inset-0 z-50">
           <DialogOverlay />
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>
                 Create new debt
                 {debtForms.length > 1 &&
                   ` (${currentDebtIndex + 1} of ${debtForms.length})`}
               </DialogTitle>
+              <DialogDescription>
+                Create a debt with a group member. They will owe you this amount.
+              </DialogDescription>
             </DialogHeader>
-            <div className="px-6 pb-6">
-              <form onSubmit={handleCreateDebts} className="grid gap-4">
-                <DebtFormItem
-                  debtData={currentDebt}
-                  groupId={groupId}
-                  currentUserId={currentUser?.id}
-                  onChange={(data) => updateDebtForm(currentDebtIndex, data)}
-                />
 
-                {/* Receipt Upload (shown only for first debt) */}
-                {currentDebtIndex === 0 && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="receipt">Receipt (optional)</Label>
-                    <input
-                      id="receipt"
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
-                      onChange={handleReceiptFileSelect}
-                      className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+            <div className="px-6 pb-4 space-y-4 overflow-y-auto">
+              {error && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <DebtFormItem
+                debtData={currentDebt}
+                groupId={groupId}
+                currentUserId={currentUser?.id}
+                onChange={(data) => updateDebtForm(currentDebtIndex, data)}
+              />
+
+              {/* Receipt Upload (shown on all debts - same receipt applies to all) */}
+              <div className="space-y-2">
+                <Label htmlFor="receipt">Receipt (optional)</Label>
+                {currentDebtIndex === 0 ? (
+                  <input
+                    id="receipt"
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    onChange={handleReceiptFileSelect}
+                    className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {receiptFile ? `Using receipt: ${receiptFile.name}` : 'No receipt uploaded'}
+                  </p>
+                )}
+                {receiptPreview && (
+                  <div className="mt-2 rounded-md border bg-muted/50 p-2">
+                    <img
+                      src={receiptPreview}
+                      alt="Receipt preview"
+                      className="h-32 w-auto object-contain"
                     />
-                    {receiptPreview && (
-                      <div className="mt-2 rounded-md border bg-muted/50 p-2">
-                        <img
-                          src={receiptPreview}
-                          alt="Receipt preview"
-                          className="h-32 w-auto object-contain"
-                        />
-                      </div>
-                    )}
                   </div>
                 )}
+              </div>
 
+              {debtForms.length > 1 && (
+                <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))
+                    }
+                    disabled={currentDebtIndex === 0}
+                  >
+                    ← Prev
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Debt {currentDebtIndex + 1} of {debtForms.length}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setCurrentDebtIndex(
+                        Math.min(debtForms.length - 1, currentDebtIndex + 1)
+                      )
+                    }
+                    disabled={currentDebtIndex === debtForms.length - 1}
+                  >
+                    Next →
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addNewDebt}
+                  className="flex-1"
+                >
+                  + Add another debt
+                </Button>
                 {debtForms.length > 1 && (
-                  <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))
-                      }
-                      disabled={currentDebtIndex === 0}
-                    >
-                      ← Prev
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Debt {currentDebtIndex + 1} of {debtForms.length}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentDebtIndex(
-                          Math.min(debtForms.length - 1, currentDebtIndex + 1)
-                        )
-                      }
-                      disabled={currentDebtIndex === debtForms.length - 1}
-                    >
-                      Next →
-                    </Button>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={addNewDebt}
-                    className="flex-1"
+                    onClick={() => removeDebt(currentDebtIndex)}
                   >
-                    + Add another debt
+                    Remove this debt
                   </Button>
-                  {debtForms.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => removeDebt(currentDebtIndex)}
-                    >
-                      Remove this debt
-                    </Button>
-                  )}
-                </div>
-
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setShowDebtModal(false);
-                      setDebtForms([
-                        {
-                          amount: "",
-                          description: "",
-                          borrowerId: "",
-                          borrower: null,
-                        },
-                      ]);
-                      setCurrentDebtIndex(0);
-                      setError("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={creating || !allDebtsValid}>
-                    {creating
-                      ? "Creating…"
-                      : `Create ${debtForms.length} debt${
-                          debtForms.length > 1 ? "s" : ""
-                        }`}
-                  </Button>
-                </DialogFooter>
-              </form>
+                )}
+              </div>
             </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDebtModal(false);
+                  setDebtForms([
+                    {
+                      amount: "",
+                      description: "",
+                      borrowerId: "",
+                      borrower: null,
+                      alertMessage: "",
+                      alertDeadline: "",
+                    },
+                  ]);
+                  setCurrentDebtIndex(0);
+                  setError("");
+                }}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateDebts}
+                disabled={creating || !allDebtsValid}
+              >
+                {creating
+                  ? "Creating…"
+                  : `Create ${debtForms.length} debt${
+                      debtForms.length > 1 ? "s" : ""
+                    }`}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </div>
       )}

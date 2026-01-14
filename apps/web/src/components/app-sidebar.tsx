@@ -63,10 +63,17 @@ function SidebarPinButton() {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
+  };
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   return (
@@ -75,6 +82,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <div className="flex items-center gap-3 p-2">
           <Link
             href="/"
+            onClick={handleLinkClick}
             className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg overflow-hidden"
           >
             <Image
@@ -101,7 +109,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
               {navLinks.map((link) => (
                 <SidebarMenuItem key={link.href}>
                   <SidebarMenuButton asChild isActive={isActive(link.href)}>
-                    <Link href={link.href}>
+                    <Link href={link.href} onClick={handleLinkClick}>
                       <link.icon />
                       <span>{link.label}</span>
                     </Link>
@@ -118,7 +126,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <Link href="/login">
+                <Link href="/login" onClick={handleLinkClick}>
                   <LogIn />
                   <span>Log in</span>
                 </Link>
@@ -126,7 +134,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <Link href="/signup">
+                <Link href="/signup" onClick={handleLinkClick}>
                   <UserRoundPlus />
                   <span>Sign up</span>
                 </Link>

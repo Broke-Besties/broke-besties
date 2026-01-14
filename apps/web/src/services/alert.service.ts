@@ -193,6 +193,45 @@ export class AlertService {
   }
 
   /**
+   * Get all active alerts where user is the borrower
+   */
+  async getActiveAlertsForBorrower(userId: string) {
+    const alerts = await prisma.alert.findMany({
+      where: {
+        borrowerId: userId,
+        isActive: true,
+      },
+      include: {
+        lender: { select: { id: true, email: true, name: true } },
+        borrower: { select: { id: true, email: true, name: true } },
+        debt: {
+          select: {
+            id: true,
+            amount: true,
+            description: true,
+            status: true,
+          },
+        },
+        recurringPayment: {
+          select: {
+            id: true,
+            amount: true,
+            description: true,
+            status: true,
+          },
+        },
+        group: { select: { id: true, name: true } },
+      },
+      orderBy: [
+        { deadline: "asc" },
+        { createdAt: "desc" },
+      ],
+    });
+
+    return alerts;
+  }
+
+  /**
    * Delete an alert (only lender can delete)
    */
   async deleteAlert(alertId: number, userId: string) {

@@ -13,6 +13,7 @@ export async function createStandaloneDebt(data: {
   description?: string
   borrowerId: string
   groupId?: number
+  receiptIds?: string[]
 }) {
   const user = await getUser()
 
@@ -27,6 +28,7 @@ export async function createStandaloneDebt(data: {
       lenderId: user.id,
       borrowerId: data.borrowerId,
       groupId: data.groupId || null,
+      receiptIds: data.receiptIds,
     })
     revalidatePath('/debts')
     revalidatePath('/dashboard')
