@@ -28,6 +28,7 @@ import {
   respondToDebtTransaction,
   cancelDebtTransaction,
 } from "@/app/groups/[id]/actions";
+import { createConfirmPaidTransaction } from "@/app/debts/actions";
 
 type Receipt = {
   id: string;
@@ -129,6 +130,9 @@ export default function DebtDetailClient({
       : ""
   );
   const [alertSubmitting, setAlertSubmitting] = useState(false);
+
+  // Mark as paid state
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   const isLender = debt.lender.id === currentUserId;
   const isBorrower = debt.borrower.id === currentUserId;
@@ -367,6 +371,25 @@ export default function DebtDetailClient({
     }
   };
 
+  const handleMarkAsPaid = async () => {
+    setMarkingPaid(true);
+    setError("");
+
+    try {
+      const result = await createConfirmPaidTransaction(debt.id);
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark as paid");
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -535,18 +558,25 @@ export default function DebtDetailClient({
                 </p>
               </div>
 
-              {/* Request Change Button */}
-              {!pendingTransaction && (
-                <div className="pt-4 border-t">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowTransactionModal(true)}
-                  >
-                    Request Change
-                  </Button>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Request to modify or delete this debt. Both parties must
-                    agree.
+              {/* Action Buttons */}
+              {!pendingTransaction && debt.status === "pending" && (
+                <div className="pt-4 border-t space-y-3">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleMarkAsPaid}
+                      disabled={markingPaid}
+                    >
+                      {markingPaid ? "Requesting..." : "Mark as Paid"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowTransactionModal(true)}
+                    >
+                      Request Change
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Both parties must agree to mark as paid or make changes.
                   </p>
                 </div>
               )}
