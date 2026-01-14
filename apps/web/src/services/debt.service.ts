@@ -192,6 +192,7 @@ export class DebtService {
           select: { id: true, name: true },
         },
         receipts: true,
+        alert: true,
       },
     });
 

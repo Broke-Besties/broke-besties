@@ -11,6 +11,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { toggleRecurringPaymentStatus, deleteRecurringPayment } from '../actions'
 
@@ -23,6 +33,12 @@ type RecurringPaymentBorrower = {
     email: string
     name: string
   }
+}
+
+type Alert = {
+  id: number
+  message: string | null
+  isActive: boolean
 }
 
 type RecurringPayment = {
@@ -38,6 +54,7 @@ type RecurringPayment = {
     name: string
   }
   borrowers: RecurringPaymentBorrower[]
+  alert?: Alert | null
 }
 
 type RecurringDetailClientProps = {
@@ -53,6 +70,11 @@ export default function RecurringDetailClient({
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
+
+  // Alert modal state
+  const [showAlertModal, setShowAlertModal] = useState(false)
+  const [alertMessage, setAlertMessage] = useState(payment.alert?.message || '')
+  const [alertSubmitting, setAlertSubmitting] = useState(false)
 
   const isLender = payment.lender.id === currentUserId
   const isBorrower = payment.borrowers.some(b => b.userId === currentUserId)
@@ -96,6 +118,78 @@ export default function RecurringDetailClient({
       setError('An error occurred while deleting the payment')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // Alert handlers
+  const handleSaveAlert = async () => {
+    setAlertSubmitting(true)
+    setError('')
+
+    try {
+      if (payment.alert) {
+        // Update existing alert
+        const response = await fetch(`/api/alerts/${payment.alert.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: alertMessage || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || 'Failed to update alert')
+        }
+      } else {
+        // Create new alert
+        const response = await fetch('/api/alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recurringPaymentId: payment.id,
+            message: alertMessage || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || 'Failed to create alert')
+        }
+      }
+
+      setShowAlertModal(false)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save alert')
+    } finally {
+      setAlertSubmitting(false)
+    }
+  }
+
+  const handleDeleteAlert = async () => {
+    if (!payment.alert) return
+
+    setAlertSubmitting(true)
+    setError('')
+
+    try {
+      const response = await fetch(`/api/alerts/${payment.alert.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete alert')
+      }
+
+      setShowAlertModal(false)
+      setAlertMessage('')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete alert')
+    } finally {
+      setAlertSubmitting(false)
     }
   }
 
@@ -209,6 +303,45 @@ export default function RecurringDetailClient({
         </CardContent>
       </Card>
 
+      {/* Alert Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle>Payment Reminder</CardTitle>
+              <CardDescription>
+                {payment.alert
+                  ? 'Alert settings for this recurring payment'
+                  : 'No reminder set for this recurring payment'}
+              </CardDescription>
+            </div>
+            {isLender && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowAlertModal(true)}
+              >
+                {payment.alert ? 'Edit Alert' : 'Add Alert'}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        {payment.alert && (
+          <CardContent>
+            {payment.alert.message ? (
+              <div>
+                <Label className="text-muted-foreground">Message</Label>
+                <p className="mt-1">{payment.alert.message}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Alert is set but no message configured.
+              </p>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
       {/* Actions */}
       {isLender && (
         <Card>
@@ -233,6 +366,58 @@ export default function RecurringDetailClient({
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Alert Modal */}
+      {showAlertModal && (
+        <>
+          <DialogOverlay onClick={() => setShowAlertModal(false)} />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {payment.alert ? 'Edit Alert' : 'Add Alert'}
+              </DialogTitle>
+              <DialogDescription>
+                Set a reminder message for this recurring payment.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="p-6 pt-0 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="alertMessage">Message (optional)</Label>
+                <Textarea
+                  id="alertMessage"
+                  value={alertMessage}
+                  onChange={(e) => setAlertMessage(e.target.value)}
+                  placeholder="e.g., Monthly subscription reminder"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              {payment.alert && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteAlert}
+                  disabled={alertSubmitting}
+                >
+                  Delete Alert
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={() => setShowAlertModal(false)}
+                disabled={alertSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
+                {alertSubmitting ? 'Saving...' : 'Save Alert'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </>
       )}
     </div>
   )

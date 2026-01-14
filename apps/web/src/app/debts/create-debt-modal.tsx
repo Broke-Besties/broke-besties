@@ -48,6 +48,10 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   const [selectedGroupId, setSelectedGroupId] = useState<string>('')
   const [groups, setGroups] = useState<Group[]>([])
 
+  // Alert fields
+  const [alertMessage, setAlertMessage] = useState('')
+  const [alertDeadline, setAlertDeadline] = useState('')
+
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Friend[]>([])
   const [recentFriends, setRecentFriends] = useState<Friend[]>([])
@@ -113,7 +117,24 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         groupId: selectedGroupId && selectedGroupId !== 'none' ? parseInt(selectedGroupId) : undefined,
       })
 
-      if (result.success) {
+      if (result.success && result.debt) {
+        // If alert fields are provided, create an alert for this debt
+        if (alertMessage || alertDeadline) {
+          try {
+            await fetch('/api/alerts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                debtId: result.debt.id,
+                message: alertMessage || null,
+                deadline: alertDeadline || null,
+              }),
+            })
+          } catch (alertError) {
+            console.error('Failed to create alert:', alertError)
+            // Don't fail the whole operation if alert creation fails
+          }
+        }
         onSuccess()
         handleClose()
       } else {
@@ -131,6 +152,8 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setDescription('')
     setBorrower(null)
     setSelectedGroupId('')
+    setAlertMessage('')
+    setAlertDeadline('')
     setSearchQuery('')
     setSearchResults([])
     setError('')
@@ -288,6 +311,31 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
             <p className="text-xs text-muted-foreground">
               Associate this debt with a group, or leave empty for a personal debt
             </p>
+          </div>
+
+          {/* Alert Section */}
+          <div className="space-y-4 pt-4 border-t">
+            <Label className="text-base font-medium">Payment Reminder (optional)</Label>
+            <div className="space-y-2">
+              <Label htmlFor="alertMessage" className="text-sm">Message</Label>
+              <Textarea
+                id="alertMessage"
+                value={alertMessage}
+                onChange={(e) => setAlertMessage(e.target.value)}
+                rows={2}
+                placeholder="e.g., Please pay by end of month"
+                className="resize-none"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="alertDeadline" className="text-sm">Deadline</Label>
+              <Input
+                id="alertDeadline"
+                type="date"
+                value={alertDeadline}
+                onChange={(e) => setAlertDeadline(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
