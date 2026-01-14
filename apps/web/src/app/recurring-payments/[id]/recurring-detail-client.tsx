@@ -38,6 +38,7 @@ type RecurringPaymentBorrower = {
 type Alert = {
   id: number
   message: string | null
+  deadline: Date | string | null
   isActive: boolean
 }
 
@@ -327,15 +328,24 @@ export default function RecurringDetailClient({
           </div>
         </CardHeader>
         {payment.alert && (
-          <CardContent>
-            {payment.alert.message ? (
+          <CardContent className="space-y-2">
+            {payment.alert.message && (
               <div>
                 <Label className="text-muted-foreground">Message</Label>
                 <p className="mt-1">{payment.alert.message}</p>
               </div>
-            ) : (
+            )}
+            {payment.alert.deadline && (
+              <div>
+                <Label className="text-muted-foreground">Deadline</Label>
+                <p className="mt-1">
+                  {new Date(payment.alert.deadline).toLocaleDateString()}
+                </p>
+              </div>
+            )}
+            {!payment.alert.message && !payment.alert.deadline && (
               <p className="text-sm text-muted-foreground">
-                Alert is set but no message configured.
+                Alert is set but no message or deadline configured.
               </p>
             )}
           </CardContent>
