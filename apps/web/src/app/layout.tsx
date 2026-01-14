@@ -4,10 +4,11 @@ import { Suspense } from "react";
 import Link from "next/link";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { AppLoading } from "@/components/app-loading";
 import { LogoutButton } from "@/components/logout-button";
+import { NotificationsWrapper } from "@/components/notifications-wrapper";
 import { getUser } from "@/lib/supabase";
 
 const overpass = Overpass({
@@ -47,10 +48,16 @@ export default async function RootLayout({
                 user ? "md:px-8 md:ml-52 md:mr-52" : "md:px-8 max-w-5xl mx-auto w-full"
               }`}
             >
-              <span className="text-lg font-semibold">Broke Besties</span>
+              <div className="flex items-center gap-2">
+                {user && <SidebarTrigger />}
+                <span className="text-lg font-semibold">Broke Besties</span>
+              </div>
               <div className="flex items-center gap-2">
                 {user ? (
                   <>
+                    <Suspense fallback={null}>
+                      <NotificationsWrapper />
+                    </Suspense>
                     <Button asChild variant="ghost" size="sm">
                       <Link href="/profile">Profile</Link>
                     </Button>

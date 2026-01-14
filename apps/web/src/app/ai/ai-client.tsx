@@ -48,6 +48,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     description: string
     borrowerId: string
     borrower: { id: string; name: string; email: string } | null
+    alertMessage: string
+    alertDeadline: string
   }>>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
   const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
@@ -105,6 +107,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           name: debt.borrowerName,
           email: debt.borrowerName, // Using name as email fallback
         },
+        alertMessage: '',
+        alertDeadline: '',
       }))
       setDebtForms(forms)
       setCurrentDebtIndex(0) // Reset to first debt
@@ -246,6 +250,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       description: '',
       borrowerId: '',
       borrower: null,
+      alertMessage: '',
+      alertDeadline: '',
     }])
     setCurrentDebtIndex(debtForms.length)
   }

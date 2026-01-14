@@ -171,6 +171,7 @@ export class RecurringPaymentService {
             user: true,
           },
         },
+        alert: true,
       },
     })
 

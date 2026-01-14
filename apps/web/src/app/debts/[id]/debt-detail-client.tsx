@@ -35,6 +35,13 @@ type Receipt = {
   createdAt: Date | string;
 };
 
+type Alert = {
+  id: number;
+  message: string | null;
+  deadline: Date | string | null;
+  isActive: boolean;
+};
+
 type Debt = {
   id: number;
   amount: number;
@@ -54,6 +61,7 @@ type Debt = {
     name: string;
   } | null;
   receipts?: Receipt[];
+  alert?: Alert | null;
 };
 
 type DebtTransaction = {
@@ -111,6 +119,16 @@ export default function DebtDetailClient({
   );
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Alert modal state
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState(debt.alert?.message || "");
+  const [alertDeadline, setAlertDeadline] = useState(
+    debt.alert?.deadline
+      ? new Date(debt.alert.deadline).toISOString().split("T")[0]
+      : ""
+  );
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
 
   const isLender = debt.lender.id === currentUserId;
   const isBorrower = debt.borrower.id === currentUserId;
@@ -272,6 +290,81 @@ export default function DebtDetailClient({
   // Helper to get image URL for a receipt
   const getReceiptImageUrl = (receiptId: string) => {
     return receiptImageUrls.find((r) => r.id === receiptId)?.url || null;
+  };
+
+  // Alert handlers
+  const handleSaveAlert = async () => {
+    setAlertSubmitting(true);
+    setError("");
+
+    try {
+      if (debt.alert) {
+        // Update existing alert
+        const response = await fetch(`/api/alerts/${debt.alert.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: alertMessage || null,
+            deadline: alertDeadline || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update alert");
+        }
+      } else {
+        // Create new alert
+        const response = await fetch("/api/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            debtId: debt.id,
+            message: alertMessage || null,
+            deadline: alertDeadline || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to create alert");
+        }
+      }
+
+      setShowAlertModal(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save alert");
+    } finally {
+      setAlertSubmitting(false);
+    }
+  };
+
+  const handleDeleteAlert = async () => {
+    if (!debt.alert) return;
+
+    setAlertSubmitting(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/alerts/${debt.alert.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete alert");
+      }
+
+      setShowAlertModal(false);
+      setAlertMessage("");
+      setAlertDeadline("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete alert");
+    } finally {
+      setAlertSubmitting(false);
+    }
   };
 
   return (
@@ -491,6 +584,54 @@ export default function DebtDetailClient({
         </CardContent>
       </Card>
 
+      {/* Alert Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle>Payment Reminder</CardTitle>
+              <CardDescription>
+                {debt.alert
+                  ? "Alert settings for this debt"
+                  : "No reminder set for this debt"}
+              </CardDescription>
+            </div>
+            {isLender && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowAlertModal(true)}
+              >
+                {debt.alert ? "Edit Alert" : "Add Alert"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        {debt.alert && (
+          <CardContent className="space-y-2">
+            {debt.alert.message && (
+              <div>
+                <Label className="text-muted-foreground">Message</Label>
+                <p className="mt-1">{debt.alert.message}</p>
+              </div>
+            )}
+            {debt.alert.deadline && (
+              <div>
+                <Label className="text-muted-foreground">Deadline</Label>
+                <p className="mt-1">
+                  {new Date(debt.alert.deadline).toLocaleDateString()}
+                </p>
+              </div>
+            )}
+            {!debt.alert.message && !debt.alert.deadline && (
+              <p className="text-sm text-muted-foreground">
+                Alert is set but no message or deadline configured.
+              </p>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
       {/* Transaction History */}
       {transactions.length > 0 && (
         <Card>
@@ -707,6 +848,68 @@ export default function DebtDetailClient({
               </Button>
               <Button onClick={handleCreateTransaction} disabled={submitting}>
                 {submitting ? "Submitting..." : "Submit Request"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </>
+      )}
+
+      {/* Alert Modal */}
+      {showAlertModal && (
+        <>
+          <DialogOverlay onClick={() => setShowAlertModal(false)} />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {debt.alert ? "Edit Alert" : "Add Alert"}
+              </DialogTitle>
+              <DialogDescription>
+                Set a reminder for this debt with an optional message and deadline.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="p-6 pt-0 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="alertMessage">Message (optional)</Label>
+                <Textarea
+                  id="alertMessage"
+                  value={alertMessage}
+                  onChange={(e) => setAlertMessage(e.target.value)}
+                  placeholder="e.g., Please pay by end of month"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="alertDeadline">Deadline (optional)</Label>
+                <Input
+                  id="alertDeadline"
+                  type="date"
+                  value={alertDeadline}
+                  onChange={(e) => setAlertDeadline(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              {debt.alert && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteAlert}
+                  disabled={alertSubmitting}
+                >
+                  Delete Alert
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={() => setShowAlertModal(false)}
+                disabled={alertSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
+                {alertSubmitting ? "Saving..." : "Save Alert"}
               </Button>
             </DialogFooter>
           </DialogContent>
