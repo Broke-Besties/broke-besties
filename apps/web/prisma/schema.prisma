@@ -23,6 +23,8 @@ model User {
   receivedInvites           GroupInvite[]                 @relation("InviteReceiver")
   lentDebts                 Debt[]                        @relation("Lender")
   borrowedDebts             Debt[]                        @relation("Borrower")
+  lentAlerts                Alert[]                       @relation("AlertLender")
+  borrowedAlerts            Alert[]                       @relation("AlertBorrower")
   tabs                      Tab[]
   debtTransactions          DebtTransaction[]             @relation("TransactionRequester")
   lentRecurringPayments     RecurringPayment[]           @relation("RecurringPaymentLender")
@@ -39,6 +41,8 @@ model Group {
   members   GroupMember[]
   invites   GroupInvite[]
   debts     Debt[]
+  recurringPayments RecurringPayment[]
+  alerts    Alert[]
 }
 
 model GroupMember {
@@ -80,18 +84,46 @@ model Debt {
   lenderId     String
   borrowerId   String
   groupId      Int?
+  alertId      Int?              @unique
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
   lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
   borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
   group        Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  alert        Alert?            @relation(fields: [alertId], references: [id], onDelete: SetNull)
   transactions DebtTransaction[]
   receipts     Receipt[]
 
   @@index([lenderId])
   @@index([borrowerId])
   @@index([groupId])
+  @@index([alertId])
+}
+
+model Alert {
+  id         Int       @id @default(autoincrement())
+  message    String?
+  deadline   DateTime?
+  groupId    Int?
+  lenderId   String
+  borrowerId String
+  isActive   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  group    Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  lender   User  @relation("AlertLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower User  @relation("AlertBorrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+
+  debt             Debt?
+  recurringPayment RecurringPayment?
+
+  @@index([groupId])
+  @@index([lenderId])
+  @@index([borrowerId])
+  @@index([isActive])
+  @@index([deadline])
 }
 
 model Receipt {
@@ -151,14 +183,20 @@ model RecurringPayment {
   description String?
   status      String                        @default("active") // "active" or "inactive"
   lenderId    String
+  groupId     Int?
+  alertId     Int?                          @unique
   frequency   Int                           // Frequency in days
   createdAt   DateTime                      @default(now())
   updatedAt   DateTime                      @updatedAt
 
   lender      User                         @relation("RecurringPaymentLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  group       Group?                       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  alert       Alert?                       @relation(fields: [alertId], references: [id], onDelete: SetNull)
   borrowers   RecurringPaymentBorrower[]
 
   @@index([lenderId])
+  @@index([groupId])
+  @@index([alertId])
 }
 
 model RecurringPaymentBorrower {

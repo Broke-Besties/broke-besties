@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import NumberFlow from "@number-flow/react";
-import { TrendingUp, TrendingDown, Repeat, Calendar, Plus } from "lucide-react";
+import { TrendingUp, TrendingDown, Repeat, Calendar, Plus, AlertTriangle, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,63 @@ type RecurringPayment = {
   }>;
 };
 
+type Alert = {
+  id: number;
+  message: string | null;
+  deadline: Date | string | null;
+  isActive: boolean;
+  createdAt: Date | string;
+  lender: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+  debt: {
+    id: number;
+    amount: number;
+    description: string | null;
+    status: string;
+  } | null;
+  recurringPayment: {
+    id: number;
+    amount: number;
+    description: string | null;
+    status: string;
+  } | null;
+  group: {
+    id: number;
+    name: string;
+  } | null;
+};
+
+type DebtTransaction = {
+  id: number;
+  type: string;
+  status: string;
+  proposedAmount: number | null;
+  proposedDescription: string | null;
+  reason: string | null;
+  createdAt: Date | string;
+  requester: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+  debt: {
+    id: number;
+    amount: number;
+    description: string | null;
+    lender: {
+      id: string;
+    };
+    borrower: {
+      id: string;
+      email: string;
+      name: string | null;
+    };
+  };
+};
+
 type DashboardPageClientProps = {
   initialDebts: Debt[];
   initialGroups: Group[];
@@ -120,6 +177,8 @@ type DashboardPageClientProps = {
   currentUser: User;
   userName: string;
   initialRecurringPayments: RecurringPayment[];
+  initialAlerts: Alert[];
+  initialPendingTransactions: DebtTransaction[];
 };
 
 function getNextRenewalDate(payment: RecurringPayment): Date {
@@ -155,11 +214,21 @@ export default function DashboardPageClient({
   currentUser,
   userName,
   initialRecurringPayments,
+  initialAlerts,
+  initialPendingTransactions,
 }: DashboardPageClientProps) {
   const [debts] = useState<Debt[]>(initialDebts);
   const [groups] = useState<Group[]>(initialGroups);
   const [tabs, setTabs] = useState<Tab[]>(initialTabs);
   const [recurringPayments] = useState<RecurringPayment[]>(initialRecurringPayments);
+  const [alerts] = useState<Alert[]>(initialAlerts);
+  const [pendingTransactions] = useState<DebtTransaction[]>(initialPendingTransactions);
+  const [showOverdueBanner, setShowOverdueBanner] = useState(
+    alerts.filter(a => a.debt !== null).length > 0
+  );
+  const [showPendingBanner, setShowPendingBanner] = useState(
+    initialPendingTransactions.length > 0
+  );
   const [error, setError] = useState("");
   const [chartView, setChartView] = useState<"owed" | "owing">("owed");
   const router = useRouter();
@@ -187,7 +256,7 @@ export default function DashboardPageClient({
         }
         return;
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred while updating the tab status");
       if (oldStatus) {
         setTabs((prevTabs) =>
@@ -322,8 +391,8 @@ export default function DashboardPageClient({
         },
         tooltip: {
           callbacks: {
-            title: (context: any) => context[0]?.label || "",
-            label: (context: any) => {
+            title: (context: { label?: string }[]) => context[0]?.label || "",
+            label: (context: { parsed: number; dataset: { data: number[] } }) => {
               const value = context.parsed;
               const total = context.dataset.data.reduce(
                 (a: number, b: number) => a + b,
@@ -332,7 +401,7 @@ export default function DashboardPageClient({
               const percentage = ((value / total) * 100).toFixed(1);
               return `$${value.toFixed(2)} (${percentage}%)`;
             },
-            afterLabel: (context: any) => {
+            afterLabel: (context: { dataIndex: number }) => {
               const descriptions = chartDescriptions[context.dataIndex];
               if (!descriptions || descriptions.length === 0) return "";
               const truncate = (s: string, len: number) =>
@@ -351,26 +420,77 @@ export default function DashboardPageClient({
     [chartDescriptions]
   );
 
+  const overduePayments = alerts.filter(a => a.debt !== null);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-6">
+      {/* Notification Banners */}
+      <div className="space-y-2">
+        {/* Overdue Payments Banner */}
+        {showOverdueBanner && overduePayments.length > 0 && (
+          <div
+            className="relative rounded-lg p-2.5 animate-in fade-in slide-in-from-top-4 duration-500 bg-red-500/10 border border-red-500/30"
+          >
+            <button
+              onClick={() => setShowOverdueBanner(false)}
+              className="absolute top-2 right-2 p-1 rounded-md hover:bg-black/10 transition-colors"
+              aria-label="Dismiss notification"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <div className="flex items-center gap-2 pr-7">
+              <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-red-100">
+                  You have {overduePayments.length} overdue payment{overduePayments.length > 1 ? 's' : ''}!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending Approvals Banner */}
+        {showPendingBanner && pendingTransactions.length > 0 && (
+          <div
+            className="relative rounded-lg p-2.5 animate-in fade-in slide-in-from-top-4 duration-500 bg-emerald-500/10 border border-emerald-500/30"
+          >
+            <button
+              onClick={() => setShowPendingBanner(false)}
+              className="absolute top-2 right-2 p-1 rounded-md hover:bg-black/10 transition-colors"
+              aria-label="Dismiss notification"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <div className="flex items-center gap-2 pr-7">
+              <AlertTriangle className="h-4 w-4 text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-emerald-100">
+                  You have {pendingTransactions.length} transaction{pendingTransactions.length > 1 ? 's' : ''} waiting for your approval!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Welcome Section */}
       <div
-        className="flex items-center justify-between gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
         style={{ animationDelay: "0ms", animationFillMode: "both" }}
       >
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           <Image
             src="/mascot/mascot.png"
             alt="Mascot"
             width={100}
             height={100}
-            className="shrink-0"
+            className="shrink-0 w-16 h-16 sm:w-[100px] sm:h-[100px]"
           />
-          <div className="space-y-1">
-            <h1 className="text-3xl font-semibold tracking-tight">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0">
+            <h1 className="text-xl sm:text-3xl font-semibold tracking-tight">
               Welcome back, {userName}!
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               Here&apos;s an overview of your debts and recurring payments
             </p>
           </div>
@@ -388,22 +508,22 @@ export default function DashboardPageClient({
       )}
 
       {/* Four Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {/* Card 1: You are owed */}
         <button
           type="button"
           onClick={() => setChartView("owed")}
           className={cn(
-            "relative rounded-xl p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
+            "relative rounded-xl p-3 md:p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
             chartView === "owed" ? "green-box-active" : "green-box"
           )}
           style={{ animationDelay: "100ms", animationFillMode: "both" }}
         >
-          <TrendingUp className="absolute top-4 right-4 h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-          <p className="text-sm text-emerald-700 dark:text-emerald-300">
+          <TrendingUp className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-emerald-600 dark:text-emerald-400" />
+          <p className="text-xs md:text-sm text-emerald-700 dark:text-emerald-300">
             You are owed
           </p>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+          <p className="text-lg md:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
             <NumberFlow
               value={calculateTotal(lendingDebts)}
               format={{ style: "currency", currency: "USD" }}
@@ -416,14 +536,14 @@ export default function DashboardPageClient({
           type="button"
           onClick={() => setChartView("owing")}
           className={cn(
-            "relative rounded-xl p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
+            "relative rounded-xl p-3 md:p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
             chartView === "owing" ? "red-box-active" : "red-box"
           )}
           style={{ animationDelay: "150ms", animationFillMode: "both" }}
         >
-          <TrendingDown className="absolute top-4 right-4 h-5 w-5 text-rose-600 dark:text-rose-400" />
-          <p className="text-sm text-rose-700 dark:text-rose-300">You owe</p>
-          <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+          <TrendingDown className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-rose-600 dark:text-rose-400" />
+          <p className="text-xs md:text-sm text-rose-700 dark:text-rose-300">You owe</p>
+          <p className="text-lg md:text-2xl font-bold text-rose-600 dark:text-rose-400">
             <NumberFlow
               value={calculateTotal(borrowingDebts)}
               format={{ style: "currency", currency: "USD" }}
@@ -433,24 +553,24 @@ export default function DashboardPageClient({
 
         {/* Card 3: Active recurring payments */}
         <div
-          className="relative rounded-xl p-4 border bg-card/50 animate-in fade-in slide-in-from-bottom-4 duration-500"
+          className="relative rounded-xl p-3 md:p-4 border bg-card/50 animate-in fade-in slide-in-from-bottom-4 duration-500"
           style={{ animationDelay: "200ms", animationFillMode: "both" }}
         >
-          <Repeat className="absolute top-4 right-4 h-5 w-5 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Active</p>
-          <p className="text-2xl font-bold">
+          <Repeat className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
+          <p className="text-xs md:text-sm text-muted-foreground">Active</p>
+          <p className="text-lg md:text-2xl font-bold">
             <NumberFlow value={recurringPayments.length} />
           </p>
         </div>
 
         {/* Card 4: Next renewal date */}
         <div
-          className="relative rounded-xl p-4 border bg-card/50 animate-in fade-in slide-in-from-bottom-4 duration-500"
+          className="relative rounded-xl p-3 md:p-4 border bg-card/50 animate-in fade-in slide-in-from-bottom-4 duration-500"
           style={{ animationDelay: "250ms", animationFillMode: "both" }}
         >
-          <Calendar className="absolute top-4 right-4 h-5 w-5 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Next renewal</p>
-          <p className="text-2xl font-bold">
+          <Calendar className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
+          <p className="text-xs md:text-sm text-muted-foreground">Next renewal</p>
+          <p className="text-lg md:text-2xl font-bold">
             {nextRenewalDate ? formatDate(nextRenewalDate) : "None"}
           </p>
         </div>
@@ -461,7 +581,7 @@ export default function DashboardPageClient({
         {/* Doughnut Chart */}
         <Card
           className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "300ms", animationFillMode: "both" }}
+          style={{ animationDelay: "350ms", animationFillMode: "both" }}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-base">
@@ -478,7 +598,7 @@ export default function DashboardPageClient({
         {/* Upcoming Recurring Payments */}
         <Card
           className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "350ms", animationFillMode: "both" }}
+          style={{ animationDelay: "400ms", animationFillMode: "both" }}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Upcoming Payments</CardTitle>
@@ -530,7 +650,7 @@ export default function DashboardPageClient({
         {/* Groups Card */}
         <Card
           className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "400ms", animationFillMode: "both" }}
+          style={{ animationDelay: "450ms", animationFillMode: "both" }}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Your Groups</CardTitle>
@@ -568,7 +688,7 @@ export default function DashboardPageClient({
         {/* Tabs Card */}
         <Card
           className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "450ms", animationFillMode: "both" }}
+          style={{ animationDelay: "500ms", animationFillMode: "both" }}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Your Tabs</CardTitle>

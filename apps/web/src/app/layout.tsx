@@ -4,10 +4,11 @@ import { Suspense } from "react";
 import Link from "next/link";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { AppLoading } from "@/components/app-loading";
 import { LogoutButton } from "@/components/logout-button";
+import { NotificationsWrapper } from "@/components/notifications-wrapper";
 import { getUser } from "@/lib/supabase";
 
 const overpass = Overpass({
@@ -51,6 +52,9 @@ export default async function RootLayout({
               <div className="flex items-center gap-2">
                 {user ? (
                   <>
+                    <Suspense fallback={null}>
+                      <NotificationsWrapper />
+                    </Suspense>
                     <Button asChild variant="ghost" size="sm">
                       <Link href="/profile">Profile</Link>
                     </Button>

@@ -38,7 +38,8 @@ export default function SignupPage() {
         return
       }
 
-      router.push('/groups')
+      // Redirect to dashboard and refresh the page
+      window.location.href = '/dashboard'
     } catch (err) {
       setError('An error occurred. Please try again.')
     } finally {
@@ -55,7 +56,7 @@ export default function SignupPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          redirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard`,
         },
       })
 

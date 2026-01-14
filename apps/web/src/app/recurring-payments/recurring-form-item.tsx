@@ -43,6 +43,7 @@ export default function RecurringFormItem({
     splitPercentage: 100,
     dollarAmount: 0,
   }])
+  const [alertMessage, setAlertMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -128,6 +129,7 @@ export default function RecurringFormItem({
       splitPercentage: 100,
       dollarAmount: 0,
     }])
+    setAlertMessage('')
     setError('')
   }
 
@@ -183,10 +185,26 @@ export default function RecurringFormItem({
       })
 
       if (result.success) {
+        // If alert message is provided, create an alert for this recurring payment
+        if (alertMessage) {
+          try {
+            await fetch('/api/alerts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                recurringPaymentId: result.recurringPayment.id,
+                message: alertMessage || null,
+              }),
+            })
+          } catch (alertError) {
+            console.error('Failed to create alert:', alertError)
+            // Don't fail the whole operation if alert creation fails
+          }
+        }
         onSuccess(result.recurringPayment)
         resetForm()
       } else {
-        setError(result.error || 'Failed to create recurring payment')
+        setError(result.error)
       }
     } catch (error) {
       console.error('Error creating recurring payment:', error)
@@ -291,6 +309,20 @@ export default function RecurringFormItem({
                 {isForSelf
                   ? "You'll be both the lender and borrower"
                   : "You'll be the lender, others will be borrowers"}
+              </p>
+            </div>
+
+            {/* Alert Section */}
+            <div className="grid gap-3 pt-4 border-t">
+              <Label>Payment Reminder (optional)</Label>
+              <Textarea
+                value={alertMessage}
+                onChange={(e) => setAlertMessage(e.target.value)}
+                placeholder="e.g., Monthly subscription reminder"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Set a reminder message for this recurring payment
               </p>
             </div>
 

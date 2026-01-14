@@ -192,6 +192,7 @@ export class DebtService {
           select: { id: true, name: true },
         },
         receipts: true,
+        alert: true,
       },
     });
 
@@ -279,8 +280,26 @@ export class DebtService {
       throw new Error("Only the lender can delete this debt");
     }
 
-    await prisma.debt.delete({
-      where: { id: debtId },
+    // Use transaction to deactivate alert and delete debt
+    await prisma.$transaction(async (tx) => {
+      // Get debt with alert
+      const debt = await tx.debt.findUnique({
+        where: { id: debtId },
+        select: { alertId: true },
+      });
+
+      // Deactivate associated alert if it exists
+      if (debt?.alertId) {
+        await tx.alert.update({
+          where: { id: debt.alertId },
+          data: { isActive: false },
+        });
+      }
+
+      // Delete the debt
+      await tx.debt.delete({
+        where: { id: debtId },
+      });
     });
   }
 }

@@ -168,8 +168,110 @@ async function main() {
   ]);
   console.log("Added members to groups");
 
+  // Create alerts first (so we can link them to debts)
+  const now = new Date();
+
+  // Alert 1: Active - overdue by 3 days
+  const alert1 = await prisma.alert.create({
+    data: {
+      message: "Friendly reminder: my money didn’t sign a lease with you 😌",
+      deadline: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
+      groupId: roommatesGroup.id,
+      lenderId: mainUser.id,
+      borrowerId: alice.id,
+      isActive: true,
+    },
+  });
+
+  // Alert 2: Active - overdue by 7 days
+  const alert2 = await prisma.alert.create({
+    data: {
+      message: "It’s been a week. My wallet is starting to feel abandoned 🥲",
+      deadline: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+      groupId: vegasGroup.id,
+      lenderId: mainUser.id,
+      borrowerId: charlie.id,
+      isActive: true,
+    },
+  });
+
+  // Alert 3: Active - due today
+  const alert3 = await prisma.alert.create({
+    data: {
+      message: "Pay me back today pls. I’m trying to grow as a person (financially) 💸",
+      deadline: new Date(now.getTime()),
+      groupId: roommatesGroup.id,
+      lenderId: bob.id,
+      borrowerId: mainUser.id,
+      isActive: true,
+    },
+  });
+
+  // Alert 4: Inactive - deadline in the future
+  const alert4 = await prisma.alert.create({
+    data: {
+      message: "All good for now. But I *will* remember this 😈",
+      deadline: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000),
+      groupId: officeGroup.id,
+      lenderId: charlie.id,
+      borrowerId: mainUser.id,
+      isActive: false,
+    },
+  });
+
+  // Alert 5: Active - overdue by 14 days
+  const alert5 = await prisma.alert.create({
+    data: {
+      message: "Two weeks overdue. At this point my money has Stockholm syndrome 🧠",
+      deadline: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+      groupId: vegasGroup.id,
+      lenderId: diana.id,
+      borrowerId: charlie.id,
+      isActive: true,
+    },
+  });
+
+  // Alert 6: Active - overdue by 5 days
+  const alert6 = await prisma.alert.create({
+    data: {
+      message: "5 days overdue. I’ve refreshed my bank app 17 times 😤",
+      deadline: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+      groupId: roommatesGroup.id,
+      lenderId: alice.id,
+      borrowerId: bob.id,
+      isActive: true,
+    },
+  });
+
+  // Alert 7: Active - overdue by 10 days
+  const alert7 = await prisma.alert.create({
+    data: {
+      message: "10 days overdue. Should I Venmo request or start a podcast about this? 🎙️",
+      deadline: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
+      groupId: officeGroup.id,
+      lenderId: alice.id,
+      borrowerId: charlie.id,
+      isActive: true,
+    },
+  });
+
+  // Alert 8: Active - overdue by 2 days
+  const alert8 = await prisma.alert.create({
+    data: {
+      message: "Overdue by 2 days. My bank account just cleared its throat loudly 😮‍💨",
+      deadline: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+      groupId: vegasGroup.id,
+      lenderId: charlie.id,
+      borrowerId: diana.id,
+      isActive: true,
+    },
+  });
+
+  console.log(`Created 8 alerts (7 active, 1 inactive)`);
+
   // Create debts - mainUser as LENDER
   const debtsAsLender = await Promise.all([
+    // Debt with alert - active deadline
     prisma.debt.create({
       data: {
         amount: 50.0,
@@ -178,8 +280,10 @@ async function main() {
         lenderId: mainUser.id,
         borrowerId: alice.id,
         groupId: roommatesGroup.id,
+        alertId: alert1.id,
       },
     }),
+    // Debt with alert - active deadline
     prisma.debt.create({
       data: {
         amount: 120.0,
@@ -188,8 +292,10 @@ async function main() {
         lenderId: mainUser.id,
         borrowerId: charlie.id,
         groupId: vegasGroup.id,
+        alertId: alert2.id,
       },
     }),
+    // Regular debt without alert
     prisma.debt.create({
       data: {
         amount: 25.0,
@@ -200,11 +306,34 @@ async function main() {
         groupId: officeGroup.id,
       },
     }),
+    // PAID debt - settled previously
+    prisma.debt.create({
+      data: {
+        amount: 35.0,
+        description: "Movie tickets",
+        status: "paid",
+        lenderId: mainUser.id,
+        borrowerId: bob.id,
+        groupId: roommatesGroup.id,
+      },
+    }),
+    // PAID debt - another settled debt
+    prisma.debt.create({
+      data: {
+        amount: 90.0,
+        description: "Dinner last month",
+        status: "paid",
+        lenderId: mainUser.id,
+        borrowerId: charlie.id,
+        groupId: vegasGroup.id,
+      },
+    }),
   ]);
-  console.log(`Created ${debtsAsLender.length} debts where main user is lender`);
+  console.log(`Created ${debtsAsLender.length} debts where main user is lender (including 2 paid debts)`);
 
   // Create debts - mainUser as BORROWER
   const debtsAsBorrower = await Promise.all([
+    // Debt with alert - urgent deadline tomorrow
     prisma.debt.create({
       data: {
         amount: 75.0,
@@ -213,6 +342,7 @@ async function main() {
         lenderId: bob.id,
         borrowerId: mainUser.id,
         groupId: roommatesGroup.id,
+        alertId: alert3.id,
       },
     }),
     prisma.debt.create({
@@ -225,6 +355,7 @@ async function main() {
         groupId: vegasGroup.id,
       },
     }),
+    // Debt with expired alert
     prisma.debt.create({
       data: {
         amount: 15.0,
@@ -233,6 +364,7 @@ async function main() {
         lenderId: charlie.id,
         borrowerId: mainUser.id,
         groupId: officeGroup.id,
+        alertId: alert4.id,
       },
     }),
   ]);
@@ -242,6 +374,7 @@ async function main() {
 
   // Create some debts between other users (not involving mainUser)
   const otherDebts = await Promise.all([
+    // Debt with alert - deadline in 5 days
     prisma.debt.create({
       data: {
         amount: 30.0,
@@ -250,8 +383,10 @@ async function main() {
         lenderId: alice.id,
         borrowerId: bob.id,
         groupId: roommatesGroup.id,
+        alertId: alert6.id,
       },
     }),
+    // Debt with alert - deadline in 2 days
     prisma.debt.create({
       data: {
         amount: 85.0,
@@ -260,6 +395,7 @@ async function main() {
         lenderId: charlie.id,
         borrowerId: diana.id,
         groupId: vegasGroup.id,
+        alertId: alert8.id,
       },
     }),
     prisma.debt.create({
@@ -272,6 +408,7 @@ async function main() {
         groupId: roommatesGroup.id,
       },
     }),
+    // Debt with alert - deadline in 14 days
     prisma.debt.create({
       data: {
         amount: 150.0,
@@ -280,8 +417,10 @@ async function main() {
         lenderId: diana.id,
         borrowerId: charlie.id,
         groupId: vegasGroup.id,
+        alertId: alert5.id,
       },
     }),
+    // Debt with alert - deadline in 10 days
     prisma.debt.create({
       data: {
         amount: 18.0,
@@ -290,6 +429,7 @@ async function main() {
         lenderId: alice.id,
         borrowerId: charlie.id,
         groupId: officeGroup.id,
+        alertId: alert7.id,
       },
     }),
     prisma.debt.create({
@@ -464,8 +604,9 @@ async function main() {
   console.log(`- Seed users: ${seedUsers.length}`);
   console.log(`- Groups: ${groups.length}`);
   console.log(
-    `- Debts: ${debtsAsLender.length + debtsAsBorrower.length + otherDebts.length}`
+    `- Debts: ${debtsAsLender.length + debtsAsBorrower.length + otherDebts.length} (2 paid, rest pending/settled)`
   );
+  console.log(`- Alerts: 8 (7 active, 1 expired)`);
   console.log(`- Tabs: ${tabs.length}`);
   console.log(`- Debt transactions: ${debtTransactions.length}`);
   console.log(`- Recurring payments: 4`);
