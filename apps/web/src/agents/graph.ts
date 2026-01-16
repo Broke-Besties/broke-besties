@@ -14,7 +14,7 @@ const AgentStateAnnotation = Annotation.Root({
   userId: Annotation<string>,
   groupId: Annotation<number>,
   imageUrl: Annotation<string | undefined>,
-  receiptId: Annotation<string | undefined>,
+  receiptIds: Annotation<string[] | undefined>,
   description: Annotation<string | undefined>,
   receiptText: Annotation<string | undefined>,
   groupMembers: Annotation<string | undefined>,

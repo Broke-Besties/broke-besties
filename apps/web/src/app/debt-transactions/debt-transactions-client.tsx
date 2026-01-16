@@ -46,7 +46,7 @@ type Transaction = {
     group: {
       id: number
       name: string
-    }
+    } | null
   }
   requester: {
     id: string
@@ -244,7 +244,7 @@ export default function DebtTransactionsClient({
                     <div>
                       Group:{' '}
                       <span className="font-medium text-foreground">
-                        {transaction.debt.group.name}
+                        {transaction.debt.group?.name}
                       </span>
                     </div>
                   </div>

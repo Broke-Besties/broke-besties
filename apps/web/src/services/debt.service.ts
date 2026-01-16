@@ -3,13 +3,13 @@ import { DebtPolicy } from "@/policies";
 import { emailService } from "./email.service";
 
 type CreateDebtParams = {
-  amount: number
-  description?: string | null
-  lenderId: string
-  borrowerId: string
-  groupId: number
-  receiptId?: string | null
-}
+  amount: number;
+  description?: string | null;
+  lenderId: string;
+  borrowerId: string;
+  groupId?: number | null;
+  receiptIds?: string[];
+};
 
 type UpdateDebtParams = {
   amount?: number;
@@ -19,7 +19,6 @@ type UpdateDebtParams = {
 
 type GetDebtsFilters = {
   type?: "lending" | "borrowing" | null;
-  groupId?: number | null;
   status?: string | null;
 };
 
@@ -28,7 +27,8 @@ export class DebtService {
    * Create a new debt
    */
   async createDebt(params: CreateDebtParams) {
-    const { amount, description, lenderId, borrowerId, groupId, receiptId } = params
+    const { amount, description, lenderId, borrowerId, groupId, receiptIds } =
+      params;
 
     // Validation
     if (!amount || amount <= 0) {
@@ -37,10 +37,6 @@ export class DebtService {
 
     if (!borrowerId) {
       throw new Error("Borrower ID is required");
-    }
-
-    if (!groupId) {
-      throw new Error("Group ID is required");
     }
 
     // Prevent creating a debt to yourself
@@ -57,23 +53,30 @@ export class DebtService {
       throw new Error("Borrower not found");
     }
 
-    // Verify both users are members of the group (policy handles the check)
-    if (
-      !(await DebtPolicy.areBothGroupMembers(lenderId, borrowerId, groupId))
-    ) {
-      throw new Error("Both lender and borrower must be group members");
+    // If receiptIds are provided, verify they exist
+    if (receiptIds && receiptIds.length > 0) {
+      const existingReceipts = await prisma.receipt.findMany({
+        where: { id: { in: receiptIds } },
+        select: { id: true },
+      });
+      if (existingReceipts.length !== receiptIds.length) {
+        throw new Error("One or more receipts not found");
+      }
     }
 
-    // Create the debt
+    // Create the debt with optional receipt connections
     const debt = await prisma.debt.create({
       data: {
         amount,
         description: description || null,
         lenderId,
         borrowerId,
-        groupId,
-        status: 'pending',
-        receiptId: receiptId || null,
+        groupId: groupId || null,
+        status: "pending",
+        receipts:
+          receiptIds && receiptIds.length > 0
+            ? { connect: receiptIds.map((id) => ({ id })) }
+            : undefined,
       },
       include: {
         lender: {
@@ -85,20 +88,23 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
     });
 
-    // Send email notification to borrower
-    const debtLink = `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debt.id}`;
-    await emailService.sendDebtCreated({
-      to: debt.borrower.email,
-      borrowerName: debt.borrower.name,
-      lenderName: debt.lender.name,
-      amount: debt.amount,
-      description: debt.description || "No description provided",
-      groupName: debt.group.name,
-      debtLink,
-    });
+    // Send email notification to borrower (only if in a group)
+    if (debt.group) {
+      const debtLink = `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debt.id}`;
+      await emailService.sendDebtCreated({
+        to: debt.borrower.email,
+        borrowerName: debt.borrower.name,
+        lenderName: debt.lender.name,
+        amount: debt.amount,
+        description: debt.description || "No description provided",
+        groupName: debt.group.name,
+        debtLink,
+      });
+    }
 
     return debt;
   }
@@ -107,7 +113,7 @@ export class DebtService {
    * Get all debts for a user with optional filters
    */
   async getUserDebts(userId: string, filters: GetDebtsFilters = {}) {
-    const { type, groupId, status } = filters;
+    const { type, status } = filters;
 
     // Build the where clause
     const where: any = {
@@ -121,10 +127,6 @@ export class DebtService {
       where.OR = [{ borrowerId: userId }];
     }
 
-    if (groupId) {
-      where.groupId = groupId;
-    }
-
     if (status) {
       where.status = status;
     }
@@ -133,14 +135,15 @@ export class DebtService {
       where,
       include: {
         lender: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         borrower: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -159,10 +162,10 @@ export class DebtService {
       where: {
         userId_groupId: { userId, groupId },
       },
-    })
+    });
 
     if (!membership) {
-      throw new Error('You must be a member of the group to view its debts')
+      throw new Error("You must be a member of the group to view its debts");
     }
 
     const debts = await prisma.debt.findMany({
@@ -177,49 +180,14 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
-    })
+    });
 
-    return debts
-  }
-
-  /**
-   * Get all debts for a group (user must be a member)
-   */
-  async getGroupDebts(groupId: number, userId: string) {
-    // Verify user is a member of the group
-    const membership = await prisma.groupMember.findUnique({
-      where: {
-        userId_groupId: { userId, groupId },
-      },
-    })
-
-    if (!membership) {
-      throw new Error('You must be a member of the group to view its debts')
-    }
-
-    const debts = await prisma.debt.findMany({
-      where: { groupId },
-      include: {
-        lender: {
-          select: { id: true, name: true, email: true },
-        },
-        borrower: {
-          select: { id: true, name: true, email: true },
-        },
-        group: {
-          select: { id: true, name: true },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
-
-    return debts
+    return debts;
   }
 
   /**
@@ -238,6 +206,8 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
+        alert: true,
       },
     });
 
@@ -289,12 +259,10 @@ export class DebtService {
       }
     }
 
-    // Both lender and borrower can update status
     if (status !== undefined) {
       updateData.status = status;
     }
 
-    // Update the debt
     const debt = await prisma.debt.update({
       where: { id: debtId },
       data: updateData,
@@ -308,6 +276,7 @@ export class DebtService {
         group: {
           select: { id: true, name: true },
         },
+        receipts: true,
       },
     });
 
@@ -323,88 +292,26 @@ export class DebtService {
       throw new Error("Only the lender can delete this debt");
     }
 
-    await prisma.debt.delete({
-      where: { id: debtId },
-    });
-  }
+    // Use transaction to deactivate alert and delete debt
+    await prisma.$transaction(async (tx) => {
+      // Get debt with alert
+      const debt = await tx.debt.findUnique({
+        where: { id: debtId },
+        select: { alertId: true },
+      });
 
-  /**
-   * Request deletion of a debt (either party can request)
-   */
-  async requestDebtDeletion(debtId: number, userId: string) {
-    if (!(await DebtPolicy.canRequestDeletion(userId, debtId))) {
-      throw new Error("Cannot request deletion for this debt");
-    }
+      // Deactivate associated alert if it exists
+      if (debt?.alertId) {
+        await tx.alert.update({
+          where: { id: debt.alertId },
+          data: { isActive: false },
+        });
+      }
 
-    const debt = await prisma.debt.update({
-      where: { id: debtId },
-      data: {
-        deletionRequestedBy: userId,
-        deletionRequestedAt: new Date(),
-      },
-      include: {
-        lender: { select: { id: true, name: true, email: true } },
-        borrower: { select: { id: true, name: true, email: true } },
-        group: { select: { id: true, name: true } },
-        deletionRequester: { select: { name: true } },
-      },
-    });
-
-    // Determine who to notify (the other party)
-    const recipientEmail =
-      debt.lender.id === userId ? debt.borrower.email : debt.lender.email;
-    const recipientName =
-      debt.lender.id === userId ? debt.borrower.name : debt.lender.name;
-
-    // Send email to the other party
-    const approveLink = `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debt.id}`;
-    await emailService.sendDebtDeletionRequest({
-      to: recipientEmail,
-      recipientName,
-      requesterName: debt.deletionRequester!.name,
-      amount: debt.amount,
-      description: debt.description || "No description",
-      groupName: debt.group.name,
-      approveLink,
-    });
-
-    return debt;
-  }
-
-  /**
-   * Approve deletion of a debt (other party approves)
-   */
-  async approveDebtDeletion(debtId: number, userId: string) {
-    if (!(await DebtPolicy.canApproveDeletion(userId, debtId))) {
-      throw new Error("Cannot approve deletion for this debt");
-    }
-
-    // Delete the debt (both parties agreed)
-    await prisma.debt.delete({
-      where: { id: debtId },
-    });
-  }
-
-  /**
-   * Cancel a deletion request (only the requester can cancel)
-   */
-  async cancelDebtDeletionRequest(debtId: number, userId: string) {
-    const debt = await prisma.debt.findUnique({
-      where: { id: debtId },
-      select: { deletionRequestedBy: true },
-    });
-
-    // Only the requester can cancel
-    if (debt?.deletionRequestedBy !== userId) {
-      throw new Error("Only the requester can cancel the deletion request");
-    }
-
-    return await prisma.debt.update({
-      where: { id: debtId },
-      data: {
-        deletionRequestedBy: null,
-        deletionRequestedAt: null,
-      },
+      // Delete the debt
+      await tx.debt.delete({
+        where: { id: debtId },
+      });
     });
   }
 }

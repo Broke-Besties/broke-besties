@@ -48,6 +48,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     description: string
     borrowerId: string
     borrower: { id: string; name: string; email: string } | null
+    alertMessage: string
+    alertDeadline: string
   }>>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
   const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
@@ -105,6 +107,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           name: debt.borrowerName,
           email: debt.borrowerName, // Using name as email fallback
         },
+        alertMessage: '',
+        alertDeadline: '',
       }))
       setDebtForms(forms)
       setCurrentDebtIndex(0) // Reset to first debt
@@ -188,7 +192,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const uploadImage = async (file: File): Promise<{ signedUrl: string; receiptId: string }> => {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('groupId', groupId)
+    // No debtIds - creating a pending receipt for AI analysis
 
     const response = await fetch('/api/receipts/upload', {
       method: 'POST',
@@ -202,6 +206,21 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
     const data = await response.json()
     return { signedUrl: data.data.signedUrl, receiptId: data.data.id }
+  }
+
+  const linkReceiptToDebts = async (receiptId: string, debtIds: number[]) => {
+    const response = await fetch(`/api/receipts/${receiptId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ debtIds }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to link receipt to debts')
+    }
   }
 
   const clearPendingImage = () => {
@@ -231,6 +250,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       description: '',
       borrowerId: '',
       borrower: null,
+      alertMessage: '',
+      alertDeadline: '',
     }])
     setCurrentDebtIndex(debtForms.length)
   }
@@ -278,20 +299,34 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         }
       }
 
-      // Create each debt individually
+      // Create each debt and collect their IDs
+      const createdDebtIds: number[] = []
       for (const debt of debtForms) {
         const result = await createDebt({
           amount: parseFloat(debt.amount),
           description: debt.description || undefined,
           borrowerId: debt.borrowerId,
           groupId: parseInt(groupId),
-          receiptId: currentReceiptId || undefined,
         })
 
         if (!result.success) {
           setError(result.error || 'Failed to create debt')
           setIsCreatingDebts(false)
           return
+        }
+
+        if (result.debt?.id) {
+          createdDebtIds.push(result.debt.id)
+        }
+      }
+
+      // Link receipt to all created debts if we have a receipt
+      if (currentReceiptId && createdDebtIds.length > 0) {
+        try {
+          await linkReceiptToDebts(currentReceiptId, createdDebtIds)
+        } catch (err) {
+          console.error('Error linking receipt to debts:', err)
+          // Don't fail the whole operation if linking fails
         }
       }
 
@@ -377,7 +412,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           messages: langchainMessages,
           groupId: parseInt(groupId),
           imageUrl: uploadedImageUrl,
-          receiptId: receiptId,
+          receiptIds: receiptId ? [receiptId] : undefined,
         }),
       })
 

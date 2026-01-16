@@ -33,12 +33,12 @@ export type Debt = {
   lenderId: string;
   borrowerId: string;
   groupId: number;
-  receiptId: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
   lender: User;
   borrower: User;
   group: Group | null;
+  receipts?: Receipt[];
 };
 
 export type Invite = {
@@ -61,10 +61,10 @@ export type Invite = {
 
 export type Receipt = {
   id: string;
-  groupId: number;
   rawText: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
+  debts?: Debt[];
 };
 
 export type ApiResponse<T> = {

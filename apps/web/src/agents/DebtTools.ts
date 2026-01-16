@@ -4,14 +4,14 @@ import { z } from "zod";
 
 // Define your tools
 export const createDebt = tool(
-  async ({ userId, amount, description, borrowerId, groupId, receiptId }) => {
+  async ({ userId, amount, description, borrowerId, groupId, receiptIds }) => {
     const debt = await debtService.createDebt({
       lenderId: userId,
       amount,
       description,
       borrowerId,
       groupId,
-      receiptId,
+      receiptIds,
     });
     return `Debt created successfully. ${debt}`;
   },
@@ -24,29 +24,36 @@ export const createDebt = tool(
       description: z.string().describe("The description of the debt"),
       borrowerId: z.string().describe("The ID of the borrower"),
       groupId: z.number().describe("The ID of the group"),
-      receiptId: z.string().optional().describe("The ID of the receipt (if any)"),
+      receiptIds: z
+        .array(z.string())
+        .optional()
+        .describe("The IDs of the receipts (if any)"),
     }),
   }
 );
 
 export const readDebtsFromGroup = tool(
   async ({ userId, groupId }) => {
-    const debts = await debtService.getUserDebts(userId, { groupId });
+    const debts = await debtService.getGroupDebts(groupId, userId);
 
     if (debts.length === 0) {
       return "No debts found in this group.";
     }
 
-    const formattedDebts = debts.map((debt: any, index: number) => {
-      const isLender = debt.lenderId === userId;
-      const otherParty = isLender ? debt.borrower.email : debt.lender.email;
-      const direction = isLender ? "lent to" : "borrowed from";
+    const formattedDebts = debts
+      .map((debt: any, index: number) => {
+        const isLender = debt.lenderId === userId;
+        const otherParty = isLender ? debt.borrower.email : debt.lender.email;
+        const direction = isLender ? "lent to" : "borrowed from";
 
-      return `${index + 1}. $${debt.amount.toFixed(2)} ${direction} ${otherParty}
+        return `${index + 1}. $${debt.amount.toFixed(
+          2
+        )} ${direction} ${otherParty}
    Description: ${debt.description || "No description"}
    Status: ${debt.status}
    Created: ${new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}`;
-    }).join("\n\n");
+      })
+      .join("\n\n");
 
     return `Found ${debts.length} debt(s) in this group:\n\n${formattedDebts}`;
   },

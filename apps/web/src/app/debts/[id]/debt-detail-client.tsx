@@ -28,15 +28,26 @@ import {
   respondToDebtTransaction,
   cancelDebtTransaction,
 } from "@/app/groups/[id]/actions";
+import { createConfirmPaidTransaction } from "@/app/debts/actions";
+
+type Receipt = {
+  id: string;
+  rawText: string | null;
+  createdAt: Date | string;
+};
+
+type Alert = {
+  id: number;
+  message: string | null;
+  deadline: Date | string | null;
+  isActive: boolean;
+};
 
 type Debt = {
   id: number;
   amount: number;
   description: string | null;
   status: string;
-  receiptId: string | null;
-  deletionRequestedBy: string | null;
-  deletionRequestedAt: Date | string | null;
   createdAt: Date | string;
   lender: {
     id: string;
@@ -50,17 +61,8 @@ type Debt = {
     id: number;
     name: string;
   } | null;
-  receipt?: {
-    id: string;
-    rawText: string | null;
-  } | null;
-};
-
-type Receipt = {
-  id: string;
-  groupId: number;
-  rawText: string | null;
-  createdAt: Date | string;
+  receipts?: Receipt[];
+  alert?: Alert | null;
 };
 
 type DebtTransaction = {
@@ -85,7 +87,7 @@ type DebtDetailClientProps = {
   receipts: Receipt[];
   transactions: DebtTransaction[];
   currentUserId: string;
-  receiptImageUrl: string | null;
+  receiptImageUrls: { id: string; url: string }[];
 };
 
 export default function DebtDetailClient({
@@ -93,7 +95,7 @@ export default function DebtDetailClient({
   receipts: initialReceipts,
   transactions,
   currentUserId,
-  receiptImageUrl,
+  receiptImageUrls,
 }: DebtDetailClientProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -103,20 +105,35 @@ export default function DebtDetailClient({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  console.log('[Debt Detail Client] Receipt data:', {
-    hasReceipt: !!debt.receipt,
-    receiptId: debt.receipt?.id,
-    hasReceiptImageUrl: !!receiptImageUrl,
-    receiptImageUrl: receiptImageUrl?.substring(0, 50) + '...'
+  console.log("[Debt Detail Client] Receipt data:", {
+    receiptsCount: debt.receipts?.length || 0,
+    receiptImageUrlsCount: receiptImageUrls.length,
   });
 
   // Transaction modal state
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [transactionType, setTransactionType] = useState<"drop" | "modify">("drop");
+  const [transactionType, setTransactionType] = useState<"drop" | "modify">(
+    "drop"
+  );
   const [proposedAmount, setProposedAmount] = useState(debt.amount.toString());
-  const [proposedDescription, setProposedDescription] = useState(debt.description || "");
+  const [proposedDescription, setProposedDescription] = useState(
+    debt.description || ""
+  );
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Alert modal state
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState(debt.alert?.message || "");
+  const [alertDeadline, setAlertDeadline] = useState(
+    debt.alert?.deadline
+      ? new Date(debt.alert.deadline).toISOString().split("T")[0]
+      : ""
+  );
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
+
+  // Mark as paid state
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   const isLender = debt.lender.id === currentUserId;
   const isBorrower = debt.borrower.id === currentUserId;
@@ -136,8 +153,10 @@ export default function DebtDetailClient({
       const result = await createDebtTransaction({
         debtId: debt.id,
         type: transactionType,
-        proposedAmount: transactionType === "modify" ? parseFloat(proposedAmount) : undefined,
-        proposedDescription: transactionType === "modify" ? proposedDescription : undefined,
+        proposedAmount:
+          transactionType === "modify" ? parseFloat(proposedAmount) : undefined,
+        proposedDescription:
+          transactionType === "modify" ? proposedDescription : undefined,
         reason: reason || undefined,
       });
 
@@ -162,7 +181,10 @@ export default function DebtDetailClient({
     setError("");
 
     try {
-      const result = await respondToDebtTransaction(pendingTransaction.id, approve);
+      const result = await respondToDebtTransaction(
+        pendingTransaction.id,
+        approve
+      );
 
       if (!result.success) {
         throw new Error(result.error);
@@ -232,8 +254,7 @@ export default function DebtDetailClient({
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("groupId", debt.group!.id.toString());
-      formData.append("debtId", debt.id.toString());
+      formData.append("debtIds", debt.id.toString());
 
       const response = await fetch("/api/receipts/upload", {
         method: "POST",
@@ -271,57 +292,102 @@ export default function DebtDetailClient({
     }
   };
 
-  const handleRequestDeletion = async () => {
-    setDeletionLoading(true);
+  // Helper to get image URL for a receipt
+  const getReceiptImageUrl = (receiptId: string) => {
+    return receiptImageUrls.find((r) => r.id === receiptId)?.url || null;
+  };
+
+  // Alert handlers
+  const handleSaveAlert = async () => {
+    setAlertSubmitting(true);
     setError("");
 
     try {
-      const result = await requestDebtDeletion(debt.id);
-      if (!result.success) {
-        setError(result.error || "Failed to request deletion");
-        return;
+      if (debt.alert) {
+        // Update existing alert
+        const response = await fetch(`/api/alerts/${debt.alert.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: alertMessage || null,
+            deadline: alertDeadline || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update alert");
+        }
+      } else {
+        // Create new alert
+        const response = await fetch("/api/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            debtId: debt.id,
+            message: alertMessage || null,
+            deadline: alertDeadline || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to create alert");
+        }
       }
+
+      setShowAlertModal(false);
       router.refresh();
     } catch (err) {
-      setError("An error occurred while requesting deletion");
+      setError(err instanceof Error ? err.message : "Failed to save alert");
     } finally {
-      setDeletionLoading(false);
+      setAlertSubmitting(false);
     }
   };
 
-  const handleApproveDeletion = async () => {
-    setDeletionLoading(true);
+  const handleDeleteAlert = async () => {
+    if (!debt.alert) return;
+
+    setAlertSubmitting(true);
     setError("");
 
     try {
-      const result = await approveDebtDeletion(debt.id);
-      if (!result.success) {
-        setError(result.error || "Failed to approve deletion");
-        return;
+      const response = await fetch(`/api/alerts/${debt.alert.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete alert");
       }
-      // Redirect to dashboard after successful deletion
-      router.push("/dashboard");
+
+      setShowAlertModal(false);
+      setAlertMessage("");
+      setAlertDeadline("");
+      router.refresh();
     } catch (err) {
-      setError("An error occurred while approving deletion");
-      setDeletionLoading(false);
+      setError(err instanceof Error ? err.message : "Failed to delete alert");
+    } finally {
+      setAlertSubmitting(false);
     }
   };
 
-  const handleCancelRequest = async () => {
-    setDeletionLoading(true);
+  const handleMarkAsPaid = async () => {
+    setMarkingPaid(true);
     setError("");
 
     try {
-      const result = await cancelDebtDeletionRequest(debt.id);
+      const result = await createConfirmPaidTransaction(debt.id);
+
       if (!result.success) {
-        setError(result.error || "Failed to cancel request");
-        return;
+        throw new Error(result.error);
       }
+
       router.refresh();
     } catch (err) {
-      setError("An error occurred while canceling request");
+      setError(err instanceof Error ? err.message : "Failed to mark as paid");
     } finally {
-      setDeletionLoading(false);
+      setMarkingPaid(false);
     }
   };
 
@@ -396,9 +462,13 @@ export default function DebtDetailClient({
             )}
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Status:</span>{" "}
-              {pendingTransaction.lenderApproved ? "Lender approved" : "Lender pending"}
+              {pendingTransaction.lenderApproved
+                ? "Lender approved"
+                : "Lender pending"}
               {" / "}
-              {pendingTransaction.borrowerApproved ? "Borrower approved" : "Borrower pending"}
+              {pendingTransaction.borrowerApproved
+                ? "Borrower approved"
+                : "Borrower pending"}
             </div>
             <div className="flex gap-2">
               {userNeedsToApprove && (
@@ -489,45 +559,108 @@ export default function DebtDetailClient({
                 </p>
               </div>
 
-              {/* Request Change Button */}
-              {!pendingTransaction && (
-                <div className="pt-4 border-t">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowTransactionModal(true)}
-                  >
-                    Request Change
-                  </Button>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Request to modify or delete this debt. Both parties must agree.
+              {/* Action Buttons */}
+              {!pendingTransaction && debt.status === "pending" && (
+                <div className="pt-4 border-t space-y-3">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleMarkAsPaid}
+                      disabled={markingPaid}
+                    >
+                      {markingPaid ? "Requesting..." : "Mark as Paid"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowTransactionModal(true)}
+                    >
+                      Request Change
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Both parties must agree to mark as paid or make changes.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Right side - Receipt */}
-            {debt.receipt && (
-              <div className="flex-shrink-0">
-                {receiptImageUrl ? (
-                  <img
-                    src={receiptImageUrl}
-                    alt="Receipt"
-                    className="mt-1 w-64 h-64 object-contain rounded-md"
-                  />
-                ) : (
-                  <div className="mt-1 w-64 rounded-md border border-dashed bg-muted/50 p-4 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Receipt image could not be loaded
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Receipt ID: {debt.receipt.id.substring(0, 8)}...
-                    </p>
-                  </div>
-                )}
+            {/* Right side - Receipts */}
+            {debt.receipts && debt.receipts.length > 0 && (
+              <div className="shrink-0 space-y-2">
+                <Label className="text-muted-foreground">Receipts</Label>
+                <div className="flex flex-wrap gap-2">
+                  {debt.receipts.map((receipt) => {
+                    const imageUrl = getReceiptImageUrl(receipt.id);
+                    return (
+                      <div key={receipt.id}>
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt="Receipt"
+                            className="w-32 h-32 object-contain rounded-md border"
+                          />
+                        ) : (
+                          <div className="w-32 h-32 rounded-md border border-dashed bg-muted/50 p-2 text-center flex items-center justify-center">
+                            <p className="text-xs text-muted-foreground">
+                              Receipt {receipt.id.substring(0, 6)}...
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
         </CardContent>
+      </Card>
+
+      {/* Alert Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle>Payment Reminder</CardTitle>
+              <CardDescription>
+                {debt.alert
+                  ? "Alert settings for this debt"
+                  : "No reminder set for this debt"}
+              </CardDescription>
+            </div>
+            {isLender && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowAlertModal(true)}
+              >
+                {debt.alert ? "Edit Alert" : "Add Alert"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        {debt.alert && (
+          <CardContent className="space-y-2">
+            {debt.alert.message && (
+              <div>
+                <Label className="text-muted-foreground">Message</Label>
+                <p className="mt-1">{debt.alert.message}</p>
+              </div>
+            )}
+            {debt.alert.deadline && (
+              <div>
+                <Label className="text-muted-foreground">Deadline</Label>
+                <p className="mt-1">
+                  {new Date(debt.alert.deadline).toLocaleDateString()}
+                </p>
+              </div>
+            )}
+            {!debt.alert.message && !debt.alert.deadline && (
+              <p className="text-sm text-muted-foreground">
+                Alert is set but no message or deadline configured.
+              </p>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       {/* Transaction History */}
@@ -535,9 +668,7 @@ export default function DebtDetailClient({
         <Card>
           <CardHeader>
             <CardTitle>Transaction History</CardTitle>
-            <CardDescription>
-              All change requests for this debt
-            </CardDescription>
+            <CardDescription>All change requests for this debt</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -550,7 +681,9 @@ export default function DebtDetailClient({
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">
-                          {transaction.type === "drop" ? "Delete Request" : "Modify Request"}
+                          {transaction.type === "drop"
+                            ? "Delete Request"
+                            : "Modify Request"}
                         </span>
                         <Badge
                           variant="outline"
@@ -565,17 +698,20 @@ export default function DebtDetailClient({
                               "border-gray-500/30 bg-gray-500/10 text-gray-700 dark:text-gray-300"
                           )}
                         >
-                          {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
+                          {transaction.status.charAt(0).toUpperCase() +
+                            transaction.status.slice(1)}
                         </Badge>
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Requested by {transaction.requester.email}
                       </div>
-                      {transaction.type === "modify" && transaction.proposedAmount !== null && (
-                        <div className="text-sm">
-                          Proposed amount: ${transaction.proposedAmount.toFixed(2)}
-                        </div>
-                      )}
+                      {transaction.type === "modify" &&
+                        transaction.proposedAmount !== null && (
+                          <div className="text-sm">
+                            Proposed amount: $
+                            {transaction.proposedAmount.toFixed(2)}
+                          </div>
+                        )}
                       {transaction.reason && (
                         <div className="text-sm text-muted-foreground">
                           Reason: {transaction.reason}
@@ -676,7 +812,9 @@ export default function DebtDetailClient({
                   </Button>
                   <Button
                     type="button"
-                    variant={transactionType === "modify" ? "default" : "outline"}
+                    variant={
+                      transactionType === "modify" ? "default" : "outline"
+                    }
                     className="flex-1"
                     onClick={() => setTransactionType("modify")}
                   >
@@ -696,12 +834,13 @@ export default function DebtDetailClient({
                       min="0.01"
                       value={proposedAmount}
                       onChange={(e) => {
-                        const value = e.target.value
+                        const value = e.target.value;
                         if (value && !isNaN(parseFloat(value))) {
-                          const rounded = Math.round(parseFloat(value) * 100) / 100
-                          setProposedAmount(rounded.toString())
+                          const rounded =
+                            Math.round(parseFloat(value) * 100) / 100;
+                          setProposedAmount(rounded.toString());
                         } else {
-                          setProposedAmount(value)
+                          setProposedAmount(value);
                         }
                       }}
                     />
@@ -740,6 +879,68 @@ export default function DebtDetailClient({
               </Button>
               <Button onClick={handleCreateTransaction} disabled={submitting}>
                 {submitting ? "Submitting..." : "Submit Request"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </>
+      )}
+
+      {/* Alert Modal */}
+      {showAlertModal && (
+        <>
+          <DialogOverlay onClick={() => setShowAlertModal(false)} />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {debt.alert ? "Edit Alert" : "Add Alert"}
+              </DialogTitle>
+              <DialogDescription>
+                Set a reminder for this debt with an optional message and deadline.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="p-6 pt-0 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="alertMessage">Message (optional)</Label>
+                <Textarea
+                  id="alertMessage"
+                  value={alertMessage}
+                  onChange={(e) => setAlertMessage(e.target.value)}
+                  placeholder="e.g., Please pay by end of month"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="alertDeadline">Deadline (optional)</Label>
+                <Input
+                  id="alertDeadline"
+                  type="date"
+                  value={alertDeadline}
+                  onChange={(e) => setAlertDeadline(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              {debt.alert && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteAlert}
+                  disabled={alertSubmitting}
+                >
+                  Delete Alert
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={() => setShowAlertModal(false)}
+                disabled={alertSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
+                {alertSubmitting ? "Saving..." : "Save Alert"}
               </Button>
             </DialogFooter>
           </DialogContent>
