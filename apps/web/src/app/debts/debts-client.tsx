@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, TrendingUp, TrendingDown, Scale, Bell, Search, CheckCircle2, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Scale, Bell, Search, ArrowUp, ArrowDown } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,6 +22,7 @@ import { CreateDebtModal } from './create-debt-modal'
 import { ConfirmPaidModal } from './confirm-paid-modal'
 import { ModifyDebtModal } from './modify-debt-modal'
 import { DeleteDebtModal } from './delete-debt-modal'
+import { DebtDetailDialog } from './debt-detail-dialog'
 
 type Debt = {
   id: number
@@ -68,6 +69,7 @@ export default function DebtsPageClient({
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [activeModal, setActiveModal] = useState<ModalType>(null)
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
+  const [detailDialogDebt, setDetailDialogDebt] = useState<Debt | null>(null)
   const router = useRouter()
 
   // Calculate totals
@@ -288,6 +290,7 @@ export default function DebtsPageClient({
               />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">Click on a row to view details and actions</p>
         </div>
 
         {/* Table Content */}
@@ -323,22 +326,20 @@ export default function DebtsPageClient({
                 </TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredDebts.map((debt) => {
                 const direction = getDebtDirection(debt)
                 const otherPerson = direction === 'lending' ? debt.borrower : debt.lender
-                const isLender = direction === 'lending'
 
                 return (
                   <TableRow
                     key={debt.id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/debts/${debt.id}`)}
+                    className="cursor-pointer h-16"
+                    onClick={() => setDetailDialogDebt(debt)}
                   >
-                    <TableCell>
+                    <TableCell className="py-4">
                       <span className={cn(
                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                         direction === 'lending' ? 'green-badge' : 'red-badge'
@@ -346,55 +347,28 @@ export default function DebtsPageClient({
                         {direction === 'lending' ? 'Lending' : 'Borrowing'}
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="py-4 font-medium">
                       {otherPerson.name || otherPerson.email}
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground max-w-[200px] truncate">
+                    <TableCell className="py-4 hidden sm:table-cell text-muted-foreground max-w-[200px] truncate">
                       {debt.description || '-'}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                    <TableCell className="py-4 hidden md:table-cell text-muted-foreground">
                       {debt.group?.name || 'No group'}
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                    <TableCell className="py-4 hidden sm:table-cell text-muted-foreground">
                       {new Date(debt.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="text-right font-semibold">
+                    <TableCell className="py-4 text-right font-semibold">
                       {direction === 'lending' ? '+' : '-'}${debt.amount.toFixed(2)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4">
                       <span className={cn(
                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                         debt.status === 'pending' ? 'yellow-badge' : 'green-badge'
                       )}>
                         {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      {debt.status === 'pending' && (
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleAction('paid', debt)}
-                            className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                            title="Mark as paid"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleAction('modify', debt)}
-                            className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                            title="Modify"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleAction('delete', debt)}
-                            className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
                     </TableCell>
                   </TableRow>
                 )
@@ -434,6 +408,16 @@ export default function DebtsPageClient({
         onSuccess={handleSuccess}
         debt={selectedDebt}
         isLender={selectedDebt?.lender.id === currentUser.id}
+      />
+
+      <DebtDetailDialog
+        debt={detailDialogDebt}
+        isOpen={detailDialogDebt !== null}
+        onClose={() => setDetailDialogDebt(null)}
+        currentUserId={currentUser.id}
+        onMarkAsPaid={(debt) => handleAction('paid', debt)}
+        onModify={(debt) => handleAction('modify', debt)}
+        onDelete={(debt) => handleAction('delete', debt)}
       />
     </div>
   )

@@ -183,10 +183,10 @@ export class DebtService {
       where: { id: debtId },
       include: {
         lender: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         borrower: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         group: {
           select: { id: true, name: true },
@@ -200,8 +200,8 @@ export class DebtService {
       throw new Error("Debt not found");
     }
 
-    // Check permission using the fetched debt object
-    if (!DebtPolicy.canView(userId, debt)) {
+    // Check permission (lender, borrower, or group member)
+    if (!(await DebtPolicy.canView(userId, debt))) {
       throw new Error("You don't have permission to view this debt");
     }
 

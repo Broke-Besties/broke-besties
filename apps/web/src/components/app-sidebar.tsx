@@ -36,7 +36,7 @@ interface AppSidebarProps {
 }
 
 const navLinks = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/groups", label: "Groups", icon: Users },
   { href: "/tabs", label: "Tabs", icon: Receipt },
   { href: "/friends", label: "Friends", icon: UserPlus },
@@ -94,9 +94,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
             />
           </Link>
           <div className="flex flex-1 items-center justify-between gap-2 overflow-hidden group-data-[state=expanded]:opacity-100 opacity-0 transition-opacity">
-            <span className="font-semibold whitespace-nowrap">
+            <Link href="/" className="font-semibold whitespace-nowrap">
               Broke Besties
-            </span>
+            </Link>
             <SidebarPinButton />
           </div>
         </div>

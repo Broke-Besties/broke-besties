@@ -3,14 +3,31 @@ import { Debt } from "@prisma/client";
 
 export class DebtPolicy {
   /**
-   * Check if user can view a debt (must be lender or borrower)
-   * Pass the debt object to avoid duplicate database calls
+   * Check if user can view a debt (must be lender, borrower, or group member)
    */
-  static canView(
+  static async canView(
     userId: string,
-    debt: Pick<Debt, "lenderId" | "borrowerId">
-  ): boolean {
-    return debt.lenderId === userId || debt.borrowerId === userId;
+    debt: Pick<Debt, "lenderId" | "borrowerId" | "groupId">
+  ): Promise<boolean> {
+    // Direct involvement - lender or borrower
+    if (debt.lenderId === userId || debt.borrowerId === userId) {
+      return true;
+    }
+
+    // Check group membership if debt belongs to a group
+    if (debt.groupId) {
+      const membership = await prisma.groupMember.findUnique({
+        where: {
+          userId_groupId: { userId, groupId: debt.groupId },
+        },
+      });
+
+      if (membership) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**

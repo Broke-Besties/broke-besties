@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+import { Doughnut } from "react-chartjs-2";
+import NumberFlow from "@number-flow/react";
+import { Sparkles, TrendingUp, TrendingDown, Scale, Users, Search, SlidersHorizontal } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -25,10 +27,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import {
   createInvite,
   createDebt,
   createDebts,
-  updateDebtStatus,
   getRecentFriends,
   searchFriendsForInvite,
   addFriendToGroup,
@@ -36,8 +45,37 @@ import {
 } from "./actions";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DebtFormItem } from "./debt-form-item";
-import { GroupDebtsList } from "./group-debts-list";
-import { GroupDebtChart } from "./group-debt-chart";
+import { cn } from "@/lib/utils";
+import { DebtDetailDialog } from "@/app/debts/debt-detail-dialog";
+import { ConfirmPaidModal } from "@/app/debts/confirm-paid-modal";
+import { ModifyDebtModal } from "@/app/debts/modify-debt-modal";
+import { DeleteDebtModal } from "@/app/debts/delete-debt-modal";
+import { MultiSelect } from "@/components/ui/multi-select";
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+// Chart color palette
+const CHART_COLORS = [
+  "hsl(210 70% 55%)",
+  "hsl(340 65% 55%)",
+  "hsl(45 85% 55%)",
+  "hsl(160 50% 45%)",
+  "hsl(270 50% 55%)",
+  "hsl(25 80% 55%)",
+  "hsl(190 60% 45%)",
+  "hsl(0 65% 55%)",
+];
+
+const CHART_BORDER_COLORS = [
+  "hsl(210 70% 45%)",
+  "hsl(340 65% 45%)",
+  "hsl(45 85% 45%)",
+  "hsl(160 50% 35%)",
+  "hsl(270 50% 45%)",
+  "hsl(25 80% 45%)",
+  "hsl(190 60% 35%)",
+  "hsl(0 65% 45%)",
+];
 
 type Member = {
   id: number;
@@ -75,6 +113,10 @@ type Debt = {
     name: string;
     email: string;
   };
+  group: {
+    id: number;
+    name: string;
+  } | null;
 };
 
 type Group = {
@@ -101,11 +143,39 @@ export default function GroupDetailPageClient({
   const [group] = useState<Group>(initialGroup);
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("debts");
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showDebtModal, setShowDebtModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
+
+  // Table filter state
+  const [viewFilter, setViewFilter] = useState<"all" | "lending" | "borrowing">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"date" | "amount">("date");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [chartView, setChartView] = useState<"owed" | "owing">("owed");
+  const [selectedLenders, setSelectedLenders] = useState<string[]>(() =>
+    group.members.map((m) => m.user.id)
+  );
+  const [selectedBorrowers, setSelectedBorrowers] = useState<string[]>(() =>
+    group.members.map((m) => m.user.id)
+  );
+  const [showFiltersDialog, setShowFiltersDialog] = useState(false);
+
+  // Temporary filter state for dialog
+  const [tempViewFilter, setTempViewFilter] = useState(viewFilter);
+  const [tempStatusFilter, setTempStatusFilter] = useState(statusFilter);
+  const [tempSortBy, setTempSortBy] = useState(sortBy);
+  const [tempSortOrder, setTempSortOrder] = useState(sortOrder);
+  const [tempSelectedLenders, setTempSelectedLenders] = useState(selectedLenders);
+  const [tempSelectedBorrowers, setTempSelectedBorrowers] = useState(selectedBorrowers);
+
+  // Debt detail dialog and modal state
+  const [detailDialogDebt, setDetailDialogDebt] = useState<Debt | null>(null);
+  const [activeModal, setActiveModal] = useState<"paid" | "modify" | "delete" | null>(null);
+  const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null);
 
   // Friend invite state
   const [inviteTab, setInviteTab] = useState<"friends" | "email">("friends");
@@ -429,47 +499,233 @@ export default function GroupDetailPageClient({
     (debt) => debt.borrowerId && debt.amount && parseFloat(debt.amount) > 0
   );
 
-  const handleUpdateStatus = async (debtId: number, newStatus: string) => {
-    // Store the old status in case we need to revert
-    const oldStatus = debts.find((d) => d.id === debtId)?.status;
+  // Member options for multi-select
+  const memberOptions = useMemo(
+    () =>
+      group.members.map((m) => ({
+        value: m.user.id,
+        label:
+          m.user.id === currentUser?.id
+            ? `${m.user.name || m.user.email} (you)`
+            : m.user.name || m.user.email,
+      })),
+    [group.members, currentUser?.id]
+  );
 
-    // Optimistically update the UI
-    setDebts((prevDebts) =>
-      prevDebts.map((debt) =>
-        debt.id === debtId ? { ...debt, status: newStatus } : debt
-      )
+  // Calculate totals for cards
+  const lendingDebts = debts.filter((debt) => debt.lender.id === currentUser?.id);
+  const borrowingDebts = debts.filter((debt) => debt.borrower.id === currentUser?.id);
+  const totalLending = lendingDebts
+    .filter((d) => d.status === "pending")
+    .reduce((sum, debt) => sum + debt.amount, 0);
+  const totalBorrowing = borrowingDebts
+    .filter((d) => d.status === "pending")
+    .reduce((sum, debt) => sum + debt.amount, 0);
+  const netBalance = totalLending - totalBorrowing;
+
+  // Filter and sort debts for table
+  const filteredDebts = useMemo(() => {
+    let result = debts;
+
+    // Apply view filter
+    if (viewFilter === "lending") {
+      result = result.filter((d) => d.lender.id === currentUser?.id);
+    } else if (viewFilter === "borrowing") {
+      result = result.filter((d) => d.borrower.id === currentUser?.id);
+    }
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      result = result.filter((d) => d.status === statusFilter);
+    }
+
+    // Apply lender/borrower multi-select filters
+    result = result.filter(
+      (d) =>
+        selectedLenders.includes(d.lender.id) &&
+        selectedBorrowers.includes(d.borrower.id)
     );
 
-    try {
-      const result = await updateDebtStatus(debtId, newStatus);
-
-      if (!result.success) {
-        setError(result.error || "Failed to update status");
-        // Revert to old status
-        if (oldStatus) {
-          setDebts((prevDebts) =>
-            prevDebts.map((debt) =>
-              debt.id === debtId ? { ...debt, status: oldStatus } : debt
-            )
-          );
-        }
-        return;
-      }
-    } catch {
-      setError("An error occurred while updating the status");
-      // Revert to old status
-      if (oldStatus) {
-        setDebts((prevDebts) =>
-          prevDebts.map((debt) =>
-            debt.id === debtId ? { ...debt, status: oldStatus } : debt
-          )
+    // Apply search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((debt) => {
+        return (
+          debt.lender.name?.toLowerCase().includes(query) ||
+          debt.lender.email.toLowerCase().includes(query) ||
+          debt.borrower.name?.toLowerCase().includes(query) ||
+          debt.borrower.email.toLowerCase().includes(query) ||
+          debt.description?.toLowerCase().includes(query)
         );
-      }
+      });
     }
+
+    // Sort by date or amount
+    return [...result].sort((a, b) => {
+      if (sortBy === "amount") {
+        return sortOrder === "desc" ? b.amount - a.amount : a.amount - b.amount;
+      }
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+    });
+  }, [debts, viewFilter, statusFilter, searchQuery, sortBy, sortOrder, currentUser?.id, selectedLenders, selectedBorrowers]);
+
+  const openFiltersDialog = () => {
+    setTempViewFilter(viewFilter);
+    setTempStatusFilter(statusFilter);
+    setTempSortBy(sortBy);
+    setTempSortOrder(sortOrder);
+    setTempSelectedLenders(selectedLenders);
+    setTempSelectedBorrowers(selectedBorrowers);
+    setShowFiltersDialog(true);
   };
 
+  const applyFilters = () => {
+    setViewFilter(tempViewFilter);
+    setStatusFilter(tempStatusFilter);
+    setSortBy(tempSortBy);
+    setSortOrder(tempSortOrder);
+    setSelectedLenders(tempSelectedLenders);
+    setSelectedBorrowers(tempSelectedBorrowers);
+    setShowFiltersDialog(false);
+  };
+
+  const resetFilters = () => {
+    const allMemberIds = group.members.map((m) => m.user.id);
+    setTempViewFilter("all");
+    setTempStatusFilter("all");
+    setTempSortBy("date");
+    setTempSortOrder("desc");
+    setTempSelectedLenders(allMemberIds);
+    setTempSelectedBorrowers(allMemberIds);
+  };
+
+  const handleAction = (action: "paid" | "modify" | "delete", debt: Debt) => {
+    setSelectedDebt(debt);
+    setActiveModal(action);
+  };
+
+  const handleModalClose = () => {
+    setActiveModal(null);
+    setSelectedDebt(null);
+  };
+
+  const handleSuccess = () => {
+    router.refresh();
+  };
+
+  // Chart data based on selected view
+  const { chartData, chartDescriptions } = useMemo(() => {
+    const relevantDebts =
+      chartView === "owed"
+        ? lendingDebts.filter((d) => d.status === "pending")
+        : borrowingDebts.filter((d) => d.status === "pending");
+
+    if (relevantDebts.length === 0) {
+      return {
+        chartData: {
+          labels: [chartView === "owed" ? "No one owes you" : "You owe no one"],
+          datasets: [
+            {
+              data: [1],
+              backgroundColor: ["rgba(156, 163, 175, 0.3)"],
+              borderColor: ["rgba(156, 163, 175, 0.5)"],
+              borderWidth: 1,
+            },
+          ],
+        },
+        chartDescriptions: [] as string[][],
+      };
+    }
+
+    // Group by person with descriptions
+    const personData = new Map<string, { amount: number; descriptions: string[] }>();
+    for (const debt of relevantDebts) {
+      const personObj = chartView === "owed" ? debt.borrower : debt.lender;
+      const person = personObj.name || personObj.email;
+      const existing = personData.get(person) || { amount: 0, descriptions: [] };
+      existing.amount += debt.amount;
+      if (debt.description) {
+        existing.descriptions.push(debt.description);
+      }
+      personData.set(person, existing);
+    }
+
+    const entries = Array.from(personData.entries()).sort(
+      (a, b) => b[1].amount - a[1].amount
+    );
+
+    return {
+      chartData: {
+        labels: entries.map(([person]) => person),
+        datasets: [
+          {
+            data: entries.map(([, data]) => data.amount),
+            backgroundColor: entries.map(
+              (_, i) => CHART_COLORS[i % CHART_COLORS.length]
+            ),
+            borderColor: entries.map(
+              (_, i) => CHART_BORDER_COLORS[i % CHART_BORDER_COLORS.length]
+            ),
+            borderWidth: 2,
+          },
+        ],
+      },
+      chartDescriptions: entries.map(([, data]) => data.descriptions),
+    };
+  }, [chartView, lendingDebts, borrowingDebts]);
+
+  const chartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: "right" as const,
+          labels: {
+            boxWidth: 12,
+            padding: 12,
+            font: {
+              size: 12,
+            },
+          },
+        },
+        tooltip: {
+          callbacks: {
+            title: (context: any) => context[0]?.label || "",
+            label: (context: any) => {
+              const value = context.parsed;
+              const total = context.dataset.data.reduce(
+                (a: number, b: number) => a + b,
+                0
+              );
+              const percentage = ((value / total) * 100).toFixed(1);
+              return `$${value.toFixed(2)} (${percentage}%)`;
+            },
+            afterLabel: (context: any) => {
+              const descriptions = chartDescriptions[context.dataIndex];
+              if (!descriptions || descriptions.length === 0) return "";
+              const truncate = (s: string, len: number) =>
+                s.length > len ? s.slice(0, len) + "..." : s;
+              const shown = descriptions.slice(0, 2).map((d) => `• ${truncate(d, 25)}`);
+              if (descriptions.length > 2) {
+                shown.push(`  +${descriptions.length - 2} more`);
+              }
+              return shown;
+            },
+          },
+        },
+      },
+      cutout: "60%",
+    }),
+    [chartDescriptions]
+  );
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col gap-4">
         <Button
           variant="ghost"
@@ -511,35 +767,213 @@ export default function GroupDetailPageClient({
         </div>
       )}
 
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* You are owed (green) */}
+        <button
+          type="button"
+          onClick={() => setChartView("owed")}
+          className={cn(
+            "relative rounded-xl p-4 text-left transition-all",
+            chartView === "owed" ? "green-box-active" : "green-box"
+          )}
+        >
+          <TrendingUp className="absolute top-4 right-4 h-5 w-5 text-green" />
+          <p className="text-sm text-green">You are owed</p>
+          <p className="text-2xl font-bold text-green">
+            <NumberFlow
+              value={totalLending}
+              format={{ style: "currency", currency: "USD" }}
+            />
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {lendingDebts.filter((d) => d.status === "pending").length} pending
+          </p>
+        </button>
+
+        {/* You owe (red) */}
+        <button
+          type="button"
+          onClick={() => setChartView("owing")}
+          className={cn(
+            "relative rounded-xl p-4 text-left transition-all",
+            chartView === "owing" ? "red-box-active" : "red-box"
+          )}
+        >
+          <TrendingDown className="absolute top-4 right-4 h-5 w-5 text-red" />
+          <p className="text-sm text-red">You owe</p>
+          <p className="text-2xl font-bold text-red">
+            <NumberFlow
+              value={totalBorrowing}
+              format={{ style: "currency", currency: "USD" }}
+            />
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {borrowingDebts.filter((d) => d.status === "pending").length} pending
+          </p>
+        </button>
+
+        {/* Net balance */}
+        <div className="relative rounded-xl p-4 border bg-card/50">
+          <Scale className="absolute top-4 right-4 h-5 w-5 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Net balance</p>
+          <p className={cn(
+            "text-2xl font-bold",
+            netBalance >= 0 ? "text-green" : "text-red"
+          )}>
+            {netBalance >= 0 ? "+" : "-"}
+            <NumberFlow
+              value={Math.abs(netBalance)}
+              format={{ style: "currency", currency: "USD" }}
+            />
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {netBalance >= 0 ? "in your favor" : "you owe more"}
+          </p>
+        </div>
+
+        {/* Members */}
+        <div className="relative rounded-xl p-4 border bg-card/50">
+          <Users className="absolute top-4 right-4 h-5 w-5 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Members</p>
+          <p className="text-2xl font-bold">
+            <NumberFlow value={group.members.length} />
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {group.invites.length} pending invite{group.invites.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Chart Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            {chartView === "owed" ? "Who owes you" : "Who you owe"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            <Doughnut data={chartData} options={chartOptions} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs for Debts and Members */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="debts">Debts</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          <GroupDebtChart
-            members={group.members}
-            debts={debts}
-            currentUserId={currentUser?.id}
-          />
+        <TabsContent value="debts" className="space-y-0 mt-4">
+          <Card>
+            {/* Table Header with Search and Filters Button */}
+            <div className="border-b p-4">
+              <div className="flex items-center gap-3">
+                {/* Search */}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search debts..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
 
-          <GroupDebtsList
-            debts={debts}
-            currentUser={currentUser}
-            onUpdateStatus={handleUpdateStatus}
-          />
+                {/* Filters Button */}
+                <Button
+                  variant="outline"
+                  onClick={openFiltersDialog}
+                  className="gap-2"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                </Button>
+              </div>
+            </div>
+
+            {/* Table Content */}
+            {filteredDebts.length === 0 ? (
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <p className="text-muted-foreground">No debts found</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {searchQuery || statusFilter !== "all" || viewFilter !== "all" ||
+                   selectedLenders.length < group.members.length ||
+                   selectedBorrowers.length < group.members.length
+                    ? "Try adjusting your filters or search"
+                    : "Create a debt to get started"}
+                </p>
+              </CardContent>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lender</TableHead>
+                    <TableHead>Borrower</TableHead>
+                    <TableHead className="hidden md:table-cell">Description</TableHead>
+                    <TableHead className="hidden sm:table-cell">Date</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDebts.map((debt) => {
+                    const isLender = debt.lender.id === currentUser?.id;
+                    const isBorrower = debt.borrower.id === currentUser?.id;
+
+                    return (
+                      <TableRow
+                        key={debt.id}
+                        className="cursor-pointer h-16"
+                        onClick={() => setDetailDialogDebt(debt)}
+                      >
+                        <TableCell className="py-4">
+                          <span className={cn(
+                            "font-medium",
+                            isLender && "text-emerald-600 dark:text-emerald-400"
+                          )}>
+                            {debt.lender.name || debt.lender.email}
+                            {isLender && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <span className={cn(
+                            "font-medium",
+                            isBorrower && "text-rose-600 dark:text-rose-400"
+                          )}>
+                            {debt.borrower.name || debt.borrower.email}
+                            {isBorrower && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-4 hidden md:table-cell text-muted-foreground max-w-[200px] truncate">
+                          {debt.description || "-"}
+                        </TableCell>
+                        <TableCell className="py-4 hidden sm:table-cell text-muted-foreground">
+                          {new Date(debt.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="py-4 text-right font-semibold">
+                          ${debt.amount.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
         </TabsContent>
 
-        <TabsContent value="members" className="space-y-6">
+        <TabsContent value="members" className="space-y-6 mt-4">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader className="flex-row items-start justify-between space-y-0">
                 <div className="space-y-1">
                   <CardTitle>Members</CardTitle>
-                  <CardDescription>
+                  <p className="text-sm text-muted-foreground">
                     {group.members.length} total
-                  </CardDescription>
+                  </p>
                 </div>
                 <Badge variant="secondary">{group.members.length}</Badge>
               </CardHeader>
@@ -552,6 +986,9 @@ export default function GroupDetailPageClient({
                     <div className="min-w-0">
                       <div className="truncate font-medium">
                         {member.user.name}
+                        {member.user.id === currentUser?.id && (
+                          <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {member.user.email}
@@ -566,9 +1003,9 @@ export default function GroupDetailPageClient({
               <CardHeader className="flex-row items-start justify-between space-y-0">
                 <div className="space-y-1">
                   <CardTitle>Pending invites</CardTitle>
-                  <CardDescription>
+                  <p className="text-sm text-muted-foreground">
                     {group.invites.length} outstanding
-                  </CardDescription>
+                  </p>
                 </div>
                 <Badge variant="secondary">{group.invites.length}</Badge>
               </CardHeader>
@@ -939,6 +1376,179 @@ export default function GroupDetailPageClient({
           </DialogContent>
         </div>
       )}
+
+      {/* Filters Dialog */}
+      {showFiltersDialog && (
+        <div className="fixed inset-0 z-50">
+          <DialogOverlay onClick={() => setShowFiltersDialog(false)} />
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Filters</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-6 px-6 py-4">
+              {/* View Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">View</Label>
+                <div className="flex gap-2">
+                  {(["all", "lending", "borrowing"] as const).map((view) => (
+                    <button
+                      key={view}
+                      onClick={() => setTempViewFilter(view)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempViewFilter === view
+                          ? view === "lending"
+                            ? "green-badge"
+                            : view === "borrowing"
+                            ? "red-badge"
+                            : "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {view === "all" && "All"}
+                      {view === "lending" && "Lending"}
+                      {view === "borrowing" && "Borrowing"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Status</Label>
+                <div className="flex gap-2">
+                  {(["all", "pending", "paid"] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setTempStatusFilter(status)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempStatusFilter === status
+                          ? status === "pending"
+                            ? "yellow-badge"
+                            : status === "paid"
+                            ? "green-badge"
+                            : "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lenders Multi-Select */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Lenders</Label>
+                <MultiSelect
+                  options={memberOptions}
+                  selected={tempSelectedLenders}
+                  onChange={setTempSelectedLenders}
+                  placeholder="Select lenders..."
+                />
+              </div>
+
+              {/* Borrowers Multi-Select */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Borrowers</Label>
+                <MultiSelect
+                  options={memberOptions}
+                  selected={tempSelectedBorrowers}
+                  onChange={setTempSelectedBorrowers}
+                  placeholder="Select borrowers..."
+                />
+              </div>
+
+              {/* Sort By */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Sort by</Label>
+                <div className="flex gap-2">
+                  {(["date", "amount"] as const).map((sort) => (
+                    <button
+                      key={sort}
+                      onClick={() => setTempSortBy(sort)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempSortBy === sort
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {sort === "date" ? "Date" : "Amount"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sort Order */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Sort order</Label>
+                <div className="flex gap-2">
+                  {(["desc", "asc"] as const).map((order) => (
+                    <button
+                      key={order}
+                      onClick={() => setTempSortOrder(order)}
+                      className={cn(
+                        "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        tempSortOrder === order
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {order === "desc" ? (tempSortBy === "date" ? "Newest first" : "Highest first") : (tempSortBy === "date" ? "Oldest first" : "Lowest first")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <Button variant="outline" onClick={resetFilters}>
+                Reset
+              </Button>
+              <Button onClick={applyFilters}>Apply Filters</Button>
+            </DialogFooter>
+          </DialogContent>
+        </div>
+      )}
+
+      {/* Debt Detail Dialog */}
+      <DebtDetailDialog
+        debt={detailDialogDebt}
+        isOpen={detailDialogDebt !== null}
+        onClose={() => setDetailDialogDebt(null)}
+        currentUserId={currentUser?.id || ""}
+        onMarkAsPaid={(debt) => handleAction("paid", debt)}
+        onModify={(debt) => handleAction("modify", debt)}
+        onDelete={(debt) => handleAction("delete", debt)}
+      />
+
+      {/* Action Modals */}
+      <ConfirmPaidModal
+        isOpen={activeModal === "paid"}
+        onClose={handleModalClose}
+        onSuccess={handleSuccess}
+        debt={selectedDebt}
+        isLender={selectedDebt?.lender.id === currentUser?.id}
+      />
+
+      <ModifyDebtModal
+        isOpen={activeModal === "modify"}
+        onClose={handleModalClose}
+        onSuccess={handleSuccess}
+        debt={selectedDebt}
+        isLender={selectedDebt?.lender.id === currentUser?.id}
+      />
+
+      <DeleteDebtModal
+        isOpen={activeModal === "delete"}
+        onClose={handleModalClose}
+        onSuccess={handleSuccess}
+        debt={selectedDebt}
+        isLender={selectedDebt?.lender.id === currentUser?.id}
+      />
     </div>
   );
 }

@@ -1,26 +1,26 @@
-import { prisma } from '@/lib/prisma'
+import { prisma } from "@/lib/prisma";
 
 type CreateTransactionParams = {
-  debtId: number
-  type: 'drop' | 'modify' | 'confirm_paid'
-  requesterId: string
-  proposedAmount?: number
-  proposedDescription?: string
-  reason?: string
-}
+  debtId: number;
+  type: "drop" | "modify" | "confirm_paid";
+  requesterId: string;
+  proposedAmount?: number;
+  proposedDescription?: string;
+  reason?: string;
+};
 
 type RespondToTransactionParams = {
-  transactionId: number
-  userId: string
-  approve: boolean
-}
+  transactionId: number;
+  userId: string;
+  approve: boolean;
+};
 
-const userSelect = { id: true, email: true, name: true }
+const userSelect = { id: true, email: true, name: true };
 const debtInclude = {
   lender: { select: userSelect },
   borrower: { select: userSelect },
   group: { select: { id: true, name: true } },
-}
+};
 
 export class DebtTransactionService {
   /**
@@ -34,37 +34,37 @@ export class DebtTransactionService {
       proposedAmount,
       proposedDescription,
       reason,
-    } = params
+    } = params;
 
     // Validate the debt exists and get its details
     const debt = await prisma.debt.findUnique({
       where: { id: debtId },
       include: { lender: true, borrower: true },
-    })
+    });
 
     if (!debt) {
-      throw new Error('Debt not found')
+      throw new Error("Debt not found");
     }
 
     // Validate requester is either lender or borrower
-    const isLender = debt.lenderId === requesterId
-    const isBorrower = debt.borrowerId === requesterId
+    const isLender = debt.lenderId === requesterId;
+    const isBorrower = debt.borrowerId === requesterId;
 
     if (!isLender && !isBorrower) {
       throw new Error(
-        'You are not authorized to create a transaction for this debt'
-      )
+        "You are not authorized to create a transaction for this debt"
+      );
     }
 
     // Validate type-specific requirements
-    if (type === 'modify') {
+    if (type === "modify") {
       if (proposedAmount === undefined && proposedDescription === undefined) {
         throw new Error(
-          'Modification must include at least one change (amount or description)'
-        )
+          "Modification must include at least one change (amount or description)"
+        );
       }
       if (proposedAmount !== undefined && proposedAmount <= 0) {
-        throw new Error('Proposed amount must be positive')
+        throw new Error("Proposed amount must be positive");
       }
     }
 
@@ -72,12 +72,12 @@ export class DebtTransactionService {
     const existingPending = await prisma.debtTransaction.findFirst({
       where: {
         debtId,
-        status: 'pending',
+        status: "pending",
       },
-    })
+    });
 
     if (existingPending) {
-      throw new Error('There is already a pending transaction for this debt')
+      throw new Error("There is already a pending transaction for this debt");
     }
 
     // Create the transaction with auto-approval for requester
@@ -86,8 +86,8 @@ export class DebtTransactionService {
         debtId,
         type,
         requesterId,
-        proposedAmount: type === 'modify' ? proposedAmount : null,
-        proposedDescription: type === 'modify' ? proposedDescription : null,
+        proposedAmount: type === "modify" ? proposedAmount : null,
+        proposedDescription: type === "modify" ? proposedDescription : null,
         reason,
         // Auto-approve for the requester
         lenderApproved: isLender,
@@ -97,37 +97,37 @@ export class DebtTransactionService {
         debt: { include: debtInclude },
         requester: { select: userSelect },
       },
-    })
+    });
 
-    return transaction
+    return transaction;
   }
 
   /**
    * Respond to a debt transaction (approve or reject)
    */
   async respondToTransaction(params: RespondToTransactionParams) {
-    const { transactionId, userId, approve } = params
+    const { transactionId, userId, approve } = params;
 
     const transaction = await prisma.debtTransaction.findUnique({
       where: { id: transactionId },
       include: {
         debt: true,
       },
-    })
+    });
 
     if (!transaction) {
-      throw new Error('Transaction not found')
+      throw new Error("Transaction not found");
     }
 
-    if (transaction.status !== 'pending') {
-      throw new Error('This transaction has already been processed')
+    if (transaction.status !== "pending") {
+      throw new Error("This transaction has already been processed");
     }
 
-    const isLender = transaction.debt.lenderId === userId
-    const isBorrower = transaction.debt.borrowerId === userId
+    const isLender = transaction.debt.lenderId === userId;
+    const isBorrower = transaction.debt.borrowerId === userId;
 
     if (!isLender && !isBorrower) {
-      throw new Error('You are not authorized to respond to this transaction')
+      throw new Error("You are not authorized to respond to this transaction");
     }
 
     // If rejecting, update status and return
@@ -135,31 +135,31 @@ export class DebtTransactionService {
       const updated = await prisma.debtTransaction.update({
         where: { id: transactionId },
         data: {
-          status: 'rejected',
+          status: "rejected",
           resolvedAt: new Date(),
         },
         include: {
           debt: { include: debtInclude },
           requester: { select: userSelect },
         },
-      })
-      return { transaction: updated, debtUpdated: false }
+      });
+      return { transaction: updated, debtUpdated: false };
     }
 
     // Approving: update the appropriate approval field
     const updateData: { lenderApproved?: boolean; borrowerApproved?: boolean } =
-      {}
+      {};
     if (isLender) {
-      updateData.lenderApproved = true
+      updateData.lenderApproved = true;
     }
     if (isBorrower) {
-      updateData.borrowerApproved = true
+      updateData.borrowerApproved = true;
     }
 
     // Check if both will now be approved
     const willBothApprove =
       (updateData.lenderApproved || transaction.lenderApproved) &&
-      (updateData.borrowerApproved || transaction.borrowerApproved)
+      (updateData.borrowerApproved || transaction.borrowerApproved);
 
     if (willBothApprove) {
       // Execute the transaction using a database transaction
@@ -169,68 +169,45 @@ export class DebtTransactionService {
           where: { id: transactionId },
           data: {
             ...updateData,
-            status: 'approved',
+            status: "approved",
             resolvedAt: new Date(),
           },
           include: {
             debt: { include: debtInclude },
             requester: { select: userSelect },
           },
-        })
+        });
 
         // Apply the change to the debt
-        if (transaction.type === 'drop') {
-          // Get debt with alert before deleting
-          const debtToDelete = await tx.debt.findUnique({
-            where: { id: transaction.debtId },
-            select: { alertId: true },
-          })
-          
-          // Deactivate associated alert if it exists
-          if (debtToDelete?.alertId) {
-            await tx.alert.update({
-              where: { id: debtToDelete.alertId },
-              data: { isActive: false },
-            })
-          }
-          
+        if (transaction.type === "drop") {
           await tx.debt.delete({
             where: { id: transaction.debtId },
-          })
-        } else if (transaction.type === 'modify') {
+          });
+        } else if (transaction.type === "modify") {
           const debtUpdate: { amount?: number; description?: string | null } =
-            {}
+            {};
           if (transaction.proposedAmount !== null) {
-            debtUpdate.amount = transaction.proposedAmount
+            debtUpdate.amount = transaction.proposedAmount;
           }
           if (transaction.proposedDescription !== null) {
-            debtUpdate.description = transaction.proposedDescription
+            debtUpdate.description = transaction.proposedDescription;
           }
           await tx.debt.update({
             where: { id: transaction.debtId },
             data: debtUpdate,
-          })
-        } else if (transaction.type === 'confirm_paid') {
+          });
+        } else if (transaction.type === "confirm_paid") {
           // Mark the debt as paid
           const updatedDebt = await tx.debt.update({
             where: { id: transaction.debtId },
-            data: { status: 'paid' },
-            include: { alert: true },
-          })
-          
-          // Deactivate associated alert if it exists
-          if (updatedDebt.alertId) {
-            await tx.alert.update({
-              where: { id: updatedDebt.alertId },
-              data: { isActive: false },
-            })
-          }
+            data: { status: "paid" },
+          });
         }
 
-        return updatedTransaction
-      })
+        return updatedTransaction;
+      });
 
-      return { transaction: result, debtUpdated: true }
+      return { transaction: result, debtUpdated: true };
     }
 
     // Only one party approved, just update the approval
@@ -241,9 +218,9 @@ export class DebtTransactionService {
         debt: { include: debtInclude },
         requester: { select: userSelect },
       },
-    })
+    });
 
-    return { transaction: updated, debtUpdated: false }
+    return { transaction: updated, debtUpdated: false };
   }
 
   /**
@@ -252,27 +229,27 @@ export class DebtTransactionService {
   async cancelTransaction(transactionId: number, userId: string) {
     const transaction = await prisma.debtTransaction.findUnique({
       where: { id: transactionId },
-    })
+    });
 
     if (!transaction) {
-      throw new Error('Transaction not found')
+      throw new Error("Transaction not found");
     }
 
     if (transaction.requesterId !== userId) {
-      throw new Error('Only the requester can cancel this transaction')
+      throw new Error("Only the requester can cancel this transaction");
     }
 
-    if (transaction.status !== 'pending') {
-      throw new Error('This transaction has already been processed')
+    if (transaction.status !== "pending") {
+      throw new Error("This transaction has already been processed");
     }
 
     return prisma.debtTransaction.update({
       where: { id: transactionId },
       data: {
-        status: 'cancelled',
+        status: "cancelled",
         resolvedAt: new Date(),
       },
-    })
+    });
   }
 
   /**
@@ -281,7 +258,7 @@ export class DebtTransactionService {
   async getUserPendingTransactions(userId: string) {
     return prisma.debtTransaction.findMany({
       where: {
-        status: 'pending',
+        status: "pending",
         debt: {
           OR: [{ lenderId: userId }, { borrowerId: userId }],
         },
@@ -290,8 +267,8 @@ export class DebtTransactionService {
         debt: { include: debtInclude },
         requester: { select: userSelect },
       },
-      orderBy: { createdAt: 'desc' },
-    })
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   /**
@@ -301,14 +278,10 @@ export class DebtTransactionService {
     // Verify user has access to the debt
     const debt = await prisma.debt.findUnique({
       where: { id: debtId },
-    })
+    });
 
     if (!debt) {
-      throw new Error('Debt not found')
-    }
-
-    if (debt.lenderId !== userId && debt.borrowerId !== userId) {
-      throw new Error('You do not have access to this debt')
+      throw new Error("Debt not found");
     }
 
     return prisma.debtTransaction.findMany({
@@ -316,8 +289,8 @@ export class DebtTransactionService {
       include: {
         requester: { select: userSelect },
       },
-      orderBy: { createdAt: 'desc' },
-    })
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   /**
@@ -330,21 +303,13 @@ export class DebtTransactionService {
         debt: { include: debtInclude },
         requester: { select: userSelect },
       },
-    })
+    });
 
     if (!transaction) {
-      throw new Error('Transaction not found')
+      throw new Error("Transaction not found");
     }
 
-    // Verify access
-    if (
-      transaction.debt.lenderId !== userId &&
-      transaction.debt.borrowerId !== userId
-    ) {
-      throw new Error('You do not have access to this transaction')
-    }
-
-    return transaction
+    return transaction;
   }
 
   /**
@@ -353,7 +318,7 @@ export class DebtTransactionService {
   async getPendingCountForUser(userId: string) {
     const transactions = await prisma.debtTransaction.findMany({
       where: {
-        status: 'pending',
+        status: "pending",
         debt: {
           OR: [{ lenderId: userId }, { borrowerId: userId }],
         },
@@ -363,18 +328,18 @@ export class DebtTransactionService {
           select: { lenderId: true, borrowerId: true },
         },
       },
-    })
+    });
 
     // Count only transactions where the user hasn't approved yet
     return transactions.filter((t) => {
-      const isLender = t.debt.lenderId === userId
-      const isBorrower = t.debt.borrowerId === userId
+      const isLender = t.debt.lenderId === userId;
+      const isBorrower = t.debt.borrowerId === userId;
 
-      if (isLender && !t.lenderApproved) return true
-      if (isBorrower && !t.borrowerApproved) return true
-      return false
-    }).length
+      if (isLender && !t.lenderApproved) return true;
+      if (isBorrower && !t.borrowerApproved) return true;
+      return false;
+    }).length;
   }
 }
 
-export const debtTransactionService = new DebtTransactionService()
+export const debtTransactionService = new DebtTransactionService();
