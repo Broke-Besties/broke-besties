@@ -20,14 +20,14 @@ export default async function GroupDetailPage({ params }: PageProps) {
 
   const user = await getUser();
 
-  if (!user) {
+  if (!user || !user.email) {
     redirect("/login");
   }
 
   try {
     const [group, debts] = await Promise.all([
       groupService.getGroupById(groupId, user.id),
-      debtService.getUserDebts(user.id, { groupId }),
+      debtService.getGroupDebts(groupId, user.id),
     ]);
 
     return (

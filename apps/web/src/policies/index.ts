@@ -1,4 +1,6 @@
 export { GroupPolicy } from './group.policy'
 export { DebtPolicy } from './debt.policy'
+export { DebtTransactionPolicy } from './debt-transaction.policy'
 export { InvitePolicy } from './invite.policy'
 export { ReceiptPolicy } from './receipt.policy'
+export { RecurringPaymentPolicy } from './recurring-payment.policy'

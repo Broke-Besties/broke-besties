@@ -3,12 +3,13 @@ import { DebtPolicy } from "@/policies";
 import { emailService } from "./email.service";
 
 type CreateDebtParams = {
-  amount: number;
-  description?: string | null;
-  lenderId: string;
-  borrowerId: string;
-  groupId: number;
-};
+  amount: number
+  description?: string | null
+  lenderId: string
+  borrowerId: string
+  groupId: number
+  receiptId?: string | null
+}
 
 type UpdateDebtParams = {
   amount?: number;
@@ -27,7 +28,7 @@ export class DebtService {
    * Create a new debt
    */
   async createDebt(params: CreateDebtParams) {
-    const { amount, description, lenderId, borrowerId, groupId } = params;
+    const { amount, description, lenderId, borrowerId, groupId, receiptId } = params
 
     // Validation
     if (!amount || amount <= 0) {
@@ -71,7 +72,8 @@ export class DebtService {
         lenderId,
         borrowerId,
         groupId,
-        status: "pending",
+        status: 'pending',
+        receiptId: receiptId || null,
       },
       include: {
         lender: {
@@ -146,6 +148,78 @@ export class DebtService {
     });
 
     return debts;
+  }
+
+  /**
+   * Get all debts for a group (user must be a member)
+   */
+  async getGroupDebts(groupId: number, userId: string) {
+    // Verify user is a member of the group
+    const membership = await prisma.groupMember.findUnique({
+      where: {
+        userId_groupId: { userId, groupId },
+      },
+    })
+
+    if (!membership) {
+      throw new Error('You must be a member of the group to view its debts')
+    }
+
+    const debts = await prisma.debt.findMany({
+      where: { groupId },
+      include: {
+        lender: {
+          select: { id: true, name: true, email: true },
+        },
+        borrower: {
+          select: { id: true, name: true, email: true },
+        },
+        group: {
+          select: { id: true, name: true },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return debts
+  }
+
+  /**
+   * Get all debts for a group (user must be a member)
+   */
+  async getGroupDebts(groupId: number, userId: string) {
+    // Verify user is a member of the group
+    const membership = await prisma.groupMember.findUnique({
+      where: {
+        userId_groupId: { userId, groupId },
+      },
+    })
+
+    if (!membership) {
+      throw new Error('You must be a member of the group to view its debts')
+    }
+
+    const debts = await prisma.debt.findMany({
+      where: { groupId },
+      include: {
+        lender: {
+          select: { id: true, name: true, email: true },
+        },
+        borrower: {
+          select: { id: true, name: true, email: true },
+        },
+        group: {
+          select: { id: true, name: true },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return debts
   }
 
   /**

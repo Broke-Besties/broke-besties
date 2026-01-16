@@ -85,7 +85,12 @@ export class GroupService {
             status: "pending",
           },
           include: {
-            sender: true,
+            sender: {
+              select: {
+                id: true,
+                email: true,
+              },
+            },
           },
         },
       },

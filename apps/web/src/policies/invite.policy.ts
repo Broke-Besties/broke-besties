@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma'
-import { GroupInvite } from '@prisma/client'
+import { prisma } from "@/lib/prisma";
+import { GroupInvite } from "@prisma/client";
 
 export class InvitePolicy {
   /**
@@ -11,8 +11,8 @@ export class InvitePolicy {
         userId,
         groupId,
       },
-    })
-    return !!membership
+    });
+    return !!membership;
   }
 
   /**
@@ -21,15 +21,18 @@ export class InvitePolicy {
    */
   static canAccept(
     userEmail: string,
-    invite: Pick<GroupInvite, 'invitedEmail' | 'status'>
+    invite: Pick<GroupInvite, "invitedEmail" | "status">
   ): boolean {
-    return invite.invitedEmail === userEmail && invite.status === 'pending'
+    return invite.invitedEmail === userEmail && invite.status === "pending";
   }
 
   /**
    * Check if an invite already exists for this email in this group
    */
-  static async inviteExists(groupId: number, invitedEmail: string): Promise<boolean> {
+  static async inviteExists(
+    groupId: number,
+    invitedEmail: string
+  ): Promise<boolean> {
     const invite = await prisma.groupInvite.findUnique({
       where: {
         groupId_invitedEmail: {
@@ -37,14 +40,17 @@ export class InvitePolicy {
           invitedEmail,
         },
       },
-    })
-    return !!invite
+    });
+    return !!invite;
   }
 
   /**
    * Check if user is already a member of the group
    */
-  static async isAlreadyMember(groupId: number, invitedEmail: string): Promise<boolean> {
+  static async isAlreadyMember(
+    groupId: number,
+    invitedEmail: string
+  ): Promise<boolean> {
     const user = await prisma.user.findUnique({
       where: { email: invitedEmail },
       include: {
@@ -52,8 +58,28 @@ export class InvitePolicy {
           where: { groupId },
         },
       },
-    })
+    });
 
-    return !!(user && user.members.length > 0)
+    return !!(user && user.members.length > 0);
+  }
+
+  /**
+   * Check if user can cancel an invite (must be the sender and invite must be pending)
+   */
+  static canCancel(
+    userId: string,
+    invite: Pick<GroupInvite, "invitedBy" | "status">
+  ): boolean {
+    return invite.invitedBy === userId && invite.status === "pending";
+  }
+
+  /**
+   * Check if user can reject an invite (must be the recipient and invite must be pending)
+   */
+  static canReject(
+    userEmail: string,
+    invite: Pick<GroupInvite, "invitedEmail" | "status">
+  ): boolean {
+    return invite.invitedEmail === userEmail && invite.status === "pending";
   }
 }

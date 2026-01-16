@@ -9,6 +9,7 @@ export async function createTab(data: {
   amount: number
   description: string
   personName: string
+  status?: 'lending' | 'borrowing'
 }) {
   const user = await getUser()
 
@@ -20,6 +21,7 @@ export async function createTab(data: {
     const tab = await tabService.createTab({
       ...data,
       userId: user.id,
+      status: data.status || 'borrowing',
     })
     revalidatePath('/tabs')
     return { success: true, tab }

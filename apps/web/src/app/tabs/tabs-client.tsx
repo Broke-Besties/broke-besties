@@ -46,6 +46,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
     amount: "",
     description: "",
     personName: "",
+    status: "borrowing" as "lending" | "borrowing",
   });
   const router = useRouter();
 
@@ -59,6 +60,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         amount: parseFloat(newTab.amount),
         description: newTab.description,
         personName: newTab.personName,
+        status: newTab.status,
       });
 
       if (!result.success) {
@@ -72,7 +74,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
       }
 
       setShowCreateModal(false);
-      setNewTab({ amount: "", description: "", personName: "" });
+      setNewTab({ amount: "", description: "", personName: "", status: "borrowing" });
     } catch (err) {
       setError("An error occurred while creating the tab");
     } finally {
@@ -81,6 +83,10 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
   };
 
   const handleMarkPaid = async (tabId: number) => {
+    // Store original status for potential revert
+    const originalTab = tabs.find((tab) => tab.id === tabId);
+    const originalStatus = originalTab?.status;
+
     // Optimistically update the UI
     setTabs((prevTabs) =>
       prevTabs.map((tab) =>
@@ -94,7 +100,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         // Revert on error
         setTabs((prevTabs) =>
           prevTabs.map((tab) =>
-            tab.id === tabId ? { ...tab, status: "pending" } : tab
+            tab.id === tabId ? { ...tab, status: originalStatus || "borrowing" } : tab
           )
         );
         setError(result.error || "Failed to update tab");
@@ -104,7 +110,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
       // Revert on error
       setTabs((prevTabs) =>
         prevTabs.map((tab) =>
-          tab.id === tabId ? { ...tab, status: "pending" } : tab
+          tab.id === tabId ? { ...tab, status: originalStatus || "borrowing" } : tab
         )
       );
       setError("An error occurred while updating the tab");
@@ -137,10 +143,12 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
     }
   };
 
-  const pendingTabs = tabs.filter((tab) => tab.status === "pending");
+  const lendingTabs = tabs.filter((tab) => tab.status === "lending");
+  const borrowingTabs = tabs.filter((tab) => tab.status === "borrowing");
   const paidTabs = tabs.filter((tab) => tab.status === "paid");
 
-  const totalOwed = pendingTabs.reduce((sum, tab) => sum + tab.amount, 0);
+  const totalLending = lendingTabs.reduce((sum, tab) => sum + tab.amount, 0);
+  const totalBorrowing = borrowingTabs.reduce((sum, tab) => sum + tab.amount, 0);
 
   return (
     <div className="space-y-8">
@@ -148,7 +156,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">My Tabs</h1>
           <p className="text-sm text-muted-foreground">
-            Track what you owe to people outside the platform.
+            Track money you lend or borrow outside the platform.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -165,15 +173,29 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         </div>
       )}
 
-      {totalOwed > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Total Outstanding</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">${totalOwed.toFixed(2)}</p>
-          </CardContent>
-        </Card>
+      {(totalBorrowing > 0 || totalLending > 0) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {totalBorrowing > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">You Owe</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">${totalBorrowing.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+          )}
+          {totalLending > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">You Are Owed</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">${totalLending.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {tabs.length === 0 ? (
@@ -181,7 +203,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
           <CardHeader>
             <CardTitle>No tabs yet</CardTitle>
             <CardDescription>
-              You haven&apos;t added any tabs. Create one to track what you owe.
+              You haven&apos;t added any tabs. Create one to track money you lend or borrow.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -192,16 +214,60 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         </Card>
       ) : (
         <div className="space-y-6">
-          {pendingTabs.length > 0 && (
+          {borrowingTabs.length > 0 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold">Pending</h2>
+              <h2 className="text-xl font-semibold">Borrowing</h2>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {pendingTabs.map((tab) => (
+                {borrowingTabs.map((tab) => (
                   <Card key={tab.id}>
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <CardTitle className="text-lg">{tab.personName}</CardTitle>
-                        <Badge variant="secondary">Pending</Badge>
+                        <Badge variant="secondary">You owe</Badge>
+                      </div>
+                      <CardDescription className="text-xl font-semibold text-foreground">
+                        ${tab.amount.toFixed(2)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        {tab.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Added {new Date(tab.createdAt).toLocaleDateString()}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleMarkPaid(tab.id)}
+                        >
+                          Mark Paid
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDelete(tab.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {lendingTabs.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Lending</h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {lendingTabs.map((tab) => (
+                  <Card key={tab.id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-lg">{tab.personName}</CardTitle>
+                        <Badge variant="default">Owes you</Badge>
                       </div>
                       <CardDescription className="text-xl font-semibold text-foreground">
                         ${tab.amount.toFixed(2)}
@@ -284,7 +350,30 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
             <div className="px-6 pb-6">
               <form onSubmit={handleCreateTab} className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="personName">Who do you owe?</Label>
+                  <Label>Type</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={newTab.status === "borrowing" ? "default" : "outline"}
+                      onClick={() => setNewTab({ ...newTab, status: "borrowing" })}
+                    >
+                      I borrowed
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={newTab.status === "lending" ? "default" : "outline"}
+                      onClick={() => setNewTab({ ...newTab, status: "lending" })}
+                    >
+                      I lent
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="personName">
+                    {newTab.status === "borrowing" ? "Who do you owe?" : "Who owes you?"}
+                  </Label>
                   <Input
                     id="personName"
                     type="text"
@@ -305,10 +394,16 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                     min="0.01"
                     required
                     value={newTab.amount}
-                    onChange={(e) =>
-                      setNewTab({ ...newTab, amount: e.target.value })
-                    }
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value && !isNaN(parseFloat(value))) {
+                        const rounded = Math.round(parseFloat(value) * 100) / 100
+                        setNewTab({ ...newTab, amount: rounded.toString() })
+                      } else {
+                        setNewTab({ ...newTab, amount: value })
+                      }
+                    }}
+                    placeholder="0"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -329,7 +424,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                     variant="secondary"
                     onClick={() => {
                       setShowCreateModal(false);
-                      setNewTab({ amount: "", description: "", personName: "" });
+                      setNewTab({ amount: "", description: "", personName: "", status: "borrowing" });
                       setError("");
                     }}
                   >

@@ -1,23 +1,25 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { DebtFormItem } from '@/app/groups/[id]/debt-form-item'
+import { createDebt } from '@/app/groups/[id]/actions'
 
 type Message = {
   role: 'user' | 'assistant' | 'system'
   content: string
   id?: string
   imageUrl?: string
-  pendingAction?: {
-    toolCalls: Array<{
-      name: string
-      args: Record<string, unknown>
-    }>
-  }
+  debts?: Array<{
+    borrowerName: string
+    borrowerId: string
+    amount: number
+    description?: string
+  }>
 }
 
 type Group = {
@@ -40,14 +42,19 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [pendingApproval, setPendingApproval] = useState<{
-    toolCalls: Array<{ name: string; args: Record<string, unknown> }>
-  } | null>(null)
-  const [editedToolCalls, setEditedToolCalls] = useState<Array<{ name: string; args: Record<string, unknown> }>>([])
-  const [isEditingToolCalls, setIsEditingToolCalls] = useState(false)
+  const [currentReceiptId, setCurrentReceiptId] = useState<string | null>(null)
+  const [debtForms, setDebtForms] = useState<Array<{
+    amount: string
+    description: string
+    borrowerId: string
+    borrower: { id: string; name: string; email: string } | null
+  }>>([])
+  const [isCreatingDebts, setIsCreatingDebts] = useState(false)
+  const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
 
   // Fetch user's groups on mount
   useEffect(() => {
@@ -85,9 +92,32 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }, [messages])
 
+  // Populate debt forms when a message with debts is received
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.debts && lastMessage.debts.length > 0) {
+      const forms = lastMessage.debts.map(debt => ({
+        amount: debt.amount.toString(),
+        description: debt.description || '',
+        borrowerId: debt.borrowerId,
+        borrower: {
+          id: debt.borrowerId,
+          name: debt.borrowerName,
+          email: debt.borrowerName, // Using name as email fallback
+        },
+      }))
+      setDebtForms(forms)
+      setCurrentDebtIndex(0) // Reset to first debt
+    }
+  }, [messages])
+
   // Handle paste events for images
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
+      if (!groupId) {
+        return
+      }
+
       const items = e.clipboardData?.items
       if (!items) return
 
@@ -96,7 +126,21 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           e.preventDefault()
           const file = item.getAsFile()
           if (file) {
-            handleImageFile(file)
+            // Inline the validation logic to avoid adding handleImageFile to dependencies
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+            if (!validTypes.includes(file.type)) {
+              setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+              return
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+              setError('File too large. Maximum size is 10MB')
+              return
+            }
+
+            const previewUrl = URL.createObjectURL(file)
+            setPendingImage({ url: previewUrl, file })
+            setError('')
           }
           break
         }
@@ -141,28 +185,15 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     e.target.value = ''
   }
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
-
-  const uploadImage = async (file: File): Promise<{ signedUrl: string; base64: string }> => {
+  const uploadImage = async (file: File): Promise<{ signedUrl: string; receiptId: string }> => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('groupId', groupId)
 
-    // Convert to base64 in parallel with upload
-    const [response, base64] = await Promise.all([
-      fetch('/api/receipts/upload', {
-        method: 'POST',
-        body: formData,
-      }),
-      fileToBase64(file),
-    ])
+    const response = await fetch('/api/receipts/upload', {
+      method: 'POST',
+      body: formData,
+    })
 
     if (!response.ok) {
       const errorData = await response.json()
@@ -170,7 +201,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
 
     const data = await response.json()
-    return { signedUrl: data.data.signedUrl, base64 }
+    return { signedUrl: data.data.signedUrl, receiptId: data.data.id }
   }
 
   const clearPendingImage = () => {
@@ -178,75 +209,112 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       URL.revokeObjectURL(pendingImage.url)
       setPendingImage(null)
     }
+    // Don't clear currentReceiptId here, need it later to create debts
   }
 
-  const handleApprove = async () => {
-    if (!pendingApproval) return
+  const deleteCurrentReceipt = async () => {
+    if (currentReceiptId) {
+      try {
+        await fetch(`/api/receipts/${currentReceiptId}`, {
+          method: 'DELETE',
+        })
+      } catch (error) {
+        console.error('Error deleting receipt:', error)
+      }
+      setCurrentReceiptId(null)
+    }
+  }
 
-    setIsLoading(true)
+  const addNewDebt = () => {
+    setDebtForms([...debtForms, {
+      amount: '',
+      description: '',
+      borrowerId: '',
+      borrower: null,
+    }])
+    setCurrentDebtIndex(debtForms.length)
+  }
+
+  const removeDebt = (index: number) => {
+    if (debtForms.length === 1) return
+    const newDebts = debtForms.filter((_, i) => i !== index)
+    setDebtForms(newDebts)
+    if (currentDebtIndex >= newDebts.length) {
+      setCurrentDebtIndex(newDebts.length - 1)
+    }
+  }
+
+  const updateDebtForm = (index: number, data: typeof debtForms[0]) => {
+    const newDebts = [...debtForms]
+    newDebts[index] = data
+    setDebtForms(newDebts)
+  }
+
+  const handleCancelDebts = async () => {
+    await deleteCurrentReceipt()
+    setDebtForms([])
+    setCurrentDebtIndex(0)
+  }
+
+  const handleCreateDebts = async () => {
+    setIsCreatingDebts(true)
     setError('')
-    setPendingApproval(null)
-    setIsEditingToolCalls(false)
 
     try {
-      // Use edited tool calls if available, otherwise use original
-      const toolCallsToExecute = editedToolCalls.length > 0 ? editedToolCalls : pendingApproval.toolCalls
+      // Validate all debts have required fields
+      for (let i = 0; i < debtForms.length; i++) {
+        const debt = debtForms[i]
+        if (!debt.borrowerId) {
+          setError(`Debt ${i + 1}: Please select a borrower`)
+          setIsCreatingDebts(false)
+          setCurrentDebtIndex(i)
+          return
+        }
+        if (!debt.amount || parseFloat(debt.amount) <= 0) {
+          setError(`Debt ${i + 1}: Please enter a valid amount`)
+          setIsCreatingDebts(false)
+          setCurrentDebtIndex(i)
+          return
+        }
+      }
 
-      const langchainMessages = messages
-        .filter(msg => !msg.pendingAction)
-        .map(msg => ({
-          type: msg.role === 'user' ? 'human' : 'ai',
-          content: msg.content,
-        }))
-
-      const response = await fetch('/api/agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: langchainMessages,
+      // Create each debt individually
+      for (const debt of debtForms) {
+        const result = await createDebt({
+          amount: parseFloat(debt.amount),
+          description: debt.description || undefined,
+          borrowerId: debt.borrowerId,
           groupId: parseInt(groupId),
-          executeApproved: true,
-          toolCallsOverride: toolCallsToExecute,
-        }),
-      })
+          receiptId: currentReceiptId || undefined,
+        })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to execute action')
+        if (!result.success) {
+          setError(result.error || 'Failed to create debt')
+          setIsCreatingDebts(false)
+          return
+        }
       }
 
-      const data = await response.json()
-
-      const lastMessage = data.messages[data.messages.length - 1]
-
-      const assistantMessage: Message = {
+      // Add success message
+      setMessages(prev => [...prev, {
         role: 'assistant',
-        content: lastMessage.content || lastMessage.kwargs?.content || 'Action completed',
+        content: `Successfully created ${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}!`,
         id: Date.now().toString(),
-      }
+      }])
 
-      setMessages(prev => [...prev, assistantMessage])
+      // Clear debt forms, receipt ID, and reset index
+      setDebtForms([])
+      setCurrentReceiptId(null)
+      setCurrentDebtIndex(0)
+
+      // Refresh the page data
+      router.refresh()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
-      setError(errorMessage)
+      setError('An error occurred while creating debts')
       console.error('Error:', err)
     } finally {
-      setIsLoading(false)
+      setIsCreatingDebts(false)
     }
-  }
-
-  const handleEditToolCall = (index: number, field: string, value: string) => {
-    const calls = editedToolCalls.length > 0 ? [...editedToolCalls] : [...(pendingApproval?.toolCalls || [])]
-    calls[index] = {
-      ...calls[index],
-      args: {
-        ...calls[index].args,
-        [field]: field === 'amount' ? parseFloat(value) || 0 : value,
-      },
-    }
-    setEditedToolCalls(calls)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -259,12 +327,8 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       return
     }
 
-    if (pendingApproval) {
-      setPendingApproval(null)
-    }
-
     let uploadedImageUrl: string | null = null
-    let uploadedImageBase64: string | null = null
+    let receiptId: string | null = null
 
     // Upload pending image if there is one
     if (pendingImage) {
@@ -272,7 +336,9 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       try {
         const result = await uploadImage(pendingImage.file)
         uploadedImageUrl = result.signedUrl
-        uploadedImageBase64 = result.base64
+        receiptId = result.receiptId
+        setCurrentReceiptId(receiptId)
+        // Note: We only need the URL now, ReceiptTool will fetch the image itself
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
         setError(errorMessage)
@@ -311,7 +377,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
           messages: langchainMessages,
           groupId: parseInt(groupId),
           imageUrl: uploadedImageUrl,
-          imageBase64: uploadedImageBase64,
+          receiptId: receiptId,
         }),
       })
 
@@ -322,53 +388,31 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
       const data = await response.json()
 
-      // Check if there's a pending action that needs approval
-      if (data.pendingAction) {
-        setPendingApproval({ toolCalls: data.pendingAction.toolCalls })
-        setEditedToolCalls([])
-        setIsEditingToolCalls(false)
+      const lastMessage = data.messages[data.messages.length - 1]
+      const content = lastMessage.content || lastMessage.kwargs?.content || 'No response'
 
-        // Fetch group members to get emails
-        let emails: Record<string, string> = {}
-        try {
-          const res = await fetch(`/api/groups/${groupId}`)
-          if (res.ok) {
-            const { group } = await res.json()
-            emails = Object.fromEntries(
-              group.members.map((m: any) => [m.userId, m.user.email])
-            )
+      // Try to parse JSON from the content
+      let parsedDebts = null
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*"debtsReady"[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.debtsReady && Array.isArray(parsed.debts)) {
+            parsedDebts = parsed.debts
           }
-        } catch (err) {
-          console.error('Failed to fetch members:', err)
         }
-
-        const toolCallsDisplay = data.pendingAction.toolCalls
-          .map((tc: any, idx: number) => {
-            const from = tc.args.borrowerId === user.id ? 'You' : (emails[tc.args.borrowerId] || tc.args.borrowerId)
-            const to = tc.args.userId === user.id ? 'You' : (emails[tc.args.userId] || 'Unknown')
-            const label = data.pendingAction.toolCalls.length > 1 ? `Debt ${idx + 1}\n` : ''
-            return `${label}Amount: $${tc.args.amount}\nFrom: ${from}\nTo: ${to}\nDescription: ${tc.args.description || 'N/A'}`
-          })
-          .join('\n\n')
-
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `I'd like to create the following debt(s):\n\n${toolCallsDisplay}`,
-          id: Date.now().toString(),
-          pendingAction: data.pendingAction,
-        }])
-      } else {
-        const lastMessage = data.messages[data.messages.length - 1]
-
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: lastMessage.content || lastMessage.kwargs?.content || 'No response',
-          id: Date.now().toString(),
-        }
-
-        setMessages(prev => [...prev, assistantMessage])
-        setPendingApproval(null)
+      } catch {
+        // Not JSON, treat as regular message
       }
+
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: parsedDebts ? 'I have the debt information ready. Please review and create:' : content,
+        id: Date.now().toString(),
+        debts: parsedDebts || undefined,
+      }
+
+      setMessages(prev => [...prev, assistantMessage])
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
@@ -422,10 +466,10 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                 >
                   <div
                     className={cn(
-                      'rounded-lg px-4 py-2 max-w-[80%]',
+                      'rounded-lg py-2 max-w-[80%] sm:max-w-[85%]',
                       message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
+                        ? 'bg-primary text-primary-foreground px-3 sm:px-4'
+                        : 'bg-muted px-2 sm:px-4'
                     )}
                   >
                     <div className="text-sm font-semibold mb-1">
@@ -443,53 +487,90 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                     <div className="text-sm whitespace-pre-wrap">
                       {message.content}
                     </div>
-                    {message.pendingAction && pendingApproval && index === messages.length - 1 && (
-                      <div className="mt-3">
-                        {isEditingToolCalls ? (
-                          <div className="space-y-3">
-                            {(editedToolCalls.length > 0 ? editedToolCalls : pendingApproval.toolCalls).map((tc: any, tcIndex: number) => (
-                              <div key={tcIndex} className="p-3 bg-background/50 rounded border space-y-2">
-                                <div className="text-xs font-semibold mb-2">Debt {tcIndex + 1}</div>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div>
-                                    <label className="text-xs">Amount ($)</label>
-                                    <Input
-                                      type="number"
-                                      value={tc.args.amount}
-                                      onChange={(e) => handleEditToolCall(tcIndex, 'amount', e.target.value)}
-                                      className="h-8 text-sm"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-xs">Description</label>
-                                    <Input
-                                      value={tc.args.description || ''}
-                                      onChange={(e) => handleEditToolCall(tcIndex, 'description', e.target.value)}
-                                      className="h-8 text-sm"
-                                    />
-                                  </div>
-                                </div>
+                    {message.debts && debtForms.length > 0 && index === messages.length - 1 && (
+                      <div className="mt-3 space-y-3 -mx-1 sm:mx-0">
+                        <div className="px-1 sm:px-0">
+                          <div className="p-3 sm:p-4 bg-background/50 rounded border">
+                            <div className="text-xs font-semibold mb-3">
+                              {debtForms.length > 1 && ` (${currentDebtIndex + 1} of ${debtForms.length})`}
+                              {currentReceiptId && (
+                                <span className="ml-2 text-muted-foreground font-normal">
+                                  Receipt ID: {currentReceiptId.substring(0, 8)}...
+                                </span>
+                              )}
+                            </div>
+                            <DebtFormItem
+                              debtData={debtForms[currentDebtIndex]}
+                              groupId={parseInt(groupId)}
+                              currentUserId={user?.id}
+                              onChange={(data) => updateDebtForm(currentDebtIndex, data)}
+                            />
+                            
+                            {/* Navigation for multiple debts */}
+                            {debtForms.length > 1 && (
+                              <div className="flex items-center justify-between rounded-md border bg-muted/30 p-2 mt-3">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))}
+                                  disabled={currentDebtIndex === 0}
+                                >
+                                  ← Prev
+                                </Button>
+                                <span className="text-sm text-muted-foreground">
+                                  Debt {currentDebtIndex + 1} of {debtForms.length}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setCurrentDebtIndex(Math.min(debtForms.length - 1, currentDebtIndex + 1))}
+                                  disabled={currentDebtIndex === debtForms.length - 1}
+                                >
+                                  Next →
+                                </Button>
                               </div>
-                            ))}
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={handleApprove} disabled={isLoading}>
-                                Save & Approve
+                            )}
+
+                            {/* Add/Remove debt buttons */}
+                            <div className="flex gap-2 mt-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addNewDebt}
+                                className="flex-1"
+                              >
+                                + Add another debt
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => setIsEditingToolCalls(false)}>
-                                Cancel Edit
-                              </Button>
+                              {debtForms.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeDebt(currentDebtIndex)}
+                                >
+                                  Remove
+                                </Button>
+                              )}
                             </div>
                           </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleApprove} disabled={isLoading}>
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setIsEditingToolCalls(true)} disabled={isLoading}>
-                              Edit
-                            </Button>
-                          </div>
-                        )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2 px-1 sm:px-0">
+                          <Button 
+                            size="sm" 
+                            onClick={handleCreateDebts} 
+                            disabled={isCreatingDebts || debtForms.some(d => !d.borrowerId || !d.amount || parseFloat(d.amount) <= 0)}
+                          >
+                            {isCreatingDebts ? 'Creating...' : `Create ${debtForms.length} Debt${debtForms.length > 1 ? 's' : ''}`}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={handleCancelDebts}>
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>

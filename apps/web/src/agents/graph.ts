@@ -7,91 +7,54 @@ import {
 } from "@langchain/langgraph";
 import { mainLLMNode } from "./MainLLMNode";
 import { extractReceiptTextTool } from "./ReceiptTool";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { BaseMessage } from "@langchain/core/messages";
-import { createDebt, readDebtsFromGroup } from "./DebtTools";
 import { listNamesInGroupTool } from "./UserTool";
-
-export interface ToolCall {
-  name: string;
-  args: Record<string, unknown>;
-}
 
 const AgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
   userId: Annotation<string>,
   groupId: Annotation<number>,
   imageUrl: Annotation<string | undefined>,
-  imageBase64: Annotation<string | undefined>,
+  receiptId: Annotation<string | undefined>,
   description: Annotation<string | undefined>,
-  pendingAction: Annotation<{
-    toolCalls: ToolCall[];
-  } | undefined>,
-  executeApproved: Annotation<boolean | undefined>,
+  receiptText: Annotation<string | undefined>,
+  groupMembers: Annotation<string | undefined>,
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;
 
-const toolNode = new ToolNode([
-  extractReceiptTextTool,
-  createDebt,
-  readDebtsFromGroup,
-  listNamesInGroupTool,
-]);
+// Pre-execute all tools before calling the agent
+async function prepareContextNode(
+  state: AgentState
+): Promise<Partial<AgentState>> {
+  console.log("[Prepare Context] === Starting context preparation ===");
 
-function shouldContinue(state: AgentState): "tools" | "pending" | typeof END {
-  const lastMessage = state.messages[state.messages.length - 1] as BaseMessage;
+  let receiptText: string | undefined;
 
-  if (
-    "tool_calls" in lastMessage &&
-    Array.isArray(lastMessage.tool_calls) &&
-    lastMessage.tool_calls.length > 0
-  ) {
-    const hasCreateDebt = lastMessage.tool_calls.some(
-      (tc: ToolCall) => tc.name === "create_debt"
-    );
-
-    // If has create_debt and not approved, go to pending for approval
-    if (hasCreateDebt && !state.executeApproved) {
-      return "pending";
-    }
-
-    // Otherwise, execute tools and continue
-    return "tools";
+  // Execute receipt OCR if imageUrl exists (Gemini call #1)
+  if (state.imageUrl) {
+    console.log("[Prepare Context] Extracting receipt text...");
+    receiptText = await extractReceiptTextTool.invoke({ imageUrl: state.imageUrl });
+    console.log("[Prepare Context] Receipt text extracted");
   }
 
-  return END;
-}
+  // Fetch group members (no Gemini call)
+  console.log("[Prepare Context] Fetching group members...");
+  const groupMembers = await listNamesInGroupTool.invoke({
+    userId: state.userId,
+    groupId: state.groupId,
+  });
+  console.log("[Prepare Context] Group members fetched");
 
-// Node that stores create_debt calls for approval
-async function pendingNode(state: AgentState): Promise<Partial<AgentState>> {
-  const lastMessage = state.messages[state.messages.length - 1] as BaseMessage;
-
-  if (
-    "tool_calls" in lastMessage &&
-    Array.isArray(lastMessage.tool_calls) &&
-    lastMessage.tool_calls.length > 0
-  ) {
-    const createDebtCalls = lastMessage.tool_calls.filter(
-      (tc: ToolCall) => tc.name === "create_debt"
-    );
-
-    return {
-      pendingAction: {
-        toolCalls: createDebtCalls,
-      },
-    };
-  }
-
-  return {};
+  return {
+    receiptText,
+    groupMembers,
+  };
 }
 
 export const agent = new StateGraph(AgentStateAnnotation)
+  .addNode("prepareContext", prepareContextNode)
   .addNode("agent", mainLLMNode)
-  .addNode("tools", toolNode)
-  .addNode("pending", pendingNode)
-  .addEdge(START, "agent")
-  .addConditionalEdges("agent", shouldContinue)
-  .addEdge("tools", "agent")
-  .addEdge("pending", END)
+  .addEdge(START, "prepareContext")
+  .addEdge("prepareContext", "agent")
+  .addEdge("agent", END)
   .compile();
