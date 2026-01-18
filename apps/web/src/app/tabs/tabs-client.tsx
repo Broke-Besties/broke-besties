@@ -278,7 +278,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                         {tab.description}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Added {new Date(tab.createdAt).toLocaleDateString()}
+                        Added {new Date(tab.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -322,7 +322,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                         {tab.description}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Added {new Date(tab.createdAt).toLocaleDateString()}
+                        Added {new Date(tab.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                       </p>
                       <Button
                         size="sm"

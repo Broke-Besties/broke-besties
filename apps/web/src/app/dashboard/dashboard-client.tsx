@@ -45,11 +45,11 @@ const CHART_BORDER_COLORS = [
 ];
 
 type Debt = {
-  id: number;
-  amount: number;
-  description: string | null;
-  status: string;
-  createdAt: Date | string;
+  id: number
+  amount: number
+  description: string | null
+  status: string
+  createdAt: Date | string
   lender: {
     id: string;
     email: string;

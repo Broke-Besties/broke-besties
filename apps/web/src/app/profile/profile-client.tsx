@@ -132,13 +132,13 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
           <div className="flex items-center justify-between border-b pb-3">
             <span className="text-sm text-muted-foreground">Member Since</span>
             <span className="text-sm font-medium">
-              {new Date(user.createdAt).toLocaleDateString()}
+              {new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Last Updated</span>
             <span className="text-sm font-medium">
-              {new Date(user.updatedAt).toLocaleDateString()}
+              {new Date(user.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
             </span>
           </div>
         </CardContent>

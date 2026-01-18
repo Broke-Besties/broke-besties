@@ -125,7 +125,7 @@ export default function InvitesPageClient({ initialInvites }: InvitesPageClientP
               </CardHeader>
               <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Invited {new Date(invite.createdAt).toLocaleDateString()}
+                  Invited {new Date(invite.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
                 </div>
                 <div className="flex gap-2">
                   <Button

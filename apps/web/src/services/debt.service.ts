@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { DebtPolicy } from "@/policies";
+import { emailService } from "./email.service";
 
 type CreateDebtParams = {
   amount: number;
@@ -79,16 +80,28 @@ export class DebtService {
       },
       include: {
         lender: {
-          select: { id: true, email: true },
+          select: { id: true, name: true, email: true },
         },
         borrower: {
-          select: { id: true, email: true },
+          select: { id: true, name: true, email: true },
         },
         group: {
           select: { id: true, name: true },
         },
         receipts: true,
       },
+    });
+
+    // Send email notification to borrower
+    const debtLink = `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debt.id}`;
+    await emailService.sendDebtCreated({
+      to: debt.borrower.email,
+      borrowerName: debt.borrower.name,
+      lenderName: debt.lender.name,
+      amount: debt.amount,
+      description: debt.description || "No description provided",
+      groupName: debt.group?.name,
+      debtLink,
     });
 
     return debt;
@@ -245,9 +258,6 @@ export class DebtService {
     }
 
     if (status !== undefined) {
-      if (status !== "pending") {
-        throw new Error("Cannot set status to anything other than pending");
-      }
       updateData.status = status;
     }
 
@@ -280,18 +290,32 @@ export class DebtService {
       throw new Error("Only the lender can delete this debt");
     }
 
+    // Fetch full debt data BEFORE deletion to send emails
+    const debtToDelete = await prisma.debt.findUnique({
+      where: { id: debtId },
+      include: {
+        lender: {
+          select: { id: true, name: true, email: true },
+        },
+        borrower: {
+          select: { id: true, name: true, email: true },
+        },
+        group: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+
+    if (!debtToDelete) {
+      throw new Error("Debt not found");
+    }
+
     // Use transaction to deactivate alert and delete debt
     await prisma.$transaction(async (tx) => {
-      // Get debt with alert
-      const debt = await tx.debt.findUnique({
-        where: { id: debtId },
-        select: { alertId: true },
-      });
-
       // Deactivate associated alert if it exists
-      if (debt?.alertId) {
+      if (debtToDelete.alertId) {
         await tx.alert.update({
-          where: { id: debt.alertId },
+          where: { id: debtToDelete.alertId },
           data: { isActive: false },
         });
       }
@@ -300,6 +324,31 @@ export class DebtService {
       await tx.debt.delete({
         where: { id: debtId },
       });
+    });
+
+    // Send email notifications to BOTH lender and borrower
+    // Email to lender (who deleted the debt)
+    await emailService.sendDebtDeleted({
+      to: debtToDelete.lender.email,
+      recipientName: debtToDelete.lender.name,
+      lenderName: debtToDelete.lender.name,
+      borrowerName: debtToDelete.borrower.name,
+      amount: debtToDelete.amount,
+      description: debtToDelete.description || "No description provided",
+      groupName: debtToDelete.group?.name,
+      deletedBy: "You",
+    });
+
+    // Email to borrower (notifying them of deletion)
+    await emailService.sendDebtDeleted({
+      to: debtToDelete.borrower.email,
+      recipientName: debtToDelete.borrower.name,
+      lenderName: debtToDelete.lender.name,
+      borrowerName: debtToDelete.borrower.name,
+      amount: debtToDelete.amount,
+      description: debtToDelete.description || "No description provided",
+      groupName: debtToDelete.group?.name,
+      deletedBy: debtToDelete.lender.name,
     });
   }
 }

@@ -11,38 +11,38 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-        
+
 model User {
-  id                        String                        @id @default(cuid())
+  id                        String                     @id @default(cuid())
   name                      String
-  email                     String                        @unique
-  createdAt                 DateTime                      @default(now())
-  updatedAt                 DateTime                      @updatedAt
+  email                     String                     @unique
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
   members                   GroupMember[]
-  sentInvites               GroupInvite[]                 @relation("InviteSender")
-  receivedInvites           GroupInvite[]                 @relation("InviteReceiver")
-  lentDebts                 Debt[]                        @relation("Lender")
-  borrowedDebts             Debt[]                        @relation("Borrower")
-  lentAlerts                Alert[]                       @relation("AlertLender")
-  borrowedAlerts            Alert[]                       @relation("AlertBorrower")
+  sentInvites               GroupInvite[]              @relation("InviteSender")
+  receivedInvites           GroupInvite[]              @relation("InviteReceiver")
+  lentDebts                 Debt[]                     @relation("Lender")
+  borrowedDebts             Debt[]                     @relation("Borrower")
+  lentAlerts                Alert[]                    @relation("AlertLender")
+  borrowedAlerts            Alert[]                    @relation("AlertBorrower")
   tabs                      Tab[]
-  debtTransactions          DebtTransaction[]             @relation("TransactionRequester")
-  lentRecurringPayments     RecurringPayment[]           @relation("RecurringPaymentLender")
+  debtTransactions          DebtTransaction[]          @relation("TransactionRequester")
+  recurringPayments         RecurringPayment[]         @relation("RecurringPaymentLender")
   recurringPaymentBorrowers RecurringPaymentBorrower[]
-  sentFriendRequests        Friend[]                     @relation("FriendRequester")
-  receivedFriendRequests    Friend[]                     @relation("FriendRecipient")
+  friends                   Friend[]                   @relation("FriendRequester")
+  friendsReceived           Friend[]                   @relation("FriendRecipient")
 }
 
 model Group {
-  id        Int           @id @default(autoincrement())
-  name      String
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  members   GroupMember[]
-  invites   GroupInvite[]
-  debts     Debt[]
+  id                Int                @id @default(autoincrement())
+  name              String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  members           GroupMember[]
+  invites           GroupInvite[]
+  debts             Debt[]
   recurringPayments RecurringPayment[]
-  alerts    Alert[]
+  alerts            Alert[]
 }
 
 model GroupMember {
@@ -59,17 +59,17 @@ model GroupMember {
 }
 
 model GroupInvite {
-  id         Int      @id @default(autoincrement())
-  groupId    Int
-  invitedBy  String
+  id           Int      @id @default(autoincrement())
+  groupId      Int
+  invitedBy    String
   invitedEmail String
-  status     String   @default("pending")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  sender     User     @relation("InviteSender", fields: [invitedBy], references: [id], onDelete: Cascade)
-  receiver   User?    @relation("InviteReceiver", fields: [invitedEmail], references: [email], onDelete: Cascade)
+  group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender   User  @relation("InviteSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+  receiver User? @relation("InviteReceiver", fields: [invitedEmail], references: [email], onDelete: Cascade)
 
   @@unique([groupId, invitedEmail])
   @@index([invitedEmail])
@@ -77,16 +77,16 @@ model GroupInvite {
 }
 
 model Debt {
-  id           Int               @id @default(autoincrement())
-  amount       Float
-  description  String?
-  status       String            @default("pending")
-  lenderId     String
-  borrowerId   String
-  groupId      Int?
-  alertId      Int?              @unique
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id          Int      @id @default(autoincrement())
+  amount      Float
+  description String?
+  status      String   @default("pending")
+  lenderId    String
+  borrowerId  String
+  groupId     Int?
+  alertId     Int?     @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
   borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
@@ -113,8 +113,8 @@ model Alert {
   updatedAt  DateTime  @updatedAt
 
   group    Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  lender   User  @relation("AlertLender", fields: [lenderId], references: [id], onDelete: Cascade)
-  borrower User  @relation("AlertBorrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  lender   User   @relation("AlertLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower User   @relation("AlertBorrower", fields: [borrowerId], references: [id], onDelete: Cascade)
 
   debt             Debt?
   recurringPayment RecurringPayment?
@@ -127,12 +127,12 @@ model Alert {
 }
 
 model Receipt {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   rawText   String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  debts     Debt[]
+  debts Debt[]
 }
 
 model Tab {
@@ -145,32 +145,32 @@ model Tab {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model DebtTransaction {
-  id                  Int       @id @default(autoincrement())
-  debtId              Int
-  type                String    // "drop", "modify", or "confirm_paid"
-  status              String    @default("pending") // "pending", "approved", "rejected", "cancelled"
+  id     Int    @id @default(autoincrement())
+  debtId Int
+  type   String // "drop", "modify", or "confirm_paid"
+  status String @default("pending") // "pending", "approved", "rejected", "cancelled"
 
-  requesterId         String
-  lenderApproved      Boolean   @default(false)
-  borrowerApproved    Boolean   @default(false)
+  requesterId      String
+  lenderApproved   Boolean @default(false)
+  borrowerApproved Boolean @default(false)
 
   // For modifications only
   proposedAmount      Float?
   proposedDescription String?
   reason              String?
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  resolvedAt          DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
 
-  debt                Debt      @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  requester           User      @relation("TransactionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  debt      Debt @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  requester User @relation("TransactionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
 
   @@index([debtId])
   @@index([requesterId])
@@ -178,21 +178,21 @@ model DebtTransaction {
 }
 
 model RecurringPayment {
-  id          Int                           @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   amount      Float
   description String?
-  status      String                        @default("active") // "active" or "inactive"
+  status      String   @default("active") // "active" or "inactive"
   lenderId    String
   groupId     Int?
-  alertId     Int?                          @unique
-  frequency   Int                           // Frequency in days
-  createdAt   DateTime                      @default(now())
-  updatedAt   DateTime                      @updatedAt
+  alertId     Int?     @unique
+  frequency   Int // Frequency in days
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  lender      User                         @relation("RecurringPaymentLender", fields: [lenderId], references: [id], onDelete: Cascade)
-  group       Group?                       @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  alert       Alert?                       @relation(fields: [alertId], references: [id], onDelete: SetNull)
-  borrowers   RecurringPaymentBorrower[]
+  lender    User                       @relation("RecurringPaymentLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  group     Group?                     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  alert     Alert?                     @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  borrowers RecurringPaymentBorrower[]
 
   @@index([lenderId])
   @@index([groupId])
@@ -203,7 +203,7 @@ model RecurringPaymentBorrower {
   id                 Int              @id @default(autoincrement())
   userId             String
   recurringPaymentId Int
-  splitPercentage    Float            // Percentage of the total amount this borrower owes (0-100)
+  splitPercentage    Float // Percentage of the total amount this borrower owes (0-100)
   user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   recurringPayment   RecurringPayment @relation(fields: [recurringPaymentId], references: [id], onDelete: Cascade)
   createdAt          DateTime         @default(now())
@@ -221,8 +221,8 @@ model Friend {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  requester   User     @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient   User     @relation("FriendRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  requester User @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User @relation("FriendRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@unique([requesterId, recipientId])
   @@index([requesterId])

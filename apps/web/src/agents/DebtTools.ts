@@ -51,7 +51,7 @@ export const readDebtsFromGroup = tool(
         )} ${direction} ${otherParty}
    Description: ${debt.description || "No description"}
    Status: ${debt.status}
-   Created: ${new Date(debt.createdAt).toLocaleDateString()}`;
+   Created: ${new Date(debt.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}`;
       })
       .join("\n\n");
 

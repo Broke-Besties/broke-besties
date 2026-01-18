@@ -122,7 +122,7 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Created {new Date(group.createdAt).toLocaleDateString()}
+                Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
               </CardContent>
             </Card>
           ))}

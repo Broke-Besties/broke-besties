@@ -484,7 +484,7 @@ export default function GroupDetailPageClient({
               {group.name}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Created {new Date(group.createdAt).toLocaleDateString()}
+              Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
