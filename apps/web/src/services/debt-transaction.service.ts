@@ -176,6 +176,32 @@ export class DebtTransactionService {
           requester: { select: userSelect },
         },
       })
+
+      // Send rejection email to requester
+      try {
+        const rejector = isLender ? updated.debt.lender : updated.debt.borrower
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const debtLink = `${baseUrl}/debts/${updated.debtId}`
+
+        // Only send for drop/modify, not confirm_paid
+        if (updated.type === 'drop' || updated.type === 'modify') {
+          await emailService.sendDebtRequestRejected({
+            to: updated.requester.email,
+            requesterName: updated.requester.name || updated.requester.email,
+            rejectorName: rejector.name || rejector.email,
+            type: updated.type as 'drop' | 'modify',
+            amount: updated.debt.amount,
+            description: updated.debt.description || 'No description',
+            proposedAmount: updated.proposedAmount ?? undefined,
+            proposedDescription: updated.proposedDescription ?? undefined,
+            groupName: updated.debt.group?.name,
+            debtLink,
+          })
+        }
+      } catch (emailError) {
+        console.error('Failed to send debt request rejected email:', emailError)
+      }
+
       return { transaction: updated, debtUpdated: false }
     }
 
@@ -263,6 +289,34 @@ export class DebtTransactionService {
         return updatedTransaction
       })
 
+      // Send approval email to requester
+      try {
+        const approver = isLender ? result.debt.lender : result.debt.borrower
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const debtLink =
+          result.type === 'drop'
+            ? `${baseUrl}/dashboard`
+            : `${baseUrl}/debts/${result.debtId}`
+
+        // Only send for drop/modify, not confirm_paid
+        if (result.type === 'drop' || result.type === 'modify') {
+          await emailService.sendDebtRequestApproved({
+            to: result.requester.email,
+            requesterName: result.requester.name || result.requester.email,
+            approverName: approver.name || approver.email,
+            type: result.type as 'drop' | 'modify',
+            amount: result.debt.amount,
+            description: result.debt.description || 'No description',
+            proposedAmount: result.proposedAmount ?? undefined,
+            proposedDescription: result.proposedDescription ?? undefined,
+            groupName: result.debt.group?.name,
+            debtLink,
+          })
+        }
+      } catch (emailError) {
+        console.error('Failed to send debt request approved email:', emailError)
+      }
+
       return { transaction: result, debtUpdated: true }
     }
 
@@ -285,6 +339,10 @@ export class DebtTransactionService {
   async cancelTransaction(transactionId: number, userId: string) {
     const transaction = await prisma.debtTransaction.findUnique({
       where: { id: transactionId },
+      include: {
+        debt: { include: debtInclude },
+        requester: { select: userSelect },
+      },
     })
 
     if (!transaction) {
@@ -299,13 +357,48 @@ export class DebtTransactionService {
       throw new Error('This transaction has already been processed')
     }
 
-    return prisma.debtTransaction.update({
+    const cancelled = await prisma.debtTransaction.update({
       where: { id: transactionId },
       data: {
         status: 'cancelled',
         resolvedAt: new Date(),
       },
+      include: {
+        debt: { include: debtInclude },
+        requester: { select: userSelect },
+      },
     })
+
+    // Send cancellation email to the other party
+    try {
+      // Determine the other party (who is not the requester)
+      const isRequesterLender = cancelled.debt.lenderId === userId
+      const otherParty = isRequesterLender
+        ? cancelled.debt.borrower
+        : cancelled.debt.lender
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const debtLink = `${baseUrl}/debts/${cancelled.debtId}`
+
+      // Only send for drop/modify, not confirm_paid
+      if (cancelled.type === 'drop' || cancelled.type === 'modify') {
+        await emailService.sendDebtRequestCancelled({
+          to: otherParty.email,
+          recipientName: otherParty.name || otherParty.email,
+          requesterName: cancelled.requester.name || cancelled.requester.email,
+          type: cancelled.type as 'drop' | 'modify',
+          amount: cancelled.debt.amount,
+          description: cancelled.debt.description || 'No description',
+          proposedAmount: cancelled.proposedAmount ?? undefined,
+          proposedDescription: cancelled.proposedDescription ?? undefined,
+          groupName: cancelled.debt.group?.name,
+          debtLink,
+        })
+      }
+    } catch (emailError) {
+      console.error('Failed to send debt request cancelled email:', emailError)
+    }
+
+    return cancelled
   }
 
   /**

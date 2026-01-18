@@ -7,6 +7,9 @@ import { DebtCreatedEmail } from "@/components/emails/debt-created";
 import { DebtDeletionRequestEmail } from "@/components/emails/debt-deletion-request";
 import { DebtDeletedEmail } from "@/components/emails/debt-deleted";
 import { DebtModificationRequestEmail } from "@/components/emails/debt-modification-request";
+import { DebtRequestApprovedEmail } from "@/components/emails/debt-request-approved";
+import { DebtRequestRejectedEmail } from "@/components/emails/debt-request-rejected";
+import { DebtRequestCancelledEmail } from "@/components/emails/debt-request-cancelled";
 import { FriendRequestEmail } from "@/components/emails/friend-request";
 import { FriendRequestAcceptedEmail } from "@/components/emails/friend-request-accepted";
 import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-rejected";
@@ -503,6 +506,168 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send tab marked paid email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendDebtRequestApproved(params: {
+    to: string;
+    requesterName: string;
+    approverName: string;
+    type: "drop" | "modify";
+    amount: number;
+    description: string;
+    proposedAmount?: number;
+    proposedDescription?: string;
+    groupName?: string;
+    debtLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const subject =
+        params.type === "drop"
+          ? params.groupName
+            ? `Your debt deletion request in ${params.groupName} was approved`
+            : "Your debt deletion request was approved"
+          : params.groupName
+          ? `Your debt modification request in ${params.groupName} was approved`
+          : "Your debt modification request was approved";
+
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject,
+        react: DebtRequestApprovedEmail({
+          requesterName: params.requesterName,
+          approverName: params.approverName,
+          type: params.type,
+          amount: params.amount,
+          description: params.description,
+          proposedAmount: params.proposedAmount,
+          proposedDescription: params.proposedDescription,
+          groupName: params.groupName,
+          debtLink: params.debtLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send debt request approved email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send debt request approved email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendDebtRequestRejected(params: {
+    to: string;
+    requesterName: string;
+    rejectorName: string;
+    type: "drop" | "modify";
+    amount: number;
+    description: string;
+    proposedAmount?: number;
+    proposedDescription?: string;
+    groupName?: string;
+    debtLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const subject =
+        params.type === "drop"
+          ? params.groupName
+            ? `Your debt deletion request in ${params.groupName} was rejected`
+            : "Your debt deletion request was rejected"
+          : params.groupName
+          ? `Your debt modification request in ${params.groupName} was rejected`
+          : "Your debt modification request was rejected";
+
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject,
+        react: DebtRequestRejectedEmail({
+          requesterName: params.requesterName,
+          rejectorName: params.rejectorName,
+          type: params.type,
+          amount: params.amount,
+          description: params.description,
+          proposedAmount: params.proposedAmount,
+          proposedDescription: params.proposedDescription,
+          groupName: params.groupName,
+          debtLink: params.debtLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send debt request rejected email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send debt request rejected email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendDebtRequestCancelled(params: {
+    to: string;
+    recipientName: string;
+    requesterName: string;
+    type: "drop" | "modify";
+    amount: number;
+    description: string;
+    proposedAmount?: number;
+    proposedDescription?: string;
+    groupName?: string;
+    debtLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const subject =
+        params.type === "drop"
+          ? params.groupName
+            ? `Debt deletion request cancelled in ${params.groupName}`
+            : "Debt deletion request cancelled"
+          : params.groupName
+          ? `Debt modification request cancelled in ${params.groupName}`
+          : "Debt modification request cancelled";
+
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject,
+        react: DebtRequestCancelledEmail({
+          recipientName: params.recipientName,
+          requesterName: params.requesterName,
+          type: params.type,
+          amount: params.amount,
+          description: params.description,
+          proposedAmount: params.proposedAmount,
+          proposedDescription: params.proposedDescription,
+          groupName: params.groupName,
+          debtLink: params.debtLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send debt request cancelled email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send debt request cancelled email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
