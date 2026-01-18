@@ -18,7 +18,7 @@ export async function GET() {
     console.error("Get friends error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -34,6 +34,12 @@ export async function POST(request: NextRequest) {
 
     const { recipientId } = await request.json();
 
+    console.log("[Friend API] POST /friends - Sending friend request", {
+      senderId: user.id,
+      recipientId,
+      recipientIdType: typeof recipientId,
+    });
+
     const result = await friendService.sendFriendRequest(user.id, recipientId);
 
     const message = result.autoAccepted
@@ -46,7 +52,7 @@ export async function POST(request: NextRequest) {
         friend: result.friend,
         autoAccepted: result.autoAccepted,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Send friend request error:", error);
