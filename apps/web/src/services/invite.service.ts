@@ -149,7 +149,7 @@ export class InviteService {
 
     // Add user to group and update invite status
     const [member, updatedInvite] = await prisma.$transaction([
-    prisma.groupMscher.create({
+      prisma.groupMember.create({
         data: {
           userId,
           groupId: invite.groupId,

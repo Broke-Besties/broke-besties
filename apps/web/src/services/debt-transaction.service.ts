@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { emailService } from './email.service'
 
 type CreateTransactionParams = {
   debtId: number
@@ -98,6 +99,38 @@ export class DebtTransactionService {
         requester: { select: userSelect },
       },
     })
+
+    // Send email notification to the other party
+    try {
+      // Determine recipient (the party who didn't make the request)
+      const recipient = isLender ? transaction.debt.borrower : transaction.debt.lender
+      const requesterName = transaction.requester.name || transaction.requester.email
+      const recipientName = recipient.name || recipient.email
+
+      // Build debt link
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const debtLink = `${baseUrl}/debts/${debtId}`
+
+      // Send email for drop or modify transactions only (not confirm_paid)
+      if (type === 'drop' || type === 'modify') {
+        await emailService.sendDebtModificationRequest({
+          to: recipient.email,
+          recipientName,
+          requesterName,
+          type,
+          currentAmount: transaction.debt.amount,
+          currentDescription: transaction.debt.description || 'No description',
+          proposedAmount: transaction.proposedAmount ?? undefined,
+          proposedDescription: transaction.proposedDescription ?? undefined,
+          reason: transaction.reason ?? undefined,
+          groupName: transaction.debt.group?.name,
+          debtLink,
+        })
+      }
+    } catch (emailError) {
+      // Log error but don't fail the transaction creation
+      console.error('Failed to send debt modification request email:', emailError)
+    }
 
     return transaction
   }

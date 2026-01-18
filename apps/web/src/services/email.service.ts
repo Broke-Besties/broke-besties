@@ -5,6 +5,8 @@ import { GroupInviteRejectedEmail } from "@/components/emails/group-invite-rejec
 import { InviteAcceptedEmail } from "@/components/emails/invite-accepted";
 import { DebtCreatedEmail } from "@/components/emails/debt-created";
 import { DebtDeletionRequestEmail } from "@/components/emails/debt-deletion-request";
+import { DebtDeletedEmail } from "@/components/emails/debt-deleted";
+import { DebtModificationRequestEmail } from "@/components/emails/debt-modification-request";
 import { FriendRequestEmail } from "@/components/emails/friend-request";
 import { FriendRequestAcceptedEmail } from "@/components/emails/friend-request-accepted";
 import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-rejected";
@@ -86,14 +88,16 @@ export class EmailService {
     lenderName: string;
     amount: number;
     description: string;
-    groupName: string;
+    groupName?: string;
     debtLink: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await resend.emails.send({
         from: EmailService.FROM_EMAIL,
         to: params.to,
-        subject: `New debt recorded in ${params.groupName}`,
+        subject: params.groupName
+          ? `New debt recorded in ${params.groupName}`
+          : `${params.lenderName} recorded a debt with you`,
         react: DebtCreatedEmail({
           borrowerName: params.borrowerName,
           lenderName: params.lenderName,
@@ -112,6 +116,49 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send debt created email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendDebtDeleted(params: {
+    to: string;
+    recipientName: string;
+    lenderName: string;
+    borrowerName: string;
+    amount: number;
+    description: string;
+    groupName?: string;
+    deletedBy: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: params.groupName
+          ? `Debt deleted in ${params.groupName}`
+          : `A debt has been deleted`,
+        react: DebtDeletedEmail({
+          recipientName: params.recipientName,
+          lenderName: params.lenderName,
+          borrowerName: params.borrowerName,
+          amount: params.amount,
+          description: params.description,
+          groupName: params.groupName,
+          deletedBy: params.deletedBy,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send debt deleted email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send debt deleted email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -151,6 +198,62 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send debt deletion request email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendDebtModificationRequest(params: {
+    to: string;
+    recipientName: string;
+    requesterName: string;
+    type: "drop" | "modify";
+    currentAmount: number;
+    currentDescription: string;
+    proposedAmount?: number;
+    proposedDescription?: string;
+    reason?: string;
+    groupName?: string;
+    debtLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const subject =
+        params.type === "drop"
+          ? params.groupName
+            ? `Debt deletion request in ${params.groupName}`
+            : "Debt deletion request"
+          : params.groupName
+          ? `Debt modification request in ${params.groupName}`
+          : "Debt modification request";
+
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject,
+        react: DebtModificationRequestEmail({
+          recipientName: params.recipientName,
+          requesterName: params.requesterName,
+          type: params.type,
+          currentAmount: params.currentAmount,
+          currentDescription: params.currentDescription,
+          proposedAmount: params.proposedAmount,
+          proposedDescription: params.proposedDescription,
+          reason: params.reason,
+          groupName: params.groupName,
+          debtLink: params.debtLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send debt modification request email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send debt modification request email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

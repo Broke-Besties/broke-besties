@@ -4,46 +4,46 @@ import {
   Head,
   Heading,
   Html,
-  Link,
   Preview,
   Section,
   Text,
 } from "@react-email/components";
 
-interface DebtCreatedEmailProps {
-  borrowerName?: string;
+interface DebtDeletedEmailProps {
+  recipientName?: string;
   lenderName?: string;
+  borrowerName?: string;
   amount?: number;
   description?: string;
   groupName?: string;
-  debtLink?: string;
+  deletedBy?: string;
 }
 
-export const DebtCreatedEmail = ({
-  borrowerName = "there",
+export const DebtDeletedEmail = ({
+  recipientName = "there",
   lenderName = "Someone",
+  borrowerName = "Someone",
   amount = 0,
   description = "No description provided",
   groupName,
-  debtLink = "#",
-}: DebtCreatedEmailProps) => (
+  deletedBy = "The lender",
+}: DebtDeletedEmailProps) => (
   <Html>
     <Head />
     <Body style={main}>
       <Preview>
-        {groupName
-          ? `${lenderName} recorded a debt in ${groupName}`
-          : `${lenderName} recorded a debt with you`}
+        A debt has been deleted
+        {groupName && ` in ${groupName}`}
       </Preview>
       <Container style={container}>
-        <Heading style={h1}>New Debt Recorded</Heading>
+        <Heading style={h1}>Debt Deleted</Heading>
 
         <Text style={text}>
-          Hi {borrowerName},
+          Hi {recipientName},
         </Text>
 
         <Text style={text}>
-          <strong>{lenderName}</strong> has recorded a debt
+          <strong>{deletedBy}</strong> has deleted a debt
           {groupName && (
             <>
               {" "}in <strong>{groupName}</strong>
@@ -54,21 +54,14 @@ export const DebtCreatedEmail = ({
         <Section style={debtDetailsContainer}>
           <Text style={debtAmount}>${amount.toFixed(2)}</Text>
           <Text style={debtDescription}>{description}</Text>
+          <Text style={debtParties}>
+            From <strong>{lenderName}</strong> to <strong>{borrowerName}</strong>
+          </Text>
         </Section>
 
         <Text style={text}>
-          You can view the full details and mark it as paid when you settle up.
-        </Text>
-
-        <Section style={buttonContainer}>
-          <Link style={button} href={debtLink}>
-            View Debt
-          </Link>
-        </Section>
-
-        <Text style={footer}>
-          If you disagree with this debt, you can discuss it with {lenderName}
-          {groupName && " in your group"} or update the status to "not paying".
+          This debt has been removed from your records. If this was a mistake,
+          {lenderName} can create a new debt.
         </Text>
 
         <Text style={footerCopyright}>
@@ -127,31 +120,13 @@ const debtAmount = {
 const debtDescription = {
   color: "#666",
   fontSize: "16px",
-  margin: "0",
+  margin: "0 0 8px 0",
 };
 
-const buttonContainer = {
-  padding: "27px 40px",
-};
-
-const button = {
-  backgroundColor: "#000000",
-  borderRadius: "8px",
-  color: "#fff",
-  fontSize: "16px",
-  fontWeight: "bold",
-  textDecoration: "none",
-  textAlign: "center" as const,
-  display: "block",
-  padding: "12px 20px",
-};
-
-const footer = {
-  color: "#8898aa",
+const debtParties = {
+  color: "#666",
   fontSize: "14px",
-  lineHeight: "24px",
-  padding: "0 40px",
-  marginTop: "32px",
+  margin: "0",
 };
 
 const footerCopyright = {
@@ -162,4 +137,4 @@ const footerCopyright = {
   marginTop: "16px",
 };
 
-export default DebtCreatedEmail;
+export default DebtDeletedEmail;

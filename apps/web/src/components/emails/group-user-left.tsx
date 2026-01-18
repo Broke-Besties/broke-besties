@@ -10,65 +10,50 @@ import {
   Text,
 } from "@react-email/components";
 
-interface DebtCreatedEmailProps {
-  borrowerName?: string;
-  lenderName?: string;
-  amount?: number;
-  description?: string;
+interface UserLeftGroupEmailProps {
+  recipientName?: string;
+  leaverName?: string;
   groupName?: string;
-  debtLink?: string;
+  groupLink?: string;
 }
 
-export const DebtCreatedEmail = ({
-  borrowerName = "there",
-  lenderName = "Someone",
-  amount = 0,
-  description = "No description provided",
-  groupName,
-  debtLink = "#",
-}: DebtCreatedEmailProps) => (
+export const GroupUserLeftEmail = ({
+  recipientName = "there",
+  leaverName = "Someone",
+  groupName = "your group",
+  groupLink = "#",
+}: UserLeftGroupEmailProps) => (
   <Html>
     <Head />
     <Body style={main}>
       <Preview>
-        {groupName
-          ? `${lenderName} recorded a debt in ${groupName}`
-          : `${lenderName} recorded a debt with you`}
+        {leaverName} has left {groupName}
       </Preview>
       <Container style={container}>
-        <Heading style={h1}>New Debt Recorded</Heading>
+        <Heading style={h1}>Member Left Group</Heading>
 
         <Text style={text}>
-          Hi {borrowerName},
+          Hi <strong>{recipientName}</strong>,
         </Text>
 
         <Text style={text}>
-          <strong>{lenderName}</strong> has recorded a debt
-          {groupName && (
-            <>
-              {" "}in <strong>{groupName}</strong>
-            </>
-          )}.
+          <strong>{leaverName}</strong> has left <strong>{groupName}</strong> on
+          BrokeBesties.
         </Text>
 
-        <Section style={debtDetailsContainer}>
-          <Text style={debtAmount}>${amount.toFixed(2)}</Text>
-          <Text style={debtDescription}>{description}</Text>
-        </Section>
-
         <Text style={text}>
-          You can view the full details and mark it as paid when you settle up.
+          You can continue tracking shared expenses and settling debts with the
+          remaining group members.
         </Text>
 
         <Section style={buttonContainer}>
-          <Link style={button} href={debtLink}>
-            View Debt
+          <Link style={button} href={groupLink}>
+            View Group
           </Link>
         </Section>
 
         <Text style={footer}>
-          If you disagree with this debt, you can discuss it with {lenderName}
-          {groupName && " in your group"} or update the status to "not paying".
+          Keep your finances organized with BrokeBesties.
         </Text>
 
         <Text style={footerCopyright}>
@@ -106,28 +91,6 @@ const text = {
   fontSize: "16px",
   lineHeight: "26px",
   padding: "0 40px",
-  marginTop: "16px",
-};
-
-const debtDetailsContainer = {
-  backgroundColor: "#f6f9fc",
-  borderRadius: "8px",
-  padding: "24px 40px",
-  margin: "24px 40px",
-  textAlign: "center" as const,
-};
-
-const debtAmount = {
-  color: "#333",
-  fontSize: "36px",
-  fontWeight: "bold",
-  margin: "0 0 8px 0",
-};
-
-const debtDescription = {
-  color: "#666",
-  fontSize: "16px",
-  margin: "0",
 };
 
 const buttonContainer = {
@@ -162,4 +125,4 @@ const footerCopyright = {
   marginTop: "16px",
 };
 
-export default DebtCreatedEmail;
+export default GroupUserLeftEmail;
