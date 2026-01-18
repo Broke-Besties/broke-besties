@@ -21,14 +21,30 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export class EmailService {
   private static FROM_EMAIL = process.env.EMAIL_FROM || "onboarding@resend.dev";
 
+  constructor() {
+    // Log email configuration on initialization
+    console.log("[EmailService] Initialized with config:", {
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      resendKeyPrefix: process.env.RESEND_API_KEY?.substring(0, 8) + "...",
+      fromEmail: EmailService.FROM_EMAIL,
+      nodeEnv: process.env.NODE_ENV,
+    });
+  }
+
   async sendGroupInvite(params: {
     to: string;
     inviterName: string;
     groupName: string;
     inviteLink: string;
   }): Promise<{ success: boolean; error?: string }> {
+    console.log("[EmailService] Attempting to send group invite email:", {
+      to: params.to,
+      from: EmailService.FROM_EMAIL,
+      groupName: params.groupName,
+    });
+
     try {
-      const { error } = await resend.emails.send({
+      const { data, error } = await resend.emails.send({
         from: EmailService.FROM_EMAIL,
         to: params.to,
         subject: `You've been invited to join ${params.groupName} on BrokeBesties`,
@@ -40,13 +56,26 @@ export class EmailService {
       });
 
       if (error) {
-        console.error("Failed to send group invite email:", error);
+        console.error("[EmailService] Failed to send group invite email:", {
+          error,
+          errorMessage: error.message,
+          to: params.to,
+        });
         return { success: false, error: error.message };
       }
 
+      console.log("[EmailService] Successfully sent group invite email:", {
+        to: params.to,
+        emailId: data?.id,
+      });
       return { success: true };
     } catch (error) {
-      console.error("Failed to send group invite email:", error);
+      console.error("[EmailService] Exception sending group invite email:", {
+        error,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorStack: error instanceof Error ? error.stack : undefined,
+        to: params.to,
+      });
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

@@ -7,6 +7,12 @@ export class FriendService {
    * Send a friend request (or auto-accept if reverse request exists)
    */
   async sendFriendRequest(requesterId: string, recipientId: string) {
+    console.log("[FriendService] sendFriendRequest called", {
+      requesterId,
+      recipientId,
+      recipientIdType: typeof recipientId,
+    });
+
     if (!recipientId) {
       throw new Error("Recipient ID is required");
     }
@@ -16,11 +22,30 @@ export class FriendService {
     }
 
     // Check if recipient exists
+    console.log(
+      "[FriendService] Looking for user in database with ID:",
+      recipientId,
+    );
     const recipient = await prisma.user.findUnique({
       where: { id: recipientId },
     });
 
+    console.log("[FriendService] User lookup result:", {
+      found: !!recipient,
+      recipientEmail: recipient?.email,
+      recipientName: recipient?.name,
+    });
+
     if (!recipient) {
+      console.error(
+        "[FriendService] User not found in database for ID:",
+        recipientId,
+      );
+      // Log all users to help debug
+      const allUsers = await prisma.user.findMany({
+        select: { id: true, email: true, name: true },
+      });
+      console.error("[FriendService] Available users in DB:", allUsers);
       throw new Error("User not found");
     }
 
@@ -391,7 +416,7 @@ export class FriendService {
       .filter(
         (f) =>
           f.friend.name.toLowerCase().includes(searchQuery) ||
-          f.friend.email.toLowerCase().includes(searchQuery)
+          f.friend.email.toLowerCase().includes(searchQuery),
       );
   }
 }
