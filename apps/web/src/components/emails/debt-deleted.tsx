@@ -32,8 +32,7 @@ export const DebtDeletedEmail = ({
     <Head />
     <Body style={main}>
       <Preview>
-        A debt has been deleted
-        {groupName && ` in ${groupName}`}
+        {`A debt has been deleted${groupName ? ` in ${groupName}` : ""}`}
       </Preview>
       <Container style={container}>
         <Heading style={h1}>Debt Deleted</Heading>

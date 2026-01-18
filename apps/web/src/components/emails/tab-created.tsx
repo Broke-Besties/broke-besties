@@ -52,7 +52,7 @@ export const TabCreatedEmail = ({
             <Text style={personLabel}>
               {isLending ? "Who owes you" : "Who you owe"}
             </Text>
-            <Text style={personName}>{personName}</Text>
+            <Text style={personNameStyle}>{personName}</Text>
             <Text style={tabAmount}>${amount.toFixed(2)}</Text>
             <Text style={tabDescription}>{description}</Text>
           </Section>
@@ -129,7 +129,7 @@ const personLabel = {
   margin: "0 0 8px 0",
 };
 
-const personName = {
+const personNameStyle = {
   color: "#333",
   fontSize: "24px",
   fontWeight: "bold",

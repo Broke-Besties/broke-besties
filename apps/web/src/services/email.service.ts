@@ -452,7 +452,7 @@ export class EmailService {
           personName: params.personName,
           amount: params.amount,
           description: params.description,
-          isLending: params.isLending,
+          status: params.isLending ? "lending" : "borrowing",
           tabsLink: params.tabsLink,
         }),
       });
