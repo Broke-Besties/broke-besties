@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { FriendPolicy } from "@/policies/friend.policy";
+import { emailService } from "@/services/email.service";
 
 export class FriendService {
   /**
@@ -47,6 +48,26 @@ export class FriendService {
             recipient: true,
           },
         });
+
+        // Send emails to BOTH users notifying them they're now friends
+        const friendsLink = `${process.env.NEXT_PUBLIC_APP_URL}/friends`;
+
+        // Email to the original requester (person who had the pending request)
+        await emailService.sendFriendRequestAccepted({
+          to: updated.requester.email,
+          recipientName: updated.requester.name,
+          friendName: updated.recipient.name,
+          friendsLink,
+        });
+
+        // Email to the person who just sent the request (causing auto-accept)
+        await emailService.sendFriendRequestAccepted({
+          to: updated.recipient.email,
+          recipientName: updated.recipient.name,
+          friendName: updated.requester.name,
+          friendsLink,
+        });
+
         return { friend: updated, autoAccepted: true };
       }
 
@@ -67,6 +88,14 @@ export class FriendService {
         requester: true,
         recipient: true,
       },
+    });
+
+    // Send email notification to recipient
+    await emailService.sendFriendRequest({
+      to: friend.recipient.email,
+      recipientName: friend.recipient.name,
+      requesterName: friend.requester.name,
+      friendsLink: `${process.env.NEXT_PUBLIC_APP_URL}/friends`,
     });
 
     return { friend, autoAccepted: false };
@@ -97,6 +126,25 @@ export class FriendService {
       },
     });
 
+    // Send emails to BOTH users notifying them they're now friends
+    const friendsLink = `${process.env.NEXT_PUBLIC_APP_URL}/friends`;
+
+    // Email to the requester (original sender of friend request)
+    await emailService.sendFriendRequestAccepted({
+      to: updated.requester.email,
+      recipientName: updated.requester.name,
+      friendName: updated.recipient.name,
+      friendsLink,
+    });
+
+    // Email to the recipient (person who just accepted)
+    await emailService.sendFriendRequestAccepted({
+      to: updated.recipient.email,
+      recipientName: updated.recipient.name,
+      friendName: updated.requester.name,
+      friendsLink,
+    });
+
     return updated;
   }
 
@@ -106,6 +154,10 @@ export class FriendService {
   async rejectFriendRequest(friendId: number, userId: string) {
     const friend = await prisma.friend.findUnique({
       where: { id: friendId },
+      include: {
+        requester: true,
+        recipient: true,
+      },
     });
 
     if (!friend) {
@@ -115,6 +167,13 @@ export class FriendService {
     if (!FriendPolicy.canAcceptOrReject(userId, friend)) {
       throw new Error("You cannot reject this friend request");
     }
+
+    // Send email notification to the requester (person who sent the friend request)
+    await emailService.sendFriendRequestRejected({
+      to: friend.requester.email,
+      recipientName: friend.requester.name,
+      rejectorName: friend.recipient.name,
+    });
 
     await prisma.friend.delete({
       where: { id: friendId },

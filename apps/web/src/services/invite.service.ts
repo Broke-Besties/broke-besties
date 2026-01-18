@@ -149,7 +149,7 @@ export class InviteService {
 
     // Add user to group and update invite status
     const [member, updatedInvite] = await prisma.$transaction([
-      prisma.groupMember.create({
+    prisma.groupMscher.create({
         data: {
           userId,
           groupId: invite.groupId,
@@ -170,8 +170,9 @@ export class InviteService {
 
     // Send confirmation email to the person who sent the invite
     const groupLink = `${process.env.NEXT_PUBLIC_APP_URL}/groups/${member.group.id}`
-    await emailService.sendInviteAccepted({
+    await emailService.sendGroupInviteAccepted({
       to: updatedInvite.sender.email,
+      recipientName: updatedInvite.sender.name,
       accepterName: member.user.name,
       groupName: member.group.name,
       groupLink,
@@ -209,6 +210,10 @@ export class InviteService {
   async rejectInvite(userEmail: string, inviteId: number) {
     const invite = await prisma.groupInvite.findUnique({
       where: { id: inviteId },
+      include: {
+        sender: true,
+        group: true,
+      },
     })
 
     if (!invite) {
@@ -219,10 +224,25 @@ export class InviteService {
       throw new Error('You can only reject invites sent to you')
     }
 
+    // Get the user who is rejecting the invite
+    const rejector = await prisma.user.findUnique({
+      where: { email: userEmail },
+    })
+
     await prisma.groupInvite.update({
       where: { id: inviteId },
       data: { status: 'rejected' },
     })
+
+    // Send email notification to the person who sent the invite
+    if (rejector) {
+      await emailService.sendGroupInviteRejected({
+        to: invite.sender.email,
+        recipientName: invite.sender.name,
+        rejectorName: rejector.name,
+        groupName: invite.group.name,
+      })
+    }
 
     return { success: true }
   }

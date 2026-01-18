@@ -1,8 +1,13 @@
 import { Resend } from "resend";
 import { GroupInviteEmail } from "@/components/emails/group-invite";
+import { GroupInviteAcceptedEmail } from "@/components/emails/group-invite-accepted";
+import { GroupInviteRejectedEmail } from "@/components/emails/group-invite-rejected";
 import { InviteAcceptedEmail } from "@/components/emails/invite-accepted";
 import { DebtCreatedEmail } from "@/components/emails/debt-created";
 import { DebtDeletionRequestEmail } from "@/components/emails/debt-deletion-request";
+import { FriendRequestEmail } from "@/components/emails/friend-request";
+import { FriendRequestAcceptedEmail } from "@/components/emails/friend-request-accepted";
+import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-rejected";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -146,6 +151,171 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send debt deletion request email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendFriendRequest(params: {
+    to: string;
+    recipientName: string;
+    requesterName: string;
+    friendsLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `${params.requesterName} sent you a friend request on BrokeBesties`,
+        react: FriendRequestEmail({
+          recipientName: params.recipientName,
+          requesterName: params.requesterName,
+          friendsLink: params.friendsLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send friend request email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send friend request email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendFriendRequestAccepted(params: {
+    to: string;
+    recipientName: string;
+    friendName: string;
+    friendsLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `You're now friends with ${params.friendName} on BrokeBesties`,
+        react: FriendRequestAcceptedEmail({
+          recipientName: params.recipientName,
+          friendName: params.friendName,
+          friendsLink: params.friendsLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send friend request accepted email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send friend request accepted email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendFriendRequestRejected(params: {
+    to: string;
+    recipientName: string;
+    rejectorName: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `${params.rejectorName} declined your friend request on BrokeBesties`,
+        react: FriendRequestRejectedEmail({
+          recipientName: params.recipientName,
+          rejectorName: params.rejectorName,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send friend request rejected email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send friend request rejected email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendGroupInviteAccepted(params: {
+    to: string;
+    recipientName: string;
+    accepterName: string;
+    groupName: string;
+    groupLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `${params.accepterName} accepted your invite to ${params.groupName}`,
+        react: GroupInviteAcceptedEmail({
+          recipientName: params.recipientName,
+          accepterName: params.accepterName,
+          groupName: params.groupName,
+          groupLink: params.groupLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send group invite accepted email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send group invite accepted email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendGroupInviteRejected(params: {
+    to: string;
+    recipientName: string;
+    rejectorName: string;
+    groupName: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `${params.rejectorName} declined your invite to ${params.groupName}`,
+        react: GroupInviteRejectedEmail({
+          recipientName: params.recipientName,
+          rejectorName: params.rejectorName,
+          groupName: params.groupName,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send group invite rejected email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send group invite rejected email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
