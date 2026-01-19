@@ -102,6 +102,7 @@ export default function DebtDetailClient({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletionLoading, setDeletionLoading] = useState(false);
+  const [fileValidationError, setFileValidationError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -225,16 +226,17 @@ export default function DebtDetailClient({
 
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
-      toast.error("Invalid file type. Only JPEG, PNG, and WebP are allowed");
+      setFileValidationError("Invalid file type. Only JPEG, PNG, and WebP are allowed");
       return;
     }
 
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error("File too large. Maximum size is 10MB");
+      setFileValidationError("File too large. Maximum size is 10MB");
       return;
     }
 
+    setFileValidationError("");
     setSelectedFile(file);
 
     const reader = new FileReader();
@@ -285,6 +287,7 @@ export default function DebtDetailClient({
   const handleReset = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
+    setFileValidationError("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -760,6 +763,11 @@ export default function DebtDetailClient({
                 </Button>
               )}
             </div>
+            {fileValidationError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {fileValidationError}
+              </div>
+            )}
           </div>
 
           {previewUrl && (

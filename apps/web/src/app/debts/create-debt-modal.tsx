@@ -112,15 +112,16 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
     if (!validTypes.includes(file.type)) {
-      toast.error('Invalid file type. Only JPEG, PNG, and WebP are allowed')
+      setValidationError('Invalid file type. Only JPEG, PNG, and WebP are allowed')
       return
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('File too large. Maximum size is 10MB')
+      setValidationError('File too large. Maximum size is 10MB')
       return
     }
 
+    setValidationError('')
     setReceiptFile(file)
     const reader = new FileReader()
     reader.onloadend = () => {
@@ -131,10 +132,11 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
   const handleSubmit = async () => {
     if (!borrower || !amount || parseFloat(amount) <= 0) {
-      toast.error('Please select a borrower and enter a valid amount')
+      setValidationError('Please select a borrower and enter a valid amount')
       return
     }
 
+    setValidationError('')
     setSubmitting(true)
 
     try {
@@ -215,6 +217,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setReceiptPreview(null)
     setSearchQuery('')
     setSearchResults([])
+    setValidationError('')
     onClose()
   }
 
@@ -241,6 +244,12 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         </DialogHeader>
 
         <div className="px-6 pb-4 space-y-4 overflow-y-auto">
+          {validationError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {validationError}
+            </div>
+          )}
+
           {/* Friend Search */}
           <div className="space-y-2">
             <Label htmlFor="friendSearch">Who owes you?</Label>

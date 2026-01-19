@@ -36,6 +36,7 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
   const [description, setDescription] = useState('')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [validationError, setValidationError] = useState('')
 
   const handleOpen = () => {
     if (debt) {
@@ -52,15 +53,16 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     const hasDescriptionChange = description !== (debt.description || '')
 
     if (!hasAmountChange && !hasDescriptionChange) {
-      toast.error('Please make at least one change')
+      setValidationError('Please make at least one change')
       return
     }
 
     if (hasAmountChange && newAmount <= 0) {
-      toast.error('Amount must be greater than 0')
+      setValidationError('Amount must be greater than 0')
       return
     }
 
+    setValidationError('')
     setSubmitting(true)
 
     try {
@@ -90,6 +92,7 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     setAmount('')
     setDescription('')
     setReason('')
+    setValidationError('')
     onClose()
   }
 
@@ -121,6 +124,12 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
         </DialogHeader>
 
         <div className="px-6 pb-4 space-y-4">
+          {validationError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {validationError}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="modifyAmount">Amount ($)</Label>
             <Input

@@ -53,6 +53,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   }>>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
   const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
+  const [validationError, setValidationError] = useState('')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -133,15 +134,16 @@ export default function AIPageClient({ user }: AIPageClientProps) {
             // Inline the validation logic to avoid adding handleImageFile to dependencies
             const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
             if (!validTypes.includes(file.type)) {
-              toast.error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+              setValidationError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
               return
             }
 
             if (file.size > 10 * 1024 * 1024) {
-              toast.error('File too large. Maximum size is 10MB')
+              setValidationError('File too large. Maximum size is 10MB')
               return
             }
 
+            setValidationError('')
             const previewUrl = URL.createObjectURL(file)
             setPendingImage({ url: previewUrl, file })
           }
@@ -156,24 +158,25 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
   const handleImageFile = (file: File) => {
     if (!groupId) {
-      toast.error('Please select a group first')
+      setValidationError('Please select a group first')
       return
     }
 
     // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
     if (!validTypes.includes(file.type)) {
-      toast.error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+      setValidationError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
       return
     }
 
     // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('File too large. Maximum size is 10MB')
+      setValidationError('File too large. Maximum size is 10MB')
       return
     }
 
     // Create a preview URL
+    setValidationError('')
     const previewUrl = URL.createObjectURL(file)
     setPendingImage({ url: previewUrl, file })
   }
@@ -283,18 +286,20 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       for (let i = 0; i < debtForms.length; i++) {
         const debt = debtForms[i]
         if (!debt.borrowerId) {
-          toast.error(`Debt ${i + 1}: Please select a borrower`)
+          setValidationError(`Debt ${i + 1}: Please select a borrower`)
           setIsCreatingDebts(false)
           setCurrentDebtIndex(i)
           return
         }
         if (!debt.amount || parseFloat(debt.amount) <= 0) {
-          toast.error(`Debt ${i + 1}: Please enter a valid amount`)
+          setValidationError(`Debt ${i + 1}: Please enter a valid amount`)
           setIsCreatingDebts(false)
           setCurrentDebtIndex(i)
           return
         }
       }
+
+      setValidationError('')
 
       // Create each debt and collect their IDs
       const createdDebtIds: number[] = []
@@ -358,9 +363,11 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     // Allow submit if there's text OR a pending image
     if (!input.trim() && !pendingImage) return
     if (!groupId) {
-      toast.error('Please select a group first')
+      setValidationError('Please select a group first')
       return
     }
+
+    setValidationError('')
 
     let uploadedImageUrl: string | null = null
     let receiptId: string | null = null
@@ -620,6 +627,13 @@ export default function AIPageClient({ user }: AIPageClientProps) {
               )}
             </div>
           </div>
+
+          {/* Validation error */}
+          {validationError && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {validationError}
+            </div>
+          )}
 
           {/* Pending image preview */}
           {pendingImage && (
