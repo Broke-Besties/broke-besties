@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,7 +36,6 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
   const [description, setDescription] = useState('')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
 
   const handleOpen = () => {
     if (debt) {
@@ -52,17 +52,16 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     const hasDescriptionChange = description !== (debt.description || '')
 
     if (!hasAmountChange && !hasDescriptionChange) {
-      setError('Please make at least one change')
+      toast.error('Please make at least one change')
       return
     }
 
     if (hasAmountChange && newAmount <= 0) {
-      setError('Amount must be greater than 0')
+      toast.error('Amount must be greater than 0')
       return
     }
 
     setSubmitting(true)
-    setError('')
 
     try {
       const result = await createDebtTransaction({
@@ -74,13 +73,14 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
       })
 
       if (result.success) {
+        toast.success('Modification request sent')
         onSuccess()
         handleClose()
       } else {
-        setError(result.error || 'Failed to create modification request')
+        toast.error(result.error || 'Failed to create modification request')
       }
     } catch {
-      setError('An error occurred')
+      toast.error('An error occurred')
     } finally {
       setSubmitting(false)
     }
@@ -90,7 +90,6 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     setAmount('')
     setDescription('')
     setReason('')
-    setError('')
     onClose()
   }
 
@@ -122,12 +121,6 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
         </DialogHeader>
 
         <div className="px-6 pb-4 space-y-4">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
           <div className="space-y-2">
             <Label htmlFor="modifyAmount">Amount ($)</Label>
             <Input

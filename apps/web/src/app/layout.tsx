@@ -4,12 +4,19 @@ import { Suspense } from "react";
 import Link from "next/link";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { AppLoading } from "@/components/app-loading";
-import { LogoutButton } from "@/components/logout-button";
 import { NotificationsWrapper } from "@/components/notifications-wrapper";
+import { UserDropdownMenu } from "@/components/user-dropdown-menu";
+import { Toaster } from "@/components/ui/sonner";
 import { getUser } from "@/lib/supabase";
+import { userService } from "@/services/user.service";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
 const overpass = Overpass({
   variable: "--font-overpass",
@@ -33,19 +40,32 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getUser();
+  const authUser = await getUser();
+
+  // Fetch full user data from database if authenticated
+  const user = authUser ? await userService.getUserById(authUser.id).catch(() => null) : null;
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head />
+
       <body
         className={`${overpass.variable} ${geistMono.variable} antialiased`}
       >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
         <SidebarProvider defaultOpen={false}>
           {user && <AppSidebar user={user} />}
           <SidebarInset>
             <header
               className={`sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60 ${
-                user ? "md:px-8 md:ml-52 md:mr-52" : "md:px-8 max-w-5xl mx-auto w-full"
+                user
+                  ? "md:px-8 md:ml-52 md:mr-52"
+                  : "md:px-8 max-w-5xl mx-auto w-full"
               }`}
             >
               <div className="flex items-center gap-2">
@@ -58,10 +78,7 @@ export default async function RootLayout({
                     <Suspense fallback={null}>
                       <NotificationsWrapper />
                     </Suspense>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href="/profile">Profile</Link>
-                    </Button>
-                    <LogoutButton />
+                    <UserDropdownMenu user={user} />
                   </>
                 ) : (
                   <>
@@ -77,13 +94,17 @@ export default async function RootLayout({
             </header>
             <main
               className={`flex-1 overflow-auto p-4 ${
-                user ? "md:py-6 md:px-8 md:ml-52 md:mr-52" : "md:py-6 md:px-8 max-w-5xl mx-auto w-full"
+                user
+                  ? "md:py-6 md:px-8 md:ml-52 md:mr-52"
+                  : "md:py-6 md:px-8 max-w-5xl mx-auto w-full"
               }`}
             >
               <Suspense fallback={<AppLoading />}>{children}</Suspense>
             </main>
           </SidebarInset>
         </SidebarProvider>
+        <Toaster position="top-right" richColors closeButton />
+        </ThemeProvider>
       </body>
     </html>
   );

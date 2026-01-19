@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -32,13 +33,11 @@ type DeleteDebtModalProps = {
 export function DeleteDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: DeleteDebtModalProps) {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
 
   const handleConfirm = async () => {
     if (!debt) return
 
     setSubmitting(true)
-    setError('')
 
     try {
       const result = await createDebtTransaction({
@@ -48,13 +47,14 @@ export function DeleteDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
       })
 
       if (result.success) {
+        toast.success('Deletion request sent')
         onSuccess()
         handleClose()
       } else {
-        setError(result.error || 'Failed to create deletion request')
+        toast.error(result.error || 'Failed to create deletion request')
       }
     } catch {
-      setError('An error occurred')
+      toast.error('An error occurred')
     } finally {
       setSubmitting(false)
     }
@@ -62,7 +62,6 @@ export function DeleteDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
 
   const handleClose = () => {
     setReason('')
-    setError('')
     onClose()
   }
 
@@ -89,12 +88,6 @@ export function DeleteDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
         </DialogHeader>
 
         <div className="px-6 pb-4 space-y-4">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
           <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Amount</span>

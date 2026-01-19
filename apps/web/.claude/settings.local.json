@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npx supabase stop)",
+      "Bash(npx supabase start)",
+      "Bash(npm run build:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm dlx:*)",
+      "Bash(pnpm build:*)"
     ]
   }
 }

@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { User } from '@prisma/client'
+import { avatarService } from '@/services/avatar.service'
 
 export class UserService {
   /**
-   * Get user by ID
+   * Get user by ID with resolved avatar URL
    */
   async getUserById(userId: string) {
     const user = await prisma.user.findUnique({
@@ -12,6 +13,12 @@ export class UserService {
 
     if (!user) {
       throw new Error('User not found')
+    }
+
+    // Resolve avatar file path to signed URL (skip if already a full URL from old data)
+    if (user.profilePictureUrl && !user.profilePictureUrl.startsWith('http')) {
+      const signedUrl = await avatarService.getSignedUrl(user.profilePictureUrl)
+      return { ...user, profilePictureUrl: signedUrl }
     }
 
     return user

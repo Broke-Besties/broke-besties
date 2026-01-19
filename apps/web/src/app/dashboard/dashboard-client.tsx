@@ -7,6 +7,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import NumberFlow from "@number-flow/react";
 import { TrendingUp, TrendingDown, Repeat, Calendar, Plus, AlertTriangle, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -229,7 +230,6 @@ export default function DashboardPageClient({
   const [showPendingBanner, setShowPendingBanner] = useState(
     initialPendingTransactions.length > 0
   );
-  const [error, setError] = useState("");
   const [chartView, setChartView] = useState<"owed" | "owing">("owed");
   const router = useRouter();
 
@@ -246,7 +246,7 @@ export default function DashboardPageClient({
       const result = await updateTabStatus(tabId, newStatus);
 
       if (!result.success) {
-        setError(result.error || "Failed to update tab status");
+        toast.error(result.error || "Failed to update tab status");
         if (oldStatus) {
           setTabs((prevTabs) =>
             prevTabs.map((tab) =>
@@ -256,8 +256,9 @@ export default function DashboardPageClient({
         }
         return;
       }
+      toast.success("Tab updated");
     } catch {
-      setError("An error occurred while updating the tab status");
+      toast.error("An error occurred while updating the tab status");
       if (oldStatus) {
         setTabs((prevTabs) =>
           prevTabs.map((tab) =>
@@ -500,12 +501,6 @@ export default function DashboardPageClient({
           Add debt
         </Button>
       </div>
-
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
 
       {/* Four Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">

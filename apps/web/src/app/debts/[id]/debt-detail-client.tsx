@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,7 +101,6 @@ export default function DebtDetailClient({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
   const [deletionLoading, setDeletionLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -147,7 +147,6 @@ export default function DebtDetailClient({
 
   const handleCreateTransaction = async () => {
     setSubmitting(true);
-    setError("");
 
     try {
       const result = await createDebtTransaction({
@@ -164,11 +163,12 @@ export default function DebtDetailClient({
         throw new Error(result.error);
       }
 
+      toast.success("Request submitted successfully");
       setShowTransactionModal(false);
       setReason("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create request");
+      toast.error(err instanceof Error ? err.message : "Failed to create request");
     } finally {
       setSubmitting(false);
     }
@@ -178,7 +178,6 @@ export default function DebtDetailClient({
     if (!pendingTransaction) return;
 
     setSubmitting(true);
-    setError("");
 
     try {
       const result = await respondToDebtTransaction(
@@ -190,9 +189,10 @@ export default function DebtDetailClient({
         throw new Error(result.error);
       }
 
+      toast.success(approve ? "Request approved" : "Request rejected");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to respond");
+      toast.error(err instanceof Error ? err.message : "Failed to respond");
     } finally {
       setSubmitting(false);
     }
@@ -202,7 +202,6 @@ export default function DebtDetailClient({
     if (!pendingTransaction) return;
 
     setSubmitting(true);
-    setError("");
 
     try {
       const result = await cancelDebtTransaction(pendingTransaction.id);
@@ -211,9 +210,10 @@ export default function DebtDetailClient({
         throw new Error(result.error);
       }
 
+      toast.success("Request cancelled");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel");
+      toast.error(err instanceof Error ? err.message : "Failed to cancel");
     } finally {
       setSubmitting(false);
     }
@@ -225,18 +225,17 @@ export default function DebtDetailClient({
 
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
-      setError("Invalid file type. Only JPEG, PNG, and WebP are allowed");
+      toast.error("Invalid file type. Only JPEG, PNG, and WebP are allowed");
       return;
     }
 
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      setError("File too large. Maximum size is 10MB");
+      toast.error("File too large. Maximum size is 10MB");
       return;
     }
 
     setSelectedFile(file);
-    setError("");
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -249,7 +248,6 @@ export default function DebtDetailClient({
     if (!selectedFile) return;
 
     setUploading(true);
-    setError("");
 
     try {
       const formData = new FormData();
@@ -267,6 +265,7 @@ export default function DebtDetailClient({
         throw new Error(data.error || "Failed to upload receipt");
       }
 
+      toast.success("Receipt uploaded successfully");
       // Reset form
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -277,7 +276,7 @@ export default function DebtDetailClient({
       // Refresh to get updated receipts
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      toast.error(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setUploading(false);
     }
@@ -286,7 +285,6 @@ export default function DebtDetailClient({
   const handleReset = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
-    setError("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -300,7 +298,6 @@ export default function DebtDetailClient({
   // Alert handlers
   const handleSaveAlert = async () => {
     setAlertSubmitting(true);
-    setError("");
 
     try {
       if (debt.alert) {
@@ -336,10 +333,11 @@ export default function DebtDetailClient({
         }
       }
 
+      toast.success("Alert saved successfully");
       setShowAlertModal(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save alert");
+      toast.error(err instanceof Error ? err.message : "Failed to save alert");
     } finally {
       setAlertSubmitting(false);
     }
@@ -349,7 +347,6 @@ export default function DebtDetailClient({
     if (!debt.alert) return;
 
     setAlertSubmitting(true);
-    setError("");
 
     try {
       const response = await fetch(`/api/alerts/${debt.alert.id}`, {
@@ -361,12 +358,13 @@ export default function DebtDetailClient({
         throw new Error(data.error || "Failed to delete alert");
       }
 
+      toast.success("Alert deleted");
       setShowAlertModal(false);
       setAlertMessage("");
       setAlertDeadline("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete alert");
+      toast.error(err instanceof Error ? err.message : "Failed to delete alert");
     } finally {
       setAlertSubmitting(false);
     }
@@ -374,7 +372,6 @@ export default function DebtDetailClient({
 
   const handleMarkAsPaid = async () => {
     setMarkingPaid(true);
-    setError("");
 
     try {
       const result = await createConfirmPaidTransaction(debt.id);
@@ -383,9 +380,10 @@ export default function DebtDetailClient({
         throw new Error(result.error);
       }
 
+      toast.success("Payment confirmation request sent");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to mark as paid");
+      toast.error(err instanceof Error ? err.message : "Failed to mark as paid");
     } finally {
       setMarkingPaid(false);
     }
@@ -406,12 +404,6 @@ export default function DebtDetailClient({
           Back to dashboard
         </Button>
       </div>
-
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
 
       {/* Pending Transaction Banner */}
       {pendingTransaction && (

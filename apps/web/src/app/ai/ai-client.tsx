@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -36,7 +37,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
   const [groupId, setGroupId] = useState('')
   const [groups, setGroups] = useState<Group[]>([])
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
@@ -79,7 +79,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         }
       } catch (err) {
         console.error('Error fetching groups:', err)
-        setError('Failed to load groups')
+        toast.error('Failed to load groups')
       } finally {
         setIsLoadingGroups(false)
       }
@@ -133,18 +133,17 @@ export default function AIPageClient({ user }: AIPageClientProps) {
             // Inline the validation logic to avoid adding handleImageFile to dependencies
             const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
             if (!validTypes.includes(file.type)) {
-              setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+              toast.error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
               return
             }
 
             if (file.size > 10 * 1024 * 1024) {
-              setError('File too large. Maximum size is 10MB')
+              toast.error('File too large. Maximum size is 10MB')
               return
             }
 
             const previewUrl = URL.createObjectURL(file)
             setPendingImage({ url: previewUrl, file })
-            setError('')
           }
           break
         }
@@ -157,27 +156,26 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
   const handleImageFile = (file: File) => {
     if (!groupId) {
-      setError('Please select a group first')
+      toast.error('Please select a group first')
       return
     }
 
     // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
     if (!validTypes.includes(file.type)) {
-      setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+      toast.error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
       return
     }
 
     // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
-      setError('File too large. Maximum size is 10MB')
+      toast.error('File too large. Maximum size is 10MB')
       return
     }
 
     // Create a preview URL
     const previewUrl = URL.createObjectURL(file)
     setPendingImage({ url: previewUrl, file })
-    setError('')
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -279,20 +277,19 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
   const handleCreateDebts = async () => {
     setIsCreatingDebts(true)
-    setError('')
 
     try {
       // Validate all debts have required fields
       for (let i = 0; i < debtForms.length; i++) {
         const debt = debtForms[i]
         if (!debt.borrowerId) {
-          setError(`Debt ${i + 1}: Please select a borrower`)
+          toast.error(`Debt ${i + 1}: Please select a borrower`)
           setIsCreatingDebts(false)
           setCurrentDebtIndex(i)
           return
         }
         if (!debt.amount || parseFloat(debt.amount) <= 0) {
-          setError(`Debt ${i + 1}: Please enter a valid amount`)
+          toast.error(`Debt ${i + 1}: Please enter a valid amount`)
           setIsCreatingDebts(false)
           setCurrentDebtIndex(i)
           return
@@ -310,7 +307,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         })
 
         if (!result.success) {
-          setError(result.error || 'Failed to create debt')
+          toast.error(result.error || 'Failed to create debt')
           setIsCreatingDebts(false)
           return
         }
@@ -330,6 +327,9 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         }
       }
 
+      // Show success toast
+      toast.success(`Successfully created ${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}!`)
+
       // Add success message
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -345,7 +345,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       // Refresh the page data
       router.refresh()
     } catch (err) {
-      setError('An error occurred while creating debts')
+      toast.error('An error occurred while creating debts')
       console.error('Error:', err)
     } finally {
       setIsCreatingDebts(false)
@@ -358,7 +358,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     // Allow submit if there's text OR a pending image
     if (!input.trim() && !pendingImage) return
     if (!groupId) {
-      setError('Please select a group first')
+      toast.error('Please select a group first')
       return
     }
 
@@ -376,7 +376,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         // Note: We only need the URL now, ReceiptTool will fetch the image itself
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
-        setError(errorMessage)
+        toast.error(errorMessage)
         setIsUploading(false)
         return
       }
@@ -394,7 +394,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     setInput('')
     clearPendingImage()
     setIsLoading(true)
-    setError('')
 
     try {
       // Convert our message format to LangChain format
@@ -450,7 +449,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       setMessages(prev => [...prev, assistantMessage])
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
-      setError(errorMessage)
+      toast.error(errorMessage)
       console.error('Error:', err)
     } finally {
       setIsLoading(false)
@@ -621,12 +620,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
               )}
             </div>
           </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">
-              {error}
-            </div>
-          )}
 
           {/* Pending image preview */}
           {pendingImage && (

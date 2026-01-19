@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Search, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -62,7 +63,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   const [recentFriends, setRecentFriends] = useState<Friend[]>([])
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
+  const [validationError, setValidationError] = useState('')
 
   // Load recent friends and groups when modal opens
   useEffect(() => {
@@ -111,12 +112,12 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
     if (!validTypes.includes(file.type)) {
-      setError('Invalid file type. Only JPEG, PNG, and WebP are allowed')
+      toast.error('Invalid file type. Only JPEG, PNG, and WebP are allowed')
       return
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError('File too large. Maximum size is 10MB')
+      toast.error('File too large. Maximum size is 10MB')
       return
     }
 
@@ -126,17 +127,15 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
       setReceiptPreview(reader.result as string)
     }
     reader.readAsDataURL(file)
-    setError('')
   }
 
   const handleSubmit = async () => {
     if (!borrower || !amount || parseFloat(amount) <= 0) {
-      setError('Please select a borrower and enter a valid amount')
+      toast.error('Please select a borrower and enter a valid amount')
       return
     }
 
     setSubmitting(true)
-    setError('')
 
     try {
       // Upload receipt if there is one
@@ -192,13 +191,14 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
             // Don't fail the whole operation if alert creation fails
           }
         }
+        toast.success('Debt created successfully')
         onSuccess()
         handleClose()
       } else {
-        setError(result.error || 'Failed to create debt')
+        toast.error(result.error || 'Failed to create debt')
       }
     } catch {
-      setError('An error occurred while creating the debt')
+      toast.error('An error occurred while creating the debt')
     } finally {
       setSubmitting(false)
     }
@@ -215,7 +215,6 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setReceiptPreview(null)
     setSearchQuery('')
     setSearchResults([])
-    setError('')
     onClose()
   }
 
@@ -242,12 +241,6 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         </DialogHeader>
 
         <div className="px-6 pb-4 space-y-4 overflow-y-auto">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
           {/* Friend Search */}
           <div className="space-y-2">
             <Label htmlFor="friendSearch">Who owes you?</Label>
