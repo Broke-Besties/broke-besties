@@ -1,11 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { FriendPolicy } from "@/policies/friend.policy";
+import { emailService } from "@/services/email.service";
 
 export class FriendService {
   /**
    * Send a friend request (or auto-accept if reverse request exists)
    */
   async sendFriendRequest(requesterId: string, recipientId: string) {
+    console.log("[FriendService] sendFriendRequest called", {
+      requesterId,
+      recipientId,
+      recipientIdType: typeof recipientId,
+    });
+
     if (!recipientId) {
       throw new Error("Recipient ID is required");
     }
@@ -15,11 +22,30 @@ export class FriendService {
     }
 
     // Check if recipient exists
+    console.log(
+      "[FriendService] Looking for user in database with ID:",
+      recipientId,
+    );
     const recipient = await prisma.user.findUnique({
       where: { id: recipientId },
     });
 
+    console.log("[FriendService] User lookup result:", {
+      found: !!recipient,
+      recipientEmail: recipient?.email,
+      recipientName: recipient?.name,
+    });
+
     if (!recipient) {
+      console.error(
+        "[FriendService] User not found in database for ID:",
+        recipientId,
+      );
+      // Log all users to help debug
+      const allUsers = await prisma.user.findMany({
+        select: { id: true, email: true, name: true },
+      });
+      console.error("[FriendService] Available users in DB:", allUsers);
       throw new Error("User not found");
     }
 
@@ -47,6 +73,26 @@ export class FriendService {
             recipient: true,
           },
         });
+
+        // Send emails to BOTH users notifying them they're now friends
+        const friendsLink = `${process.env.NEXT_PUBLIC_APP_URL}/friends`;
+
+        // Email to the original requester (person who had the pending request)
+        await emailService.sendFriendRequestAccepted({
+          to: updated.requester.email,
+          recipientName: updated.requester.name,
+          friendName: updated.recipient.name,
+          friendsLink,
+        });
+
+        // Email to the person who just sent the request (causing auto-accept)
+        await emailService.sendFriendRequestAccepted({
+          to: updated.recipient.email,
+          recipientName: updated.recipient.name,
+          friendName: updated.requester.name,
+          friendsLink,
+        });
+
         return { friend: updated, autoAccepted: true };
       }
 
@@ -67,6 +113,14 @@ export class FriendService {
         requester: true,
         recipient: true,
       },
+    });
+
+    // Send email notification to recipient
+    await emailService.sendFriendRequest({
+      to: friend.recipient.email,
+      recipientName: friend.recipient.name,
+      requesterName: friend.requester.name,
+      friendsLink: `${process.env.NEXT_PUBLIC_APP_URL}/friends`,
     });
 
     return { friend, autoAccepted: false };
@@ -97,6 +151,25 @@ export class FriendService {
       },
     });
 
+    // Send emails to BOTH users notifying them they're now friends
+    const friendsLink = `${process.env.NEXT_PUBLIC_APP_URL}/friends`;
+
+    // Email to the requester (original sender of friend request)
+    await emailService.sendFriendRequestAccepted({
+      to: updated.requester.email,
+      recipientName: updated.requester.name,
+      friendName: updated.recipient.name,
+      friendsLink,
+    });
+
+    // Email to the recipient (person who just accepted)
+    await emailService.sendFriendRequestAccepted({
+      to: updated.recipient.email,
+      recipientName: updated.recipient.name,
+      friendName: updated.requester.name,
+      friendsLink,
+    });
+
     return updated;
   }
 
@@ -106,6 +179,10 @@ export class FriendService {
   async rejectFriendRequest(friendId: number, userId: string) {
     const friend = await prisma.friend.findUnique({
       where: { id: friendId },
+      include: {
+        requester: true,
+        recipient: true,
+      },
     });
 
     if (!friend) {
@@ -115,6 +192,13 @@ export class FriendService {
     if (!FriendPolicy.canAcceptOrReject(userId, friend)) {
       throw new Error("You cannot reject this friend request");
     }
+
+    // Send email notification to the requester (person who sent the friend request)
+    await emailService.sendFriendRequestRejected({
+      to: friend.requester.email,
+      recipientName: friend.requester.name,
+      rejectorName: friend.recipient.name,
+    });
 
     await prisma.friend.delete({
       where: { id: friendId },
@@ -332,7 +416,7 @@ export class FriendService {
       .filter(
         (f) =>
           f.friend.name.toLowerCase().includes(searchQuery) ||
-          f.friend.email.toLowerCase().includes(searchQuery)
+          f.friend.email.toLowerCase().includes(searchQuery),
       );
   }
 }

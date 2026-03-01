@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { TabPolicy } from '@/policies/tab.policy'
+import { emailService } from './email.service'
 
 type CreateTabParams = {
   amount: number
@@ -52,6 +53,33 @@ export class TabService {
         status,
       },
     })
+
+    // Send email notification
+    try {
+      // Get user details
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, name: true },
+      })
+
+      if (user) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const tabsLink = `${baseUrl}/tabs`
+
+        await emailService.sendTabCreated({
+          to: user.email,
+          userName: user.name || user.email,
+          personName: personName.trim(),
+          amount,
+          description: description.trim(),
+          isLending: status === 'lending',
+          tabsLink,
+        })
+      }
+    } catch (emailError) {
+      // Log error but don't fail the tab creation
+      console.error('Failed to send tab created email:', emailError)
+    }
 
     return tab
   }
@@ -151,6 +179,35 @@ export class TabService {
       where: { id: tabId },
       data: updateData,
     })
+
+    // Send email notification if status was changed to 'paid'
+    if (status === 'paid' && existingTab.status !== 'paid') {
+      try {
+        // Get user details
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true, name: true },
+        })
+
+        if (user) {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+          const tabsLink = `${baseUrl}/tabs`
+
+          await emailService.sendTabMarkedPaid({
+            to: user.email,
+            userName: user.name || user.email,
+            personName: tab.personName,
+            amount: tab.amount,
+            description: tab.description,
+            wasLending: existingTab.status === 'lending',
+            tabsLink,
+          })
+        }
+      } catch (emailError) {
+        // Log error but don't fail the tab update
+        console.error('Failed to send tab marked paid email:', emailError)
+      }
+    }
 
     return tab
   }
