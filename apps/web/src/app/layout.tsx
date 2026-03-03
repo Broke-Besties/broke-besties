@@ -10,6 +10,8 @@ import { AppLoading } from "@/components/app-loading";
 import { LogoutButton } from "@/components/logout-button";
 import { NotificationsWrapper } from "@/components/notifications-wrapper";
 import { getUser } from "@/lib/supabase";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ModeToggle } from "@/components/mode-toggle";
 
 const overpass = Overpass({
   variable: "--font-overpass",
@@ -36,10 +38,16 @@ export default async function RootLayout({
   const user = await getUser();
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${overpass.variable} ${geistMono.variable} antialiased`}
       >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
         <SidebarProvider defaultOpen={false}>
           {user && <AppSidebar user={user} />}
           <SidebarInset>
@@ -53,6 +61,7 @@ export default async function RootLayout({
                 <span className="text-lg font-semibold">Broke Besties</span>
               </div>
               <div className="flex items-center gap-2">
+                <ModeToggle />
                 {user ? (
                   <>
                     <Suspense fallback={null}>
@@ -84,6 +93,7 @@ export default async function RootLayout({
             </main>
           </SidebarInset>
         </SidebarProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

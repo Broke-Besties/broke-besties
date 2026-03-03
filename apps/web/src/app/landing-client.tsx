@@ -19,7 +19,7 @@ export function LandingPageClient() {
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight">
           Split costs,
           <br />
-          <Highlighter action="highlight" color="#1d4ed8">
+          <Highlighter action="highlight" color="#10b981">
             not friendships
           </Highlighter>
         </h1>
@@ -45,7 +45,7 @@ export function LandingPageClient() {
           <h2 className="text-3xl md:text-4xl font-bold">
             Your shared expenses
             <br />
-            <Highlighter action="underline" color="#1d4ed8">
+            <Highlighter action="underline" color="#10b981">
               need clarity.
             </Highlighter>
           </h2>
