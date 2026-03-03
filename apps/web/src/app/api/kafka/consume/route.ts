@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kafka, TOPICS } from "@/lib/kafka";
 import { handlePaymentSuccess as databaseHandler } from "@/events/listeners/database.listener";
-import { handlePaymentSuccess as notificationHandler } from "@/events/listeners/notification.listener";
-import { PaymentSuccessPayload } from "@/events/types";
+import { handlePaymentSuccess as notificationSuccessHandler } from "@/events/listeners/notification.listener";
+import { handlePaymentFailed as notificationFailureHandler } from "@/events/listeners/notification.listener";
+import { handlePaymentFailed as paymentFailureHandler } from "@/events/listeners/payment-failure.listener";
+import { PaymentSuccessPayload, PaymentFailedPayload } from "@/events/types";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,30 +24,45 @@ export async function POST(request: NextRequest) {
     });
 
     await consumer.connect();
-    await consumer.subscribe({ topic: TOPICS.PAYMENT_SUCCESS, fromBeginning: false });
+
+    // Subscribe to both payment success and failure topics
+    await consumer.subscribe({
+      topics: [TOPICS.PAYMENT_SUCCESS, TOPICS.PAYMENT_FAILED],
+      fromBeginning: false,
+    });
 
     let messageCount = 0;
     let lastError: Error | null = null;
 
     await consumer.run({
-      eachMessage: async ({ message }: any) => {
+      eachMessage: async ({ topic, message }: any) => {
         try {
           if (!message.value) {
             console.warn("[Consumer] Received message with no value");
             return;
           }
 
-          const data: PaymentSuccessPayload = JSON.parse(
-            message.value.toString()
-          );
+          const payload = JSON.parse(message.value.toString());
+          console.log(`[Consumer] Processing message from ${topic}:`, payload);
 
-          console.log(`[Consumer] Processing message:`, data);
-
-          // Run both listeners
-          await Promise.allSettled([
-            databaseHandler(data),
-            notificationHandler(data),
-          ]);
+          // Route to appropriate handlers based on topic
+          if (topic === TOPICS.PAYMENT_SUCCESS) {
+            const data: PaymentSuccessPayload = payload;
+            // Run database and notification listeners in parallel
+            await Promise.allSettled([
+              databaseHandler(data),
+              notificationSuccessHandler(data),
+            ]);
+          } else if (topic === TOPICS.PAYMENT_FAILED) {
+            const data: PaymentFailedPayload = payload;
+            // Run payment failure and notification failure listeners in parallel
+            await Promise.allSettled([
+              paymentFailureHandler(data),
+              notificationFailureHandler(data),
+            ]);
+          } else {
+            console.warn(`[Consumer] Unknown topic: ${topic}`);
+          }
 
           messageCount++;
         } catch (error) {

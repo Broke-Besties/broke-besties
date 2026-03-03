@@ -1,5 +1,5 @@
 import { kafka, TOPICS } from "@/lib/kafka";
-import { PaymentSuccessPayload } from "./types";
+import { PaymentSuccessPayload, PaymentFailedPayload } from "./types";
 
 export async function publishPaymentSuccess(
   payload: PaymentSuccessPayload
@@ -18,6 +18,33 @@ export async function publishPaymentSuccess(
     });
     console.log(
       `[Producer] Message published to ${TOPICS.PAYMENT_SUCCESS}:`,
+      payload
+    );
+  } catch (error) {
+    console.error("[Producer] Failed to publish message:", error);
+    throw error;
+  } finally {
+    await producer.disconnect();
+  }
+}
+
+export async function publishPaymentFailed(
+  payload: PaymentFailedPayload
+): Promise<void> {
+  const producer = kafka.producer();
+
+  try {
+    await producer.connect();
+    await producer.send({
+      topic: TOPICS.PAYMENT_FAILED,
+      messages: [
+        {
+          value: JSON.stringify(payload),
+        },
+      ],
+    });
+    console.log(
+      `[Producer] Message published to ${TOPICS.PAYMENT_FAILED}:`,
       payload
     );
   } catch (error) {

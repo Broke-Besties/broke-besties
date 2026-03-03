@@ -18,6 +18,13 @@ model User {
   email                     String                     @unique
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime                   @updatedAt
+
+  // Stripe Connect fields
+  stripe_connect_id         String?                    @unique
+  stripe_onboarding_completed Boolean                  @default(false)
+  stripe_charges_enabled    Boolean                    @default(false)
+  stripe_account_verified_at DateTime?
+
   members                   GroupMember[]
   sentInvites               GroupInvite[]              @relation("InviteSender")
   receivedInvites           GroupInvite[]              @relation("InviteReceiver")
@@ -31,6 +38,7 @@ model User {
   recurringPaymentBorrowers RecurringPaymentBorrower[]
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
+  paymentAttempts           PaymentAttempt[]
 }
 
 model Group {
@@ -98,6 +106,7 @@ model Debt {
   alert        Alert?            @relation(fields: [alertId], references: [id], onDelete: SetNull)
   transactions DebtTransaction[]
   receipts     Receipt[]
+  paymentAttempts PaymentAttempt[]
 
   @@index([lenderId])
   @@index([borrowerId])
@@ -231,5 +240,46 @@ model Friend {
   @@unique([requesterId, recipientId])
   @@index([requesterId])
   @@index([recipientId])
+  @@index([status])
+}
+
+model PaymentAttempt {
+  id String @id @default(cuid())
+
+  // Stripe data
+  stripe_session_id String @unique
+  stripe_payment_intent_id String?
+  stripe_user_id String?
+
+  // Debt reference
+  debtId Int
+  debt Debt @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  // Idempotency
+  idempotency_key String @unique
+
+  // Status tracking
+  status String @default("pending") // "pending", "completed", "failed", "expired"
+  amount Int // in cents
+  currency String @default("usd")
+
+  // Webhook tracking
+  webhook_event_id String? @unique // Stripe event ID
+  webhook_processed_at DateTime?
+
+  // Error tracking
+  stripe_error_code String?
+  stripe_error_message String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relation to borrower for tracking
+  borrower User? @relation(fields: [stripe_user_id], references: [id], onDelete: SetNull)
+
+  @@index([debtId])
+  @@index([stripe_session_id])
+  @@index([idempotency_key])
   @@index([status])
 }

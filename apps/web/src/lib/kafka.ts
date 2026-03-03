@@ -2,6 +2,7 @@ import { Kafka, logLevel } from "kafkajs";
 
 export const TOPICS = {
   PAYMENT_SUCCESS: "payment.success",
+  PAYMENT_FAILED: "payment.failed",
 } as const;
 
 function createKafkaClient(): Kafka {

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { PaymentSuccessPayload } from "../types";
+import { PaymentSuccessPayload, PaymentFailedPayload } from "../types";
 
 export async function handlePaymentSuccess(
   payload: PaymentSuccessPayload
@@ -23,4 +23,34 @@ export async function handlePaymentSuccess(
   // TODO: Create a dedicated DebtSettledEmail template and send it here.
   // For now, log the settlement details. When the email template is ready:
   // await emailService.sendDebtSettledEmail({ lender: debt.lender, borrower: debt.borrower, amount, provider: providerType });
+}
+
+export async function handlePaymentFailed(
+  payload: PaymentFailedPayload
+): Promise<void> {
+  const { debtId, amount, reason, providerType } = payload;
+
+  const debt = await prisma.debt.findUnique({
+    where: { id: debtId },
+    include: { lender: true, borrower: true },
+  });
+
+  if (!debt) {
+    console.warn(`[NotificationListener] Debt ${debtId} not found, skipping`);
+    return;
+  }
+
+  console.log(
+    `[NotificationListener] Payment failed for debt ${debtId}: ${reason}`
+  );
+
+  // TODO: Send payment failure notification to borrower
+  // When email service is integrated:
+  // await emailService.sendPaymentFailedEmail(debt.borrower.email, {
+  //   debtId,
+  //   amount,
+  //   reason,
+  //   lenderName: debt.lender.name,
+  //   retryUrl: `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debtId}/pay`,
+  // });
 }
