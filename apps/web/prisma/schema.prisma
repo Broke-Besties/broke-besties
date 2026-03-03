@@ -88,6 +88,10 @@ model Debt {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  settledAt            DateTime?
+  settlementProvider   String?    // "stripe" | "coinbase" | "mock"
+  settlementReference  String?    // external transaction ID
+
   lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
   borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
   group        Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
