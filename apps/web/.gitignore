@@ -45,3 +45,5 @@ next-env.d.ts
 # claude code (personal use only)
 .claude/
 .mcp.json
+.agent/
+
