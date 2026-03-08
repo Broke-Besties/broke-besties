@@ -27,36 +27,55 @@ export async function POST(request: NextRequest) {
     let messageCount = 0;
     let lastError: Error | null = null;
 
-    await consumer.run({
-      eachMessage: async ({ message }: any) => {
-        try {
-          if (!message.value) {
-            console.warn("[Consumer] Received message with no value");
-            return;
-          }
+    // Use eachBatch to process all pending messages then stop.
+    // consumer.run() loops forever; we instead grab one batch and disconnect.
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => resolve(), 8000); // max 8s per cron invocation
 
-          const data: PaymentSuccessPayload = JSON.parse(
-            message.value.toString()
-          );
+      consumer
+        .run({
+          eachBatch: async ({ batch, heartbeat, resolveOffset, commitOffsetsIfNecessary }) => {
+            for (const message of batch.messages) {
+              try {
+                if (!message.value) {
+                  console.warn("[Consumer] Received message with no value");
+                  resolveOffset(message.offset);
+                  continue;
+                }
 
-          console.log(`[Consumer] Processing message:`, data);
+                const data: PaymentSuccessPayload = JSON.parse(
+                  message.value.toString()
+                );
 
-          // Run both listeners
-          await Promise.allSettled([
-            databaseHandler(data),
-            notificationHandler(data),
-          ]);
+                console.log(`[Consumer] Processing message:`, data);
 
-          messageCount++;
-        } catch (error) {
-          console.error("[Consumer] Error processing message:", error);
-          lastError = error instanceof Error ? error : new Error(String(error));
-        }
-      },
+                await Promise.allSettled([
+                  databaseHandler(data),
+                  notificationHandler(data),
+                ]);
+
+                messageCount++;
+              } catch (error) {
+                console.error("[Consumer] Error processing message:", error);
+                lastError = error instanceof Error ? error : new Error(String(error));
+              }
+
+              resolveOffset(message.offset);
+              await heartbeat();
+            }
+
+            await commitOffsetsIfNecessary();
+          },
+        })
+        .then(() => {
+          clearTimeout(timeout);
+          resolve();
+        })
+        .catch((err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
     });
-
-    // Run for 1 second to consume pending messages
-    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     await consumer.disconnect();
 

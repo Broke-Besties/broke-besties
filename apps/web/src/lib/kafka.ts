@@ -5,11 +5,11 @@ export const TOPICS = {
 } as const;
 
 function createKafkaClient(): Kafka {
-  const brokers = (process.env.KAFKA_BROKERS || "").split(",");
-
   if (!process.env.KAFKA_BROKERS) {
     throw new Error("KAFKA_BROKERS environment variable is not set");
   }
+
+  const brokers = process.env.KAFKA_BROKERS.split(",");
 
   const ssl =
     process.env.KAFKA_CA_CERT ||
