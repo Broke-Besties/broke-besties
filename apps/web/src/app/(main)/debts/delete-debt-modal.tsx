@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { createDebtTransaction } from '@/app/groups/[id]/actions'
+import { createDebtTransaction } from '@/app/(main)/groups/[id]/actions'
 
 type DeleteDebtModalProps = {
   isOpen: boolean

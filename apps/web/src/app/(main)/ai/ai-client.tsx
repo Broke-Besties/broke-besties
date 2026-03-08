@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { DebtFormItem } from '@/app/groups/[id]/debt-form-item'
-import { createDebt } from '@/app/groups/[id]/actions'
+import { DebtFormItem } from '@/app/(main)/groups/[id]/debt-form-item'
+import { createDebt } from '@/app/(main)/groups/[id]/actions'
 
 type Message = {
   role: 'user' | 'assistant' | 'system'

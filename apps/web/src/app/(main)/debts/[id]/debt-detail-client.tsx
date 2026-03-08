@@ -27,8 +27,8 @@ import {
   createDebtTransaction,
   respondToDebtTransaction,
   cancelDebtTransaction,
-} from "@/app/groups/[id]/actions";
-import { createConfirmPaidTransaction } from "@/app/debts/actions";
+} from "@/app/(main)/groups/[id]/actions";
+import { createConfirmPaidTransaction } from "@/app/(main)/debts/actions";
 
 type Receipt = {
   id: string;

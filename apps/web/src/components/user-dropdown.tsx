@@ -2,6 +2,7 @@
 
 import { useTheme } from "next-themes"
 import Link from "next/link"
+import { useTransition } from "react"
 import { User } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,70 +12,91 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, Settings, Sun, Moon, Monitor } from "lucide-react"
+import { Settings, Newspaper, FlaskConical } from "lucide-react"
+import { signOut } from "@/app/auth/actions"
 
-export function UserDropdown({ user }: { user: User }) {
+const themeOptions = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "System" },
+] as const
+
+export function UserDropdown({ user, userName }: { user: User; userName: string }) {
   const { theme, setTheme } = useTheme()
+  const [isPending, startTransition] = useTransition()
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-            {user.email?.[0].toUpperCase() || "U"}
+        <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
+          <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
+            {userName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U"}
           </div>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.email}</p>
-          </div>
+      <DropdownMenuContent align="end" className="w-52 p-1 rounded-sm text-xs">
+        <DropdownMenuLabel className="font-normal px-2 py-1.5">
+          {userName && (
+            <p className="text-xs font-semibold leading-tight truncate">
+              {userName}
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground leading-tight truncate">
+            {user.email}
+          </p>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+
+        <div className="h-[1px] bg-border/50 mx-1 my-0.5" />
+
         <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem asChild className="py-1 px-2 text-xs rounded-none">
             <Link href="/settings">
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
+              <Settings size={13} className="mr-2 text-muted-foreground" />
+              Account preferences
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem className="py-1 px-2 text-xs rounded-none">
+            <FlaskConical size={13} className="mr-2 text-muted-foreground" />
+            Feature previews
+          </DropdownMenuItem>
+          <DropdownMenuItem className="py-1 px-2 text-xs rounded-none">
+            <Newspaper size={13} className="mr-2 text-muted-foreground" />
+            Changelog
+          </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Sun className="mr-2 h-4 w-4" />
-            <span>Theme</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem onClick={() => setTheme("light")}>
-              <Sun className="mr-2 h-4 w-4" />
-              <span>Light</span>
-              {theme === "light" && <span className="ml-auto">✓</span>}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("dark")}>
-              <Moon className="mr-2 h-4 w-4" />
-              <span>Dark</span>
-              {theme === "dark" && <span className="ml-auto">✓</span>}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
-              <Monitor className="mr-2 h-4 w-4" />
-              <span>System</span>
-              {theme === "system" && <span className="ml-auto">✓</span>}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/logout">
-            <LogOut className="mr-2 h-4 w-4" />
-            <span>Log out</span>
-          </Link>
+
+        <div className="h-[1px] bg-border/50 mx-1 my-0.5" />
+
+        <div className="px-2 py-1.5">
+          <span className="text-[11px] text-muted-foreground font-medium">Theme</span>
+          <div className="mt-1.5 space-y-0.5">
+            {themeOptions.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setTheme(value)}
+                className="flex items-center gap-2 w-full rounded-none px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                {theme === value ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-foreground flex-shrink-0" />
+                ) : (
+                  <span className="h-1.5 w-1.5 flex-shrink-0" />
+                )}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-[1px] bg-border/50 mx-1 my-0.5" />
+
+        <DropdownMenuItem
+          disabled={isPending}
+          onSelect={() => startTransition(() => signOut())}
+          className="py-1 px-2 text-xs rounded-none"
+        >
+          {isPending ? "Signing out…" : "Log out"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

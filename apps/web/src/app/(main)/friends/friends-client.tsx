@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Users, UserPlus, UserX } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,29 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Separator } from "@/components/ui/separator";
+
 import {
   sendFriendRequestByEmail,
   acceptFriendRequest,
@@ -54,7 +79,14 @@ type FriendsPageClientProps = {
   initialSentRequests: FriendRequest[];
 };
 
-type Tab = "friends" | "requests" | "add";
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
 
 export default function FriendsPageClient({
   initialFriends,
@@ -66,23 +98,20 @@ export default function FriendsPageClient({
     useState<FriendRequest[]>(initialPendingRequests);
   const [sentRequests, setSentRequests] =
     useState<FriendRequest[]>(initialSentRequests);
-  const [activeTab, setActiveTab] = useState<Tab>("friends");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [email, setEmail] = useState("");
   const [addLoading, setAddLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("friends");
   const router = useRouter();
 
   const handleAccept = async (requestId: number) => {
     setProcessingId(requestId);
-    setError("");
 
     try {
       const result = await acceptFriendRequest(requestId);
 
       if (!result.success) {
-        setError(result.error || "Failed to accept request");
+        toast.error(result.error || "Failed to accept request");
         setProcessingId(null);
         return;
       }
@@ -94,10 +123,9 @@ export default function FriendsPageClient({
           { ...result.friend, friend: result.friend.requester },
         ]);
       }
-      setSuccess("Friend request accepted!");
-      setTimeout(() => setSuccess(""), 3000);
+      toast.success("Friend request accepted!");
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -105,20 +133,20 @@ export default function FriendsPageClient({
 
   const handleReject = async (requestId: number) => {
     setProcessingId(requestId);
-    setError("");
 
     try {
       const result = await rejectFriendRequest(requestId);
 
       if (!result.success) {
-        setError(result.error || "Failed to reject request");
+        toast.error(result.error || "Failed to reject request");
         setProcessingId(null);
         return;
       }
 
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      toast.success("Request rejected");
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -126,20 +154,20 @@ export default function FriendsPageClient({
 
   const handleCancel = async (requestId: number) => {
     setProcessingId(requestId);
-    setError("");
 
     try {
       const result = await cancelFriendRequest(requestId);
 
       if (!result.success) {
-        setError(result.error || "Failed to cancel request");
+        toast.error(result.error || "Failed to cancel request");
         setProcessingId(null);
         return;
       }
 
       setSentRequests((prev) => prev.filter((r) => r.id !== requestId));
+      toast.success("Request cancelled");
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -147,20 +175,20 @@ export default function FriendsPageClient({
 
   const handleRemove = async (friendshipId: number) => {
     setProcessingId(friendshipId);
-    setError("");
 
     try {
       const result = await removeFriend(friendshipId);
 
       if (!result.success) {
-        setError(result.error || "Failed to remove friend");
+        toast.error(result.error || "Failed to remove friend");
         setProcessingId(null);
         return;
       }
 
       setFriends((prev) => prev.filter((f) => f.id !== friendshipId));
+      toast.success("Friend removed");
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -171,13 +199,12 @@ export default function FriendsPageClient({
     if (!email.trim()) return;
 
     setAddLoading(true);
-    setError("");
 
     try {
       const result = await sendFriendRequestByEmail(email.trim());
 
       if (!result.success) {
-        setError(result.error || "Failed to add friend");
+        toast.error(result.error || "Failed to add friend");
         setAddLoading(false);
         return;
       }
@@ -187,16 +214,15 @@ export default function FriendsPageClient({
           ...prev,
           { ...result.friend, friend: result.friend.requester },
         ]);
-        setSuccess("You are now friends!");
+        toast.success("You are now friends!");
       } else if (result.friend) {
         setSentRequests((prev) => [result.friend, ...prev]);
-        setSuccess("Friend request sent!");
+        toast.success("Friend request sent!");
       }
 
       setEmail("");
-      setTimeout(() => setSuccess(""), 3000);
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setAddLoading(false);
     }
@@ -222,217 +248,261 @@ export default function FriendsPageClient({
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b">
-        <button
-          onClick={() => setActiveTab("friends")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === "friends"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Friends
-          {friends.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {friends.length}
-            </Badge>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("requests")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === "requests"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Requests
-          {totalRequests > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {totalRequests}
-            </Badge>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("add")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === "add"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Add Friend
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="friends">
+            Friends
+            {friends.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {friends.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="requests">
+            Requests
+            {totalRequests > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {totalRequests}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="add">Add Friend</TabsTrigger>
+        </TabsList>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600">
-          {success}
-        </div>
-      )}
-
-      {/* Friends Tab */}
-      {activeTab === "friends" && (
-        <>
+        {/* Friends Tab */}
+        <TabsContent value="friends">
           {friends.length === 0 ? (
-            <Card className="border-dashed">
-              <CardHeader>
-                <CardTitle>No friends yet</CardTitle>
-                <CardDescription>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Users />
+                </EmptyMedia>
+                <EmptyTitle>No friends yet</EmptyTitle>
+                <EmptyDescription>
                   Start by adding friends using their email address.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => setActiveTab("add")}>Add a friend</Button>
-              </CardContent>
-            </Card>
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button
+                  onClick={() => setActiveTab("add")}
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add a friend
+                </Button>
+              </EmptyContent>
+            </Empty>
           ) : (
             <div className="grid gap-4">
               {friends.map((friendship) => (
                 <Card key={friendship.id}>
                   <CardHeader className="flex-row items-center justify-between space-y-0">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">
-                        {friendship.friend.name}
-                      </CardTitle>
-                      <CardDescription>{friendship.friend.email}</CardDescription>
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback>
+                          {getInitials(friendship.friend.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="space-y-1">
+                        <CardTitle className="text-lg">
+                          {friendship.friend.name}
+                        </CardTitle>
+                        <CardDescription>
+                          {friendship.friend.email}
+                        </CardDescription>
+                      </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRemove(friendship.id)}
-                      disabled={processingId === friendship.id}
-                    >
-                      {processingId === friendship.id ? "Removing..." : "Remove"}
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={processingId === friendship.id}
+                        >
+                          {processingId === friendship.id
+                            ? "Removing..."
+                            : "Remove"}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remove friend?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to remove{" "}
+                            <strong>{friendship.friend.name}</strong> from your
+                            friends? You can always add them back later.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleRemove(friendship.id)}
+                          >
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </CardHeader>
                 </Card>
               ))}
             </div>
           )}
-        </>
-      )}
+        </TabsContent>
 
-      {/* Requests Tab */}
-      {activeTab === "requests" && (
-        <div className="space-y-6">
-          {/* Incoming Requests */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium">
-              Incoming Requests ({pendingRequests.length})
-            </h2>
-            {pendingRequests.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No pending friend requests.
-              </p>
-            ) : (
-              <div className="grid gap-4">
-                {pendingRequests.map((request) => (
-                  <Card key={request.id}>
-                    <CardHeader className="flex-row items-center justify-between space-y-0">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">
-                          {request.requester.name}
-                        </CardTitle>
-                        <CardDescription>
-                          {request.requester.email}
-                        </CardDescription>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleAccept(request.id)}
-                          disabled={processingId === request.id}
-                        >
-                          {processingId === request.id ? "..." : "Accept"}
-                        </Button>
+        {/* Requests Tab */}
+        <TabsContent value="requests">
+          <div className="space-y-6">
+            {/* Incoming Requests */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-medium">
+                Incoming Requests ({pendingRequests.length})
+              </h2>
+              {pendingRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No pending friend requests.
+                </p>
+              ) : (
+                <div className="grid gap-4">
+                  {pendingRequests.map((request) => (
+                    <Card key={request.id}>
+                      <CardHeader className="flex-row items-center justify-between space-y-0">
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>
+                              {getInitials(request.requester.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="space-y-1">
+                            <CardTitle className="text-lg">
+                              {request.requester.name}
+                            </CardTitle>
+                            <CardDescription>
+                              {request.requester.email}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleAccept(request.id)}
+                            disabled={processingId === request.id}
+                          >
+                            {processingId === request.id ? "..." : "Accept"}
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={processingId === request.id}
+                              >
+                                Reject
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Reject request?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to reject the friend
+                                  request from{" "}
+                                  <strong>{request.requester.name}</strong>?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleReject(request.id)}
+                                >
+                                  Reject
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Sent Requests */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-medium">
+                Sent Requests ({sentRequests.length})
+              </h2>
+              {sentRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No pending sent requests.
+                </p>
+              ) : (
+                <div className="grid gap-4">
+                  {sentRequests.map((request) => (
+                    <Card key={request.id}>
+                      <CardHeader className="flex-row items-center justify-between space-y-0">
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>
+                              {getInitials(request.recipient.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="space-y-1">
+                            <CardTitle className="text-lg">
+                              {request.recipient.name}
+                            </CardTitle>
+                            <CardDescription>
+                              {request.recipient.email}
+                            </CardDescription>
+                          </div>
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleReject(request.id)}
+                          onClick={() => handleCancel(request.id)}
                           disabled={processingId === request.id}
                         >
-                          Reject
+                          {processingId === request.id ? "..." : "Cancel"}
                         </Button>
-                      </div>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
-            )}
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+        </TabsContent>
 
-          {/* Sent Requests */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium">
-              Sent Requests ({sentRequests.length})
-            </h2>
-            {sentRequests.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No pending sent requests.
-              </p>
-            ) : (
-              <div className="grid gap-4">
-                {sentRequests.map((request) => (
-                  <Card key={request.id}>
-                    <CardHeader className="flex-row items-center justify-between space-y-0">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">
-                          {request.recipient.name}
-                        </CardTitle>
-                        <CardDescription>
-                          {request.recipient.email}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCancel(request.id)}
-                        disabled={processingId === request.id}
-                      >
-                        {processingId === request.id ? "..." : "Cancel"}
-                      </Button>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Add Friend Tab */}
-      {activeTab === "add" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Add a Friend</CardTitle>
-            <CardDescription>
-              Enter their email address to send a friend request.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddFriend} className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="friend@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1"
-              />
-              <Button type="submit" disabled={addLoading || !email.trim()}>
-                {addLoading ? "Adding..." : "Add Friend"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+        {/* Add Friend Tab */}
+        <TabsContent value="add">
+          <Card>
+            <CardHeader>
+              <CardTitle>Add a Friend</CardTitle>
+              <CardDescription>
+                Enter their email address to send a friend request.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAddFriend} className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="friend@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <Button type="submit" disabled={addLoading || !email.trim()}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  {addLoading ? "Adding..." : "Add Friend"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

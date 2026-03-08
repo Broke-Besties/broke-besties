@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { createTab, updateTab, deleteTab } from "@/app/tabs/actions";
+import { createTab, updateTab, deleteTab } from "@/app/(main)/tabs/actions";
 
 type Tab = {
   id: number;

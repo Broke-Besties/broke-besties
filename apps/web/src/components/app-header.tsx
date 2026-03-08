@@ -1,39 +1,35 @@
 "use client"
 
-import Link from "next/link"
+import Image from "next/image"
 import { User } from "@supabase/supabase-js"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { ModeToggle } from "@/components/mode-toggle"
+import { Separator } from "@/components/ui/separator"
 import { UserDropdown } from "@/components/user-dropdown"
 
 interface AppHeaderProps {
-  user?: User | null
+  user: User
+  userName: string
 }
 
-export function AppHeader({ user }: AppHeaderProps) {
+export function AppHeader({ user, userName }: AppHeaderProps) {
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-center bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60 border-b border-gray-200 dark:border-gray-800 w-full">
-      <div className={`flex items-center justify-between w-full max-w-5xl ${user ? "md:px-8" : "md:px-8"}`}>
+    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
+      <div className="flex items-center gap-3">
+        <SidebarTrigger />
+        <Separator orientation="vertical" className="h-4" />
         <div className="flex items-center gap-2">
-          {user && <SidebarTrigger />}
-          <span className="text-lg font-semibold">Broke Besties</span>
+          <Image
+            src="/mascot/waving.png"
+            alt="Broke Besties"
+            width={24}
+            height={24}
+            className="object-cover rounded"
+          />
+          <span className="font-semibold text-sm text-foreground">Broke Besties</span>
         </div>
-        <div className="flex items-center gap-2">
-          {user ? (
-            <UserDropdown user={user} />
-          ) : (
-            <>
-              <ModeToggle />
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/login">Log in</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href="/signup">Sign up</Link>
-              </Button>
-            </>
-          )}
-        </div>
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        <UserDropdown user={user} userName={userName} />
       </div>
     </header>
   )

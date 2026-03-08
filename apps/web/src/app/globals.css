@@ -22,8 +22,8 @@
   --muted: 0 0% 96%;
   --muted-foreground: 0 0% 45%;
 
-  --accent: 151 67% 67%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 0 0% 94%;
+  --accent-foreground: 0 0% 9%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
@@ -167,8 +167,8 @@ body {
   --muted: 0 0% 9%;
   --muted-foreground: 0 0% 55%;
 
-  --accent: 151 67% 67%;
-  --accent-foreground: 0 0% 0%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 100%;
 
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 100%;
@@ -185,7 +185,7 @@ body {
   --yellow-foreground: 0 0% 0%;
   --yellow-muted: 48 96% 20%;
 
-  --border: 0 0% 18%;
+  --border: 0 0% 22%;
   --input: 0 0% 9%;
   --ring: 151 67% 67%;
 

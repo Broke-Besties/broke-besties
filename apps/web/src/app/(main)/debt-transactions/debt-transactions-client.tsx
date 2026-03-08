@@ -16,7 +16,7 @@ import {
 import {
   respondToDebtTransaction,
   cancelDebtTransaction,
-} from '@/app/groups/[id]/actions'
+} from '@/app/(main)/groups/[id]/actions'
 
 type Transaction = {
   id: number

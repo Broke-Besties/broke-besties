@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createGroup } from "@/app/groups/actions";
+import { createGroup } from "@/app/(main)/groups/actions";
 
 type Group = {
   id: number;
@@ -67,7 +67,7 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
   };
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col min-h-[calc(100dvh-8rem)] space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">My groups</h1>
@@ -93,19 +93,21 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
       )}
 
       {groups.length === 0 ? (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>No groups yet</CardTitle>
-            <CardDescription>
-              You haven&apos;t joined any groups. Create one to get started.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => setShowCreateModal(true)}>
-              Create your first group
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex-1 flex flex-col items-center justify-center text-center">
+          <Card className="border-dashed max-w-md w-full">
+            <CardHeader>
+              <CardTitle>No groups yet</CardTitle>
+              <CardDescription>
+                You haven&apos;t joined any groups. Create one to get started.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => setShowCreateModal(true)}>
+                Create your first group
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => (
