@@ -18,9 +18,9 @@ export default async function LandingLayout({
   const userName = dbUser?.name ?? "";
 
   return (
-    <div className="flex flex-col h-[100dvh] overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh]">
       <MarketingHeader user={user} userName={userName} />
-      <main className="flex-1 overflow-y-auto overscroll-none">
+      <main className="flex-1">
         <Suspense fallback={<AppLoading />}>{children}</Suspense>
       </main>
     </div>

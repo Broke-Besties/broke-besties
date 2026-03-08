@@ -23,12 +23,12 @@ export default async function MainLayout({
   const userName = dbUser?.name ?? "";
 
   return (
-    <SidebarProvider defaultOpen={false} className="flex-col h-[100dvh] overflow-hidden">
+    <SidebarProvider defaultOpen={false} className="flex-col min-h-[100dvh]">
       <AppHeader user={user} userName={userName} />
-      <div className="flex flex-1 min-h-0 w-full">
+      <div className="flex flex-1 w-full">
         <AppSidebar user={user} />
-        <SidebarInset className="flex flex-col min-w-0 overflow-hidden">
-          <main className="flex-1 overflow-y-auto overscroll-none p-4 md:p-6">
+        <SidebarInset className="flex flex-col min-w-0">
+          <main className="flex-1 p-4 md:p-6">
             <div className="mx-auto w-full max-w-screen-xl">
               <Suspense fallback={<AppLoading />}>{children}</Suspense>
             </div>

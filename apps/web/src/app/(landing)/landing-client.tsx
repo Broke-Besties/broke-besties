@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useRef, MouseEvent } from "react";
 import {
   ArrowRight,
-  Camera,
+  ScanLine,
+  ArrowLeftRight,
+  Wallet,
+  PiggyBank,
+  Repeat,
+  GitGraph,
+  ShieldCheck,
   Github,
-  Database,
-  Layers,
-  Cpu,
-  Sparkles,
+  Twitter,
+  Linkedin,
 } from "lucide-react";
 import { motion, useInView } from "motion/react";
 
@@ -51,35 +55,38 @@ function DotGrid() {
     <div
       className="absolute inset-0 pointer-events-none"
       style={{
-        backgroundImage: `radial-gradient(circle, hsl(var(--foreground) / 0.06) 1px, transparent 1px)`,
+        backgroundImage: `radial-gradient(circle, hsl(var(--foreground) / 0.05) 1px, transparent 1px)`,
         backgroundSize: "28px 28px",
-        maskImage: "radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 100%)",
-        WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 100%)",
+        maskImage:
+          "radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 100%)",
+        WebkitMaskImage:
+          "radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 100%)",
       }}
     />
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  2. Hero                                                                    */
+/*  1. Hero                                                                    */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function Hero() {
   return (
-    <section className="relative min-h-screen flex flex-col justify-center pb-16 overflow-hidden">
+    <section className="relative min-h-[85vh] flex flex-col justify-center pb-16 overflow-hidden">
       <DotGrid />
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[#72E3AD]/8 rounded-full blur-3xl pointer-events-none" />
+      {/* Gradient glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative max-w-6xl mx-auto px-6 w-full text-center space-y-8">
+      <div className="relative max-w-5xl mx-auto px-6 w-full text-center space-y-8">
         {/* Badge */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3.5 py-1.5"
+          className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1.5"
         >
-          <Sparkles className="w-3 h-3 text-violet-400" />
-          <span className="text-xs font-medium text-violet-400 dark:text-violet-300 tracking-wide">
-            Powered by LangGraph + Gemini
+          <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+          <span className="text-xs font-medium text-primary tracking-wide">
+            Bank-grade security &bull; SOC2 compliant
           </span>
         </motion.div>
 
@@ -88,13 +95,11 @@ function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.06] tracking-tight text-foreground"
+          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.06] tracking-tight text-foreground"
         >
-          Build Wealth.{" "}
-          <span
-            className="bg-gradient-to-r from-[#72E3AD] to-cyan-400 bg-clip-text text-transparent"
-          >
-            Stay Besties.
+          The smartest way to share{" "}
+          <span className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
+            expenses with your besties.
           </span>
         </motion.h1>
 
@@ -103,9 +108,10 @@ function Hero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-muted-foreground text-lg leading-relaxed max-w-xl mx-auto"
+          className="text-muted-foreground text-lg md:text-xl leading-relaxed max-w-2xl mx-auto"
         >
-          Powered by Supabase real-time sync, LangGraph automation, and Gemini AI — so your group finances just work.
+          Split receipts with AI, settle in crypto or e-Transfer, and never
+          lose track of who owes who — all in one beautiful app.
         </motion.p>
 
         {/* CTAs */}
@@ -118,7 +124,7 @@ function Hero() {
           <Button
             asChild
             size="lg"
-            className="bg-[#72E3AD] text-zinc-900 hover:bg-[#5ed4a0] font-semibold px-7 h-11"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold px-7 h-12 text-base cursor-pointer"
           >
             <Link href="/signup">
               Start for Free
@@ -129,13 +135,40 @@ function Hero() {
             variant="outline"
             asChild
             size="lg"
-            className="border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground px-6 h-11 gap-2"
+            className="border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground px-6 h-12 gap-2 cursor-pointer"
           >
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://github.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Github className="w-4 h-4" />
               View on GitHub
             </a>
           </Button>
+        </motion.div>
+
+        {/* Social proof numbers */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="flex items-center justify-center gap-8 md:gap-12 pt-8"
+        >
+          {[
+            { value: "10K+", label: "Splits settled" },
+            { value: "$2.4M", label: "Tracked" },
+            { value: "4.9★", label: "User rating" },
+          ].map((stat) => (
+            <div key={stat.label} className="text-center">
+              <p className="text-2xl md:text-3xl font-bold text-foreground tabular-nums">
+                {stat.value}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stat.label}
+              </p>
+            </div>
+          ))}
         </motion.div>
       </div>
     </section>
@@ -143,56 +176,19 @@ function Hero() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  3. Bento Feature Grid                                                      */
+/*  2. Feature Card (Bento with mouse glow)                                    */
 /* ─────────────────────────────────────────────────────────────────────────── */
-
-/* Mini bar chart SVG */
-function MiniBarChart() {
-  const bars = [40, 70, 55, 90, 65, 80, 45, 95, 60, 75];
-  return (
-    <svg viewBox="0 0 120 40" className="w-full h-10" preserveAspectRatio="none">
-      {bars.map((h, i) => (
-        <rect
-          key={i}
-          x={i * 12 + 2}
-          y={40 - h * 0.38}
-          width={8}
-          height={h * 0.38}
-          rx={2}
-          fill={i === 7 ? "#72E3AD" : "rgba(114,227,173,0.25)"}
-        />
-      ))}
-    </svg>
-  );
-}
-
-/* LangGraph node diagram SVG */
-function NodeDiagram() {
-  return (
-    <svg viewBox="0 0 160 80" className="w-full h-16">
-      {/* Lines */}
-      <line x1="45" y1="40" x2="75" y2="40" stroke="rgba(114,227,173,0.4)" strokeWidth="1.5" strokeDasharray="4 2" />
-      <line x1="105" y1="40" x2="135" y2="40" stroke="rgba(114,227,173,0.4)" strokeWidth="1.5" strokeDasharray="4 2" />
-      {/* Nodes */}
-      <circle cx="25" cy="40" r="14" fill="#18181b" stroke="#72E3AD" strokeWidth="1.5" />
-      <text x="25" y="44" textAnchor="middle" fontSize="8" fill="#72E3AD" fontFamily="monospace">parse</text>
-      <circle cx="90" cy="40" r="14" fill="#18181b" stroke="rgba(114,227,173,0.5)" strokeWidth="1.5" />
-      <text x="90" y="44" textAnchor="middle" fontSize="8" fill="rgba(114,227,173,0.7)" fontFamily="monospace">split</text>
-      <circle cx="152" cy="40" r="14" fill="#18181b" stroke="rgba(114,227,173,0.3)" strokeWidth="1.5" />
-      <text x="152" y="44" textAnchor="middle" fontSize="8" fill="rgba(114,227,173,0.5)" fontFamily="monospace">log</text>
-      {/* Arrows */}
-      <polygon points="76,37 83,40 76,43" fill="rgba(114,227,173,0.4)" />
-      <polygon points="136,37 143,40 136,43" fill="rgba(114,227,173,0.4)" />
-    </svg>
-  );
-}
-
-/* Bento card with mouse-glow */
-function BentoCard({
-  children,
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+  tag,
   className = "",
 }: {
-  children: React.ReactNode;
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  tag?: string;
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -200,10 +196,8 @@ function BentoCard({
   function handleMouseMove(e: MouseEvent<HTMLDivElement>) {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    ref.current.style.setProperty("--mx", `${x}px`);
-    ref.current.style.setProperty("--my", `${y}px`);
+    ref.current.style.setProperty("--mx", `${e.clientX - rect.left}px`);
+    ref.current.style.setProperty("--my", `${e.clientY - rect.top}px`);
   }
 
   return (
@@ -212,138 +206,157 @@ function BentoCard({
       onMouseMove={handleMouseMove}
       whileHover={{ y: -4, scale: 1.01 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`relative bg-card/50 border border-border rounded-2xl overflow-hidden group ${className}`}
-      style={
-        {
-          "--mx": "50%",
-          "--my": "50%",
-        } as React.CSSProperties
-      }
+      className={`relative bg-card/60 border border-border rounded-2xl p-6 overflow-hidden group cursor-pointer ${className}`}
+      style={{ "--mx": "50%", "--my": "50%" } as React.CSSProperties}
     >
       {/* Mouse glow */}
       <div
         className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
         style={{
-          background: "radial-gradient(200px circle at var(--mx) var(--my), rgba(114,227,173,0.08), transparent 80%)",
+          background:
+            "radial-gradient(200px circle at var(--mx) var(--my), hsl(var(--primary) / 0.08), transparent 80%)",
         }}
       />
-      {children}
+
+      {/* Content */}
+      <div className="relative space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
+            <Icon className="w-5 h-5 text-primary" />
+          </div>
+          {tag && (
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full">
+              {tag}
+            </span>
+          )}
+        </div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {description}
+        </p>
+      </div>
     </motion.div>
   );
 }
 
-const BALANCES = [
-  { name: "Sarah K.", label: "Weekend Trip", amount: "+$128.40", positive: true },
-  { name: "Marcus T.", label: "Utilities", amount: "-$42.00", positive: false },
-  { name: "Priya M.", label: "Dinner Club", amount: "+$96.75", positive: true },
+const FEATURES = [
+  {
+    icon: ScanLine,
+    title: "Smart Split",
+    description:
+      "AI-powered receipt scanning. Friends claim items; tax & tip are auto-calculated into ledger debts.",
+    tag: "AI",
+  },
+  {
+    icon: ArrowLeftRight,
+    title: "e-Transfer Ledger",
+    description:
+      "A manual log for Interac e-Transfers to keep the group balances in sync without the guesswork.",
+  },
+  {
+    icon: Wallet,
+    title: "Coinbase Wallet",
+    description:
+      "Settle up in USDC or ETH with native Web3 wallet integration. Fast, borderless, zero-fee.",
+    tag: "Web3",
+  },
+  {
+    icon: PiggyBank,
+    title: "Goal Pots",
+    description:
+      "Shared group savings with real-time progress bars for trips, big purchases, or rainy-day funds.",
+  },
+  {
+    icon: Repeat,
+    title: "Recurring Splits",
+    description:
+      "Automated monthly logic for shared rent and utilities. Set it once and never chase again.",
+  },
+  {
+    icon: GitGraph,
+    title: "Social Debt Graph",
+    description:
+      'High-density view of \"who owes who\" across your entire circle. Simplify debts with one tap.',
+  },
 ];
 
-function BentoGrid() {
+function FeatureGrid() {
   return (
-    <div id="features" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {/* Card 1 — Large debt dashboard (col-span-2) */}
-      <BentoCard className="lg:col-span-2 p-6 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#72E3AD]/20 flex items-center justify-center text-[10px] font-bold text-[#72E3AD]">
-              JD
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-foreground/90">Group Balances</p>
-              <p className="text-[10px] text-muted-foreground">Weekend Trip • 4 members</p>
-            </div>
-          </div>
-          <span className="text-xs font-bold text-[#72E3AD]">+$190.65 net</span>
-        </div>
+    <section id="features" className="py-24 border-t border-border">
+      <div className="max-w-6xl mx-auto px-6">
+        <FadeUp className="text-center mb-14">
+          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
+            Features
+          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+            Everything you need to split, save, and settle.
+          </h2>
+          <p className="text-muted-foreground text-base max-w-2xl mx-auto">
+            Six powerful tools that handle every way your group shares money —
+            from receipts to rent to crypto.
+          </p>
+        </FadeUp>
 
-        {/* Balance rows */}
-        <div className="space-y-1">
-          {BALANCES.map((b) => (
-            <div key={b.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40">
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground">
-                  {b.name.split(" ").map((n) => n[0]).join("")}
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-foreground/85">{b.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{b.label}</p>
-                </div>
-              </div>
-              <span className={`text-xs font-bold tabular-nums ${b.positive ? "text-[#72E3AD]" : "text-rose-400"}`}>
-                {b.amount}
-              </span>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {FEATURES.map((feature, i) => (
+            <FadeUp key={feature.title} delay={i * 0.08}>
+              <FeatureCard {...feature} />
+            </FadeUp>
           ))}
         </div>
-
-        {/* Mini chart */}
-        <div className="pt-2">
-          <p className="text-[10px] text-muted-foreground mb-1.5">Spending this month</p>
-          <MiniBarChart />
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center gap-2 pt-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#72E3AD] animate-pulse" />
-          <span className="text-[10px] text-muted-foreground">Live • Updated just now</span>
-        </div>
-      </BentoCard>
-
-      {/* Card 2 — AI Receipt Scanning */}
-      <BentoCard className="p-6 flex flex-col justify-between min-h-[220px]">
-        <div className="space-y-3">
-          <div className="relative inline-flex">
-            <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
-              <Camera className="w-6 h-6 text-muted-foreground" />
-            </div>
-            {/* Gemini G badge */}
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-              <span className="text-[8px] font-black text-white">G</span>
-            </div>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-1">AI Receipt Scanning</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">Snap a photo and Gemini AI instantly extracts every line item.</p>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
-          <span className="text-[11px] font-mono text-[#72E3AD]">Snap → Split → Done</span>
-        </div>
-      </BentoCard>
-
-      {/* Card 3 — LangGraph Agent */}
-      <BentoCard className="md:col-span-2 lg:col-span-1 p-6 space-y-4">
-        <div className="space-y-1">
-          <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center mb-3">
-            <Cpu className="w-5 h-5 text-violet-400" />
-          </div>
-          <h3 className="text-sm font-semibold text-foreground">LangGraph Agent</h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">Multi-step reasoning for complex expense logic.</p>
-        </div>
-        <NodeDiagram />
-        <p className="text-[10px] text-muted-foreground/60 font-mono">parse → split → log</p>
-      </BentoCard>
-    </div>
+      </div>
+    </section>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  4. Social Proof / Stat Bar                                                 */
+/*  3. Trust Bar                                                               */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function StatBar() {
+function TrustBar() {
   return (
-    <section className="py-20 border-t border-border">
-      <div className="max-w-4xl mx-auto px-6 text-center">
+    <section className="py-16 border-t border-border">
+      <div className="max-w-4xl mx-auto px-6">
         <FadeUp>
-          <p className="text-3xl md:text-5xl font-bold text-foreground leading-tight mb-4">
-            &ldquo;The average person forgets{" "}
-            <span className="text-rose-400">$300+</span>{" "}
-            owed to them each year.&rdquo;
-          </p>
-          <p className="text-muted-foreground text-base mt-4">
-            BrokeBesties tracks every cent, automatically.
-          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12">
+            {/* SOC2 Badge */}
+            <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-border bg-card/50">
+              <ShieldCheck className="w-6 h-6 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground leading-tight">
+                  SOC 2 Type II
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Audited annually
+                </p>
+              </div>
+            </div>
+
+            {/* HIPAA Badge */}
+            <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-border bg-card/50">
+              <ShieldCheck className="w-6 h-6 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground leading-tight">
+                  HIPAA Compliant
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Data encryption at rest & transit
+                </p>
+              </div>
+            </div>
+
+            {/* Bank-level */}
+            <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-border bg-card/50">
+              <ShieldCheck className="w-6 h-6 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground leading-tight">
+                  256-bit Encryption
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Bank-grade security
+                </p>
+              </div>
+            </div>
+          </div>
         </FadeUp>
       </div>
     </section>
@@ -351,107 +364,7 @@ function StatBar() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  5. Developer Trust Section                                                 */
-/* ─────────────────────────────────────────────────────────────────────────── */
-function CodeToken({ children, color }: { children: React.ReactNode; color: string }) {
-  return <span style={{ color }}>{children}</span>;
-}
-
-function CodeBlock() {
-  return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden font-mono text-[12px] leading-relaxed">
-      {/* Terminal bar */}
-      <div className="flex items-center gap-1.5 px-4 py-3 border-b border-border bg-muted/50">
-        <div className="w-2.5 h-2.5 rounded-full bg-rose-500/60" />
-        <div className="w-2.5 h-2.5 rounded-full bg-amber-500/60" />
-        <div className="w-2.5 h-2.5 rounded-full bg-[#72E3AD]/60" />
-        <span className="ml-2 text-[11px] text-muted-foreground">langgraph-tool.ts</span>
-      </div>
-      <pre className="p-5 text-foreground/80 overflow-x-auto whitespace-pre">
-        <code>
-          <CodeToken color="#6b7280">{"// LangGraph Tool — addDebt\n"}</CodeToken>
-          <CodeToken color="#c084fc">{"const "}</CodeToken>
-          <CodeToken color="#e5e7eb">{"addDebtTool = "}</CodeToken>
-          <CodeToken color="#c084fc">{"tool"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"(async ({ amount, paidBy, participants }) => {'\n'  "}</CodeToken>
-          <CodeToken color="#c084fc">{"const "}</CodeToken>
-          <CodeToken color="#e5e7eb">{"split = amount / participants.length;\n  "}</CodeToken>
-          <CodeToken color="#c084fc">{"await "}</CodeToken>
-          <CodeToken color="#e5e7eb">{"db.debt."}</CodeToken>
-          <CodeToken color="#72E3AD">{"createMany"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"({ data: participants."}</CodeToken>
-          <CodeToken color="#72E3AD">{"map"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"(p => ({\n    amount: split, owedBy: p, owedTo: paidBy\n  }))});\n  "}</CodeToken>
-          <CodeToken color="#c084fc">{"return "}</CodeToken>
-          <CodeToken color="#72E3AD">{"`Split $"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"${"}</CodeToken>
-          <CodeToken color="#72E3AD">{"amount"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"}"}</CodeToken>
-          <CodeToken color="#72E3AD">{" between ${"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"participants."}</CodeToken>
-          <CodeToken color="#72E3AD">{"join"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"(', ')"}</CodeToken>
-          <CodeToken color="#72E3AD">{"}`"}</CodeToken>
-          <CodeToken color="#e5e7eb">{";\n}, { name: "}</CodeToken>
-          <CodeToken color="#72E3AD">{'"add_debt"'}</CodeToken>
-          <CodeToken color="#e5e7eb">{", schema: z."}</CodeToken>
-          <CodeToken color="#72E3AD">{"object"}</CodeToken>
-          <CodeToken color="#e5e7eb">{"({...}) });"}</CodeToken>
-        </code>
-      </pre>
-    </div>
-  );
-}
-
-const STACK = [
-  { icon: Database, label: "Supabase Postgres", desc: "Real-time sync, row-level security" },
-  { icon: Layers, label: "Prisma ORM", desc: "Type-safe database access" },
-  { icon: Cpu, label: "LangGraph", desc: "Multi-step agent orchestration" },
-  { icon: Sparkles, label: "Gemini 2.0", desc: "Receipt parsing & NLP" },
-];
-
-function DeveloperSection() {
-  return (
-    <section id="developers" className="py-24 border-t border-border">
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
-          {/* Left */}
-          <FadeUp className="space-y-8">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4 leading-snug">
-                Built on real infrastructure.
-              </h2>
-              <p className="text-muted-foreground text-base leading-relaxed">
-                No toy stack. Every layer is production-grade and battle-tested.
-              </p>
-            </div>
-            <ul className="space-y-4">
-              {STACK.map((item) => (
-                <li key={item.label} className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0 mt-0.5">
-                    <item.icon className="w-4 h-4 text-[#72E3AD]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </FadeUp>
-
-          {/* Right: Code block */}
-          <FadeUp delay={0.15}>
-            <CodeBlock />
-          </FadeUp>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  6. Bottom CTA                                                              */
+/*  4. Bottom CTA                                                              */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function BottomCTA() {
   return (
@@ -460,20 +373,31 @@ function BottomCTA() {
         <FadeUp className="space-y-6">
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-foreground">
             Stop splitting hairs.{" "}
-            <span className="bg-gradient-to-r from-[#72E3AD] to-cyan-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
               Start splitting bills.
             </span>
           </h2>
-          <div className="pt-2">
+          <p className="text-muted-foreground text-base max-w-lg mx-auto">
+            Join thousands of friend groups who settled up without the awkwardness.
+          </p>
+          <div className="pt-2 flex flex-wrap gap-3 justify-center">
             <Button
               asChild
               size="lg"
-              className="bg-[#72E3AD] text-zinc-900 hover:bg-[#5ed4a0] font-semibold px-8 h-12 text-base"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold px-8 h-12 text-base cursor-pointer"
             >
               <Link href="/signup">
                 Create Free Account
                 <ArrowRight className="w-5 h-5 ml-1.5" />
               </Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="border-border text-muted-foreground hover:bg-muted hover:text-foreground h-12 px-6 cursor-pointer"
+            >
+              <Link href="/login">Sign In</Link>
             </Button>
           </div>
           <p className="text-xs text-muted-foreground/60">
@@ -486,29 +410,142 @@ function BottomCTA() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/*  5. Footer                                                                  */
+/* ─────────────────────────────────────────────────────────────────────────── */
+const FOOTER_SECTIONS = [
+  {
+    title: "Product",
+    links: [
+      { label: "Smart Split", href: "#features" },
+      { label: "Goal Pots", href: "#features" },
+      { label: "Recurring Splits", href: "#features" },
+      { label: "Pricing", href: "#" },
+    ],
+  },
+  {
+    title: "Solutions",
+    links: [
+      { label: "Roommates", href: "#" },
+      { label: "Travel Groups", href: "#" },
+      { label: "Couples", href: "#" },
+      { label: "Teams", href: "#" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { label: "Help Center", href: "#" },
+      { label: "Blog", href: "#" },
+      { label: "Changelog", href: "#" },
+      { label: "Status", href: "#" },
+    ],
+  },
+  {
+    title: "Developers",
+    links: [
+      { label: "API Docs", href: "#" },
+      { label: "GitHub", href: "https://github.com" },
+      { label: "Self-Host", href: "#" },
+      { label: "Contributing", href: "#" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { label: "About", href: "#" },
+      { label: "Careers", href: "#" },
+      { label: "Privacy Policy", href: "#" },
+      { label: "Terms of Service", href: "#" },
+    ],
+  },
+];
+
+function Footer() {
+  return (
+    <footer className="border-t border-border bg-card/30">
+      <div className="max-w-6xl mx-auto px-6 py-16">
+        {/* Sitemap grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8">
+          {FOOTER_SECTIONS.map((section) => (
+            <div key={section.title}>
+              <h4 className="text-sm font-semibold text-foreground mb-3">
+                {section.title}
+              </h4>
+              <ul className="space-y-2">
+                {section.links.map((link) => (
+                  <li key={link.label}>
+                    <a
+                      href={link.href}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom bar */}
+        <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+            <span className="text-sm font-bold text-foreground tracking-tight">
+              BrokeBesties
+            </span>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} BrokeBesties. All rights reserved.
+          </p>
+
+          <div className="flex items-center gap-3">
+            <a
+              href="https://github.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+              aria-label="GitHub"
+            >
+              <Github className="w-4 h-4" />
+            </a>
+            <a
+              href="https://twitter.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+              aria-label="Twitter"
+            >
+              <Twitter className="w-4 h-4" />
+            </a>
+            <a
+              href="https://linkedin.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+              aria-label="LinkedIn"
+            >
+              <Linkedin className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /*  Root                                                                       */
 /* ─────────────────────────────────────────────────────────────────────────── */
 export function LandingPageClient() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Hero />
-
-      {/* Bento grid */}
-      <section id="agent" className="py-24 border-t border-border">
-        <div className="max-w-6xl mx-auto px-6 space-y-4">
-          <FadeUp className="mb-8">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Features</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Everything in one place.
-            </h2>
-          </FadeUp>
-          <BentoGrid />
-        </div>
-      </section>
-
-      <StatBar />
-      <DeveloperSection />
+      <FeatureGrid />
+      <TrustBar />
       <BottomCTA />
+      <Footer />
     </div>
   );
 }
