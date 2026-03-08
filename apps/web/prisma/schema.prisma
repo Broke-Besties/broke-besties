@@ -39,6 +39,27 @@ model User {
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
   paymentAttempts           PaymentAttempt[]
+  subscription              Subscription?
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripePriceId        String?
+  plan                 String    @default("free") // "free", "pro", "max"
+  status               String    @default("active") // "active", "canceled", "past_due", "trialing"
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
 }
 
 model Group {

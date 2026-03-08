@@ -97,3 +97,85 @@ export async function createDebtPaymentSession(debtId: number) {
 
   return session;
 }
+
+// ─── Subscription Plan Configuration ───────────────────────────────
+
+export type PlanTier = 'free' | 'pro' | 'max'
+
+export type PlanConfig = {
+  id: PlanTier
+  name: string
+  description: string
+  monthlyPrice: number
+  yearlyPrice: number
+  monthlyPriceId: string
+  yearlyPriceId: string
+  features: string[]
+  highlighted?: boolean
+}
+
+export const PLANS: PlanConfig[] = [
+  {
+    id: 'free',
+    name: 'Free',
+    description: 'Get started with expense splitting',
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    monthlyPriceId: '',
+    yearlyPriceId: '',
+    features: [
+      'Up to 3 groups',
+      'Basic expense splitting',
+      'Friend management',
+      'Debt tracking',
+      'Email notifications',
+    ],
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    description: 'Split smarter, save more',
+    monthlyPrice: 9.99,
+    yearlyPrice: 79.99,
+    monthlyPriceId: 'price_1T8Z42LMTBZbWN5N2NA6TRUo',
+    yearlyPriceId: 'price_1T8Z43LMTBZbWN5NaJqs7xfb',
+    highlighted: true,
+    features: [
+      'Everything in Free, and:',
+      'Unlimited groups',
+      'Recurring payments',
+      'Receipt scanning (AI)',
+      'Priority support',
+      'Advanced analytics',
+      'Custom reminders',
+    ],
+  },
+  {
+    id: 'max',
+    name: 'Max',
+    description: 'Ultimate expense management',
+    monthlyPrice: 24.99,
+    yearlyPrice: 199.99,
+    monthlyPriceId: 'price_1T8Z44LMTBZbWN5NBfAT49B9',
+    yearlyPriceId: 'price_1T8Z45LMTBZbWN5NNZo7OSwj',
+    features: [
+      'Everything in Pro, plus:',
+      'AI-powered expense categorization',
+      'P2P payment integration',
+      'Export to accounting software',
+      'Early access to new features',
+      'Priority access at high traffic times',
+      'Dedicated support channel',
+    ],
+  },
+]
+
+export function getPlanByPriceId(priceId: string): PlanConfig | undefined {
+  return PLANS.find(
+    (p) => p.monthlyPriceId === priceId || p.yearlyPriceId === priceId
+  )
+}
+
+export function getPlanById(planId: PlanTier): PlanConfig | undefined {
+  return PLANS.find((p) => p.id === planId)
+}
