@@ -6,7 +6,7 @@ import { AuthLayout } from '@/components/auth/auth-layout'
 export default function SignupPage() {
   return (
     <AuthLayout>
-      <SignupForm className="w-full" />
+      <SignupForm />
     </AuthLayout>
   )
 }

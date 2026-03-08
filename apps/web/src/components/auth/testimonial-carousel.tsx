@@ -8,25 +8,29 @@ const testimonials = [
     id: 1,
     quote: "Finally, an app that actually understands group expenses. No more awkward conversations about who owes what.",
     author: "Sarah M.",
-    role: "Roommate of 3 years",
+    handle: "@sarahm",
+    initials: "SM",
   },
   {
     id: 2,
     quote: "Broke Besties saved my trip planning. Everyone knew exactly how much they owed before we even got home.",
     author: "James T.",
-    role: "Travel enthusiast",
+    handle: "@jamest",
+    initials: "JT",
   },
   {
     id: 3,
     quote: "The recurring payments feature is a lifesaver. Netflix, utilities, rent splits itself now.",
     author: "Alex P.",
-    role: "Shared apartment dweller",
+    handle: "@alexp",
+    initials: "AP",
   },
   {
     id: 4,
     quote: "No more lost money. We've recovered $400+ that people actually owed us using this app.",
     author: "Jordan K.",
-    role: "Friend group organizer",
+    handle: "@jordank",
+    initials: "JK",
   },
 ];
 
@@ -36,7 +40,7 @@ export function TestimonialCarousel() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrent((prev) => (prev + 1) % testimonials.length);
-    }, 6000); // Rotate every 6 seconds
+    }, 6000);
 
     return () => clearInterval(interval);
   }, []);
@@ -44,7 +48,7 @@ export function TestimonialCarousel() {
   const testimonial = testimonials[current];
 
   return (
-    <div className="relative w-full h-full flex flex-col justify-center items-center px-6 py-12">
+    <div className="relative w-full h-full flex flex-col justify-center px-12 py-16">
       <AnimatePresence mode="wait">
         <motion.div
           key={testimonial.id}
@@ -52,35 +56,42 @@ export function TestimonialCarousel() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.5 }}
-          className="space-y-6 text-center"
+          className="flex flex-col gap-6"
         >
-          {/* Quote */}
-          <div className="space-y-4">
-            <p className="text-lg md:text-xl text-foreground leading-relaxed italic">
-              "{testimonial.quote}"
-            </p>
+          {/* Large decorative quote mark */}
+          <div className="text-[120px] leading-none text-white/10 font-serif select-none -mb-8">
+            &ldquo;
           </div>
 
+          {/* Quote text */}
+          <p className="text-2xl font-medium text-foreground leading-snug">
+            {testimonial.quote}
+          </p>
+
           {/* Author */}
-          <div className="space-y-1">
-            <p className="font-semibold text-foreground">{testimonial.author}</p>
-            <p className="text-sm text-primary">{testimonial.role}</p>
+          <div className="flex items-center gap-3 mt-2">
+            <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+              {testimonial.initials}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{testimonial.author}</p>
+              <p className="text-xs text-muted-foreground">{testimonial.handle}</p>
+            </div>
           </div>
         </motion.div>
       </AnimatePresence>
 
       {/* Carousel indicators */}
-      <div className="mt-8 flex gap-2 justify-center">
+      <div className="mt-12 flex gap-2">
         {testimonials.map((_, index) => (
           <motion.div
             key={index}
-            className={`h-2 rounded-full cursor-pointer transition-all ${
+            className={`h-1.5 rounded-full cursor-pointer transition-all ${
               index === current
                 ? "bg-primary w-8"
-                : "bg-primary/30 w-2"
+                : "bg-white/20 w-2"
             }`}
             onClick={() => setCurrent(index)}
-            layoutId="carousel-indicator"
           />
         ))}
       </div>

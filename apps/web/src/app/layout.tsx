@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
-import { Suspense } from "react";
 import "./globals.css";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppLoading } from "@/components/app-loading";
-import { getUser } from "@/lib/supabase";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AppHeader } from "@/components/app-header";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -26,13 +20,11 @@ export const metadata: Metadata = {
     "Split expenses with friends: groups, invites, debts, and balances.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getUser();
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -44,19 +36,7 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-        <AppHeader user={user} />
-        <SidebarProvider defaultOpen={false}>
-          {user && <AppSidebar user={user} />}
-          <SidebarInset>
-            <main
-              className={`flex-1 overflow-auto p-4 ${
-                user ? "md:py-6 md:px-8 md:ml-52 md:mr-52" : "md:py-6 md:px-8 max-w-5xl mx-auto w-full"
-              }`}
-            >
-              <Suspense fallback={<AppLoading />}>{children}</Suspense>
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>

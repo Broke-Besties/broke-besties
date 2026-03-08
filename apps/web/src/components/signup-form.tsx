@@ -4,32 +4,43 @@ import { useState } from "react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FormField } from "@/components/auth/form-field"
-import { OAuthButton } from "@/components/auth/oauth-button"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase-client"
 
 export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
+  const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+
     setLoading(true)
 
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, fullName }),
       })
 
       const data = await response.json()
@@ -40,7 +51,7 @@ export function SignupForm({
       }
 
       window.location.href = "/dashboard"
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.")
     } finally {
       setLoading(false)
@@ -64,80 +75,100 @@ export function SignupForm({
         setError(error.message)
         setLoading(false)
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.")
       setLoading(false)
     }
   }
 
   return (
-    <Card className={cn("border-primary/20", className)} {...props}>
-      <CardHeader>
-        <CardTitle className="text-2xl">Create your account</CardTitle>
-        <CardDescription>
-          Start splitting expenses with friends.
-        </CardDescription>
-      </CardHeader>
+    <form className={cn("flex flex-col gap-6", className)} onSubmit={handleSignup} {...props}>
+      <FieldGroup>
+        <div className="flex flex-col items-center gap-1 text-center">
+          <h1 className="text-2xl font-bold">Create your account</h1>
+          <p className="text-sm text-balance text-muted-foreground">
+            Start splitting expenses with friends.
+          </p>
+        </div>
 
-      <CardContent>
-        <form onSubmit={handleSignup} className="space-y-6">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-          <FormField
-            label="Email"
+        <Field>
+          <FieldLabel htmlFor="fullName">Full Name</FieldLabel>
+          <Input
+            id="fullName"
+            type="text"
+            placeholder="John Doe"
+            required
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            autoComplete="name"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="email">Email</FieldLabel>
+          <Input
             id="email"
             type="email"
-            placeholder="you@example.com"
+            placeholder="m@example.com"
+            required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
             autoComplete="email"
           />
-
-          <FormField
-            label="Password"
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="password">Password</FieldLabel>
+          <Input
             id="password"
             type="password"
+            required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            required
             autoComplete="new-password"
           />
-
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full"
-          >
+          <FieldDescription>Must be at least 8 characters long.</FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
+          <Input
+            id="confirm-password"
+            type="password"
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <FieldDescription>Please confirm your password.</FieldDescription>
+        </Field>
+        <Field>
+          <Button type="submit" disabled={loading}>
             {loading ? "Creating…" : "Create account"}
           </Button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-muted-foreground">Or continue with</span>
-            </div>
-          </div>
-
-          <OAuthButton onClick={handleGoogleSignup} loading={loading} />
-
-          <div className="text-center text-sm">
-            <span className="text-muted-foreground">Already have an account? </span>
-            <Link
-              href="/login"
-              className="text-primary hover:text-primary/80 underline underline-offset-4"
-            >
-              Log in
+        </Field>
+        <FieldSeparator>Or continue with</FieldSeparator>
+        <Field>
+          <Button variant="outline" type="button" disabled={loading} onClick={handleGoogleSignup}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <path
+                d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
+                fill="currentColor"
+              />
+            </svg>
+            Sign up with Google
+          </Button>
+          <FieldDescription className="text-center">
+            Already have an account?{" "}
+            <Link href="/login" className="underline underline-offset-4">
+              Sign in
             </Link>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
+    </form>
   )
 }
