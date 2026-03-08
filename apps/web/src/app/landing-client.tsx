@@ -7,54 +7,42 @@ import { ArrowRight, Users, RefreshCw, Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Highlighter } from "@/components/ui/highlighter";
+import { HeroSection } from "@/components/home/hero-section";
+import { FeaturesCarousel } from "@/components/home/features-carousel";
 
 export function LandingPageClient() {
   return (
     <div className="space-y-20 pt-24 md:pt-32">
       {/* Hero Section */}
-      <div
-        className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
-        style={{ animationDelay: "0ms", animationFillMode: "both" }}
-      >
-        <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-          Split costs,
-          <br />
-          <Highlighter action="highlight" color="#72E3AD">
-            not friendships
-          </Highlighter>
-        </h1>
-        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-          Keep track of your shared expenses, subscriptions, and recurring payments with housemates, trips, groups, friends, and family.
-        </p>
-        <div className="pt-4">
-          <Button asChild size="lg" className="text-base">
-            <Link href="/signup">
-              Get organized
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <HeroSection />
 
-      {/* Feature Section */}
+      {/* Feature Section with Carousel */}
       <div className="space-y-8">
         <div
           className="text-center animate-in fade-in slide-in-from-bottom-4 duration-500"
           style={{ animationDelay: "100ms", animationFillMode: "both" }}
         >
           <h2 className="text-3xl md:text-4xl font-bold">
-            Your shared expenses
+            Everything you need
             <br />
             <Highlighter action="underline" color="#72E3AD">
-              need clarity.
+              to manage shared expenses.
             </Highlighter>
           </h2>
+        </div>
+
+        {/* Animated Features Carousel */}
+        <div
+          className="animate-in fade-in slide-in-from-bottom-4 duration-500"
+          style={{ animationDelay: "150ms", animationFillMode: "both" }}
+        >
+          <FeaturesCarousel />
         </div>
 
         {/* Features + Table Side by Side */}
         <div
           className="grid md:grid-cols-2 gap-8 items-start animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "150ms", animationFillMode: "both" }}
+          style={{ animationDelay: "200ms", animationFillMode: "both" }}
         >
           {/* Left: Vertical bullet list */}
           <div className="space-y-6">
