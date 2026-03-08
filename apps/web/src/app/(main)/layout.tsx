@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppLoading } from "@/components/app-loading";
@@ -20,10 +21,17 @@ export default async function MainLayout({
     : null;
   const userName = dbUser?.name ?? "";
 
-  if (!user) {
+  // Check if we're on the landing page via middleware-injected header
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") || "";
+  const isLandingPage = pathname === "/";
+
+  // Unauthenticated users OR authenticated users on the landing page
+  // get the marketing layout (no sidebar)
+  if (!user || isLandingPage) {
     return (
       <div className="flex flex-col h-[100dvh] overflow-hidden">
-        <MarketingHeader />
+        <MarketingHeader user={user} userName={userName} />
         <main className="flex-1 overflow-y-auto overscroll-none p-4 md:p-6">
           <Suspense fallback={<AppLoading />}>{children}</Suspense>
         </main>
