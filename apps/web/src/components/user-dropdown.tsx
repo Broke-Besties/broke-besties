@@ -32,7 +32,9 @@ export function UserDropdown({ user, userName }: { user: User; userName: string 
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
           <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
-            {userName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U"}
+            {userName
+              ? userName.split(" ").map(n => n[0]?.toUpperCase()).join("").slice(0, 2)
+              : user.email?.[0]?.toUpperCase() || "U"}
           </div>
         </Button>
       </DropdownMenuTrigger>
