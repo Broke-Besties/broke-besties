@@ -52,16 +52,10 @@ import * as z from 'zod'
 import { cn } from '@/lib/utils'
 import { createStandaloneDebt, searchFriendsForDebt, getRecentFriendsForDebt, getUserGroups } from './actions'
 
-type Friend = {
-  id: string
-  name: string
-  email: string
-}
+import type { User, Group as PrismaGroup } from '@prisma/client'
 
-type Group = {
-  id: number
-  name: string
-}
+type Friend = Pick<User, 'id' | 'name' | 'email'>
+type Group = Pick<PrismaGroup, 'id' | 'name'>
 
 type CreateDebtModalProps = {
   isOpen: boolean
