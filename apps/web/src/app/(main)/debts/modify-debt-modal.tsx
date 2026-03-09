@@ -7,13 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  DialogOverlay,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from '@/components/ui/sheet'
 import { createDebtTransaction } from '@/app/(main)/groups/[id]/actions'
 
 type ModifyDebtModalProps = {
@@ -94,7 +94,7 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     onClose()
   }
 
-  if (!isOpen || !debt) return null
+  if (!debt) return null
 
   const otherPerson = isLender ? debt.borrower : debt.lender
 
@@ -104,24 +104,23 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
   }
 
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay onClick={handleClose} />
-      <DialogContent>
-        <DialogHeader>
+    <Sheet open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <SheetContent side="right" className="sm:max-w-md">
+        <SheetHeader>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full yellow-badge">
               <Pencil className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle>Modify Debt</DialogTitle>
-              <DialogDescription>
+              <SheetTitle>Modify Debt</SheetTitle>
+              <SheetDescription>
                 Request changes to this debt
-              </DialogDescription>
+              </SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
-        <div className="px-6 pb-4 space-y-4">
+        <div className="px-4 pb-4 space-y-4 flex-1 overflow-y-auto">
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -129,7 +128,9 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="modifyAmount">Amount ($)</Label>
+            <Label htmlFor="modifyAmount" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Amount ($)
+            </Label>
             <Input
               id="modifyAmount"
               type="number"
@@ -137,48 +138,53 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
               min="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              className="font-mono"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="modifyDescription">Description</Label>
+            <Label htmlFor="modifyDescription" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Description
+            </Label>
             <Textarea
               id="modifyDescription"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="resize-none"
+              className="resize-none text-[13px]"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="modifyReason">Reason for change (optional)</Label>
+            <Label htmlFor="modifyReason" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Reason for change (optional)
+            </Label>
             <Textarea
               id="modifyReason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
               placeholder="Why are you requesting this change?"
-              className="resize-none"
+              className="resize-none text-[13px]"
             />
           </div>
 
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="text-sm text-amber-700 dark:text-amber-300">
+          <div className="yellow-callout">
+            <p className="text-[13px]">
               This will send a request to <strong>{otherPerson.name || otherPerson.email}</strong> to approve these changes.
             </p>
           </div>
         </div>
 
-        <DialogFooter>
+        <SheetFooter>
           <Button variant="outline" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={submitting}>
             {submitting ? 'Requesting...' : 'Request Changes'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

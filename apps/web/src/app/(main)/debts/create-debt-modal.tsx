@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  DialogOverlay,
+  Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -225,23 +225,20 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setSearchResults([])
   }
 
-  if (!isOpen) return null
-
   const displayResults = searchQuery.trim() ? searchResults : recentFriends
   const showDropdown = searchQuery.trim() || (!borrower && recentFriends.length > 0)
 
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay onClick={handleClose} />
-      <DialogContent className="max-h-[90vh] flex flex-col">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-h-[90vh] flex flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add New Debt</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-[13px]">
             Create a debt with a friend. They will owe you this amount.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 pb-4 space-y-4 overflow-y-auto">
+        <div className="space-y-4 overflow-y-auto flex-1 px-1">
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -250,28 +247,30 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
           {/* Friend Search */}
           <div className="space-y-2">
-            <Label htmlFor="friendSearch">Who owes you?</Label>
+            <Label htmlFor="friendSearch" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Who owes you?
+            </Label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="friendSearch"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search friends by name or email..."
-                className="pl-9"
+                className="pl-9 text-[13px]"
                 autoComplete="off"
               />
             </div>
 
             {showDropdown && (
-              <div className="max-h-40 overflow-y-auto rounded-lg border bg-background shadow-sm">
+              <div className="max-h-40 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-sm">
                 {searching ? (
-                  <div className="p-3 text-center text-sm text-muted-foreground">Searching...</div>
+                  <div className="p-3 text-center text-[13px] text-muted-foreground">Searching...</div>
                 ) : displayResults.length > 0 ? (
                   <>
                     {!searchQuery.trim() && (
-                      <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b">
+                      <div className="px-3 py-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground border-b border-border/40">
                         Recent friends
                       </div>
                     )}
@@ -280,15 +279,15 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                         key={friend.id}
                         type="button"
                         onClick={() => selectBorrower(friend)}
-                        className="w-full border-b p-3 text-left hover:bg-muted/50 transition-colors last:border-b-0"
+                        className="w-full border-b border-border/40 p-3 text-left hover:bg-accent/50 transition-colors last:border-b-0 cursor-pointer"
                       >
-                        <div className="font-medium text-sm">{friend.name}</div>
-                        <div className="text-xs text-muted-foreground">{friend.email}</div>
+                        <div className="font-medium text-[13px]">{friend.name}</div>
+                        <div className="text-[11px] text-muted-foreground">{friend.email}</div>
                       </button>
                     ))}
                   </>
                 ) : searchQuery.trim() ? (
-                  <div className="p-3 text-center text-sm text-muted-foreground">No friends found</div>
+                  <div className="p-3 text-center text-[13px] text-muted-foreground">No friends found</div>
                 ) : null}
               </div>
             )}
@@ -297,17 +296,17 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
           {/* Selected Borrower */}
           {borrower && (
             <div className="space-y-2">
-              <Label>Selected Person</Label>
-              <div className="rounded-lg border bg-muted/50 p-3">
+              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">Selected Person</Label>
+              <div className="rounded-lg border border-border/40 bg-muted/50 p-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-sm">{borrower.name}</div>
-                    <div className="text-xs text-muted-foreground">{borrower.email}</div>
+                    <div className="font-medium text-[13px]">{borrower.name}</div>
+                    <div className="text-[11px] text-muted-foreground">{borrower.email}</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setBorrower(null)}
-                    className="p-1 rounded hover:bg-background transition-colors"
+                    className="p-1 rounded hover:bg-background transition-colors cursor-pointer"
                   >
                     <X className="h-4 w-4 text-muted-foreground" />
                   </button>
@@ -318,7 +317,9 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
           {/* Amount */}
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount ($)</Label>
+            <Label htmlFor="amount" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Amount ($)
+            </Label>
             <Input
               id="amount"
               type="number"
@@ -335,27 +336,32 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                 }
               }}
               placeholder="0.00"
+              className="font-mono"
             />
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description (optional)</Label>
+            <Label htmlFor="description" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Description (optional)
+            </Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder="What is this debt for?"
-              className="resize-none"
+              className="resize-none text-[13px]"
             />
           </div>
 
           {/* Group Selector */}
           <div className="space-y-2">
-            <Label htmlFor="group">Group (optional)</Label>
+            <Label htmlFor="group" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Group (optional)
+            </Label>
             <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
-              <SelectTrigger id="group">
+              <SelectTrigger id="group" className="text-[13px]">
                 <SelectValue placeholder="Select a group (optional)" />
               </SelectTrigger>
               <SelectContent>
@@ -367,23 +373,25 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Associate this debt with a group, or leave empty for a personal debt
             </p>
           </div>
 
           {/* Receipt Upload */}
           <div className="space-y-2">
-            <Label htmlFor="receipt">Receipt (optional)</Label>
+            <Label htmlFor="receipt" className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Receipt (optional)
+            </Label>
             <input
               id="receipt"
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp"
               onChange={handleReceiptFileSelect}
-              className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+              className="block w-full text-[13px] text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-[13px] file:font-medium file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
             />
             {receiptPreview && (
-              <div className="mt-2 rounded-md border bg-muted/50 p-2">
+              <div className="mt-2 rounded-md border border-border/40 bg-muted/50 p-2">
                 <img
                   src={receiptPreview}
                   alt="Receipt preview"
@@ -394,26 +402,33 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
           </div>
 
           {/* Alert Section */}
-          <div className="space-y-4 pt-4 border-t">
-            <Label className="text-base font-medium">Payment Reminder (optional)</Label>
+          <div className="space-y-4 pt-4 border-t border-border/40">
+            <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Payment Reminder (optional)
+            </Label>
             <div className="space-y-2">
-              <Label htmlFor="alertMessage" className="text-sm">Message</Label>
+              <Label htmlFor="alertMessage" className="text-[13px] text-muted-foreground">
+                Message
+              </Label>
               <Textarea
                 id="alertMessage"
                 value={alertMessage}
                 onChange={(e) => setAlertMessage(e.target.value)}
                 rows={2}
                 placeholder="e.g., Please pay by end of month"
-                className="resize-none"
+                className="resize-none text-[13px]"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="alertDeadline" className="text-sm">Deadline</Label>
+              <Label htmlFor="alertDeadline" className="text-[13px] text-muted-foreground">
+                Deadline
+              </Label>
               <Input
                 id="alertDeadline"
                 type="date"
                 value={alertDeadline}
                 onChange={(e) => setAlertDeadline(e.target.value)}
+                className="text-[13px]"
               />
             </div>
           </div>
@@ -428,6 +443,6 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
           </Button>
         </DialogFooter>
       </DialogContent>
-    </div>
+    </Dialog>
   )
 }

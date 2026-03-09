@@ -81,7 +81,30 @@ async function waitForUser(
   throw new Error(`User ${userId} not found after ${maxRetries} retries`);
 }
 
+async function resetDatabase() {
+  console.log("Clearing existing data...");
+  // Delete in dependency order
+  await prisma.debtTransaction.deleteMany();
+  await prisma.recurringPaymentBorrower.deleteMany();
+  await prisma.recurringPayment.deleteMany();
+  await prisma.receipt.deleteMany();
+  await prisma.debt.deleteMany();
+  await prisma.alert.deleteMany();
+  await prisma.tab.deleteMany();
+  await prisma.groupInvite.deleteMany();
+  await prisma.groupMember.deleteMany();
+  await prisma.group.deleteMany();
+  await prisma.friend.deleteMany();
+  await prisma.user.deleteMany();
+  console.log("Database cleared.");
+}
+
 async function main() {
+  const shouldReset = process.argv.includes("--reset");
+  if (shouldReset) {
+    await resetDatabase();
+  }
+
   const seedUserEmail = process.env.SEED_USER_EMAIL;
   if (!seedUserEmail) {
     throw new Error("SEED_USER_EMAIL environment variable is required");
@@ -103,6 +126,8 @@ async function main() {
     { email: "bob@example.com", name: "Bob Smith" },
     { email: "charlie@example.com", name: "Charlie Brown" },
     { email: "diana@example.com", name: "Diana Prince" },
+    { email: "elena@example.com", name: "Elena Vasquez" },
+    { email: "frank@example.com", name: "Frank Okafor" },
   ];
 
   const seedUserIds = await Promise.all(
@@ -115,57 +140,92 @@ async function main() {
   const seedUsers = await Promise.all(
     seedUserIds.map((id) => prisma.user.findUniqueOrThrow({ where: { id } }))
   );
-  const [alice, bob, charlie, diana] = seedUsers;
+  const [alice, bob, charlie, diana, elena, frank] = seedUsers;
   console.log(`Created ${seedUsers.length} seed users`);
+
+  // ── Friendships ──────────────────────────────────────────────
+  // mainUser friends with everyone, plus cross-friendships
+  const friendPairs: [string, string][] = [
+    [mainUser.id, alice.id],
+    [mainUser.id, bob.id],
+    [mainUser.id, charlie.id],
+    [mainUser.id, diana.id],
+    [mainUser.id, elena.id],
+    [mainUser.id, frank.id],
+    [alice.id, bob.id],
+    [alice.id, charlie.id],
+    [charlie.id, diana.id],
+    [elena.id, frank.id],
+    [bob.id, elena.id],
+  ];
+
+  await Promise.all(
+    friendPairs.map(([requesterId, recipientId], i) =>
+      prisma.friend.create({
+        data: {
+          requesterId,
+          recipientId,
+          status: "accepted",
+          createdAt: new Date(
+            now.getTime() - (180 - i * 10) * 24 * 60 * 60 * 1000
+          ),
+        },
+      })
+    )
+  );
+  // One pending friend request (diana → frank)
+  await prisma.friend.create({
+    data: {
+      requesterId: diana.id,
+      recipientId: frank.id,
+      status: "pending",
+    },
+  });
+  console.log(`Created ${friendPairs.length} accepted friendships + 1 pending`);
 
   // Create groups
   const groups = await Promise.all([
-    prisma.group.create({
-      data: { name: "Roommates" },
-    }),
-    prisma.group.create({
-      data: { name: "Trip to Vegas" },
-    }),
-    prisma.group.create({
-      data: { name: "Office Lunch Club" },
-    }),
+    prisma.group.create({ data: { name: "Roommates" } }),
+    prisma.group.create({ data: { name: "Trip to Vegas" } }),
+    prisma.group.create({ data: { name: "Office Lunch Club" } }),
+    prisma.group.create({ data: { name: "Weekend Hikers" } }),
+    prisma.group.create({ data: { name: "Book Club" } }),
   ]);
-  const [roommatesGroup, vegasGroup, officeGroup] = groups;
+  const [roommatesGroup, vegasGroup, officeGroup, hikersGroup, bookClub] =
+    groups;
   console.log(`Created ${groups.length} groups`);
 
   // Add members to groups
-  await Promise.all([
-    // Roommates group: mainUser, alice, bob
-    prisma.groupMember.create({
-      data: { userId: mainUser.id, groupId: roommatesGroup.id },
-    }),
-    prisma.groupMember.create({
-      data: { userId: alice.id, groupId: roommatesGroup.id },
-    }),
-    prisma.groupMember.create({
-      data: { userId: bob.id, groupId: roommatesGroup.id },
-    }),
-    // Vegas trip group: mainUser, charlie, diana
-    prisma.groupMember.create({
-      data: { userId: mainUser.id, groupId: vegasGroup.id },
-    }),
-    prisma.groupMember.create({
-      data: { userId: charlie.id, groupId: vegasGroup.id },
-    }),
-    prisma.groupMember.create({
-      data: { userId: diana.id, groupId: vegasGroup.id },
-    }),
-    // Office group: mainUser, alice, charlie
-    prisma.groupMember.create({
-      data: { userId: mainUser.id, groupId: officeGroup.id },
-    }),
-    prisma.groupMember.create({
-      data: { userId: alice.id, groupId: officeGroup.id },
-    }),
-    prisma.groupMember.create({
-      data: { userId: charlie.id, groupId: officeGroup.id },
-    }),
-  ]);
+  const memberAssignments: [string, number][] = [
+    // Roommates: mainUser, alice, bob
+    [mainUser.id, roommatesGroup.id],
+    [alice.id, roommatesGroup.id],
+    [bob.id, roommatesGroup.id],
+    // Vegas: mainUser, charlie, diana, elena
+    [mainUser.id, vegasGroup.id],
+    [charlie.id, vegasGroup.id],
+    [diana.id, vegasGroup.id],
+    [elena.id, vegasGroup.id],
+    // Office: mainUser, alice, charlie, frank
+    [mainUser.id, officeGroup.id],
+    [alice.id, officeGroup.id],
+    [charlie.id, officeGroup.id],
+    [frank.id, officeGroup.id],
+    // Hikers: mainUser, bob, elena, frank
+    [mainUser.id, hikersGroup.id],
+    [bob.id, hikersGroup.id],
+    [elena.id, hikersGroup.id],
+    [frank.id, hikersGroup.id],
+    // Book Club: mainUser, alice, diana
+    [mainUser.id, bookClub.id],
+    [alice.id, bookClub.id],
+    [diana.id, bookClub.id],
+  ];
+  await Promise.all(
+    memberAssignments.map(([userId, groupId]) =>
+      prisma.groupMember.create({ data: { userId, groupId } })
+    )
+  );
   console.log("Added members to groups");
 
   // Create alerts first (so we can link them to debts)
@@ -455,6 +515,138 @@ async function main() {
   ]);
   console.log(`Created ${otherDebts.length} debts between other users`);
 
+  // ── Extra debts involving elena & frank ────────────────────
+  const extraDebts = await Promise.all([
+    // mainUser lent elena for hiking gear
+    prisma.debt.create({
+      data: {
+        amount: 55.0,
+        description: "Hiking boots rental",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: elena.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+    // frank owes mainUser for book
+    prisma.debt.create({
+      data: {
+        amount: 18.5,
+        description: "Shared Kindle book",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: frank.id,
+        groupId: officeGroup.id,
+      },
+    }),
+    // mainUser owes elena for gas
+    prisma.debt.create({
+      data: {
+        amount: 32.0,
+        description: "Gas for trail drive",
+        status: "pending",
+        lenderId: elena.id,
+        borrowerId: mainUser.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+    // Settled debt mainUser → elena
+    prisma.debt.create({
+      data: {
+        amount: 70.0,
+        description: "Camping supplies",
+        status: "paid",
+        lenderId: mainUser.id,
+        borrowerId: elena.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+    // Settled debt frank → mainUser
+    prisma.debt.create({
+      data: {
+        amount: 28.0,
+        description: "Team lunch",
+        status: "paid",
+        lenderId: frank.id,
+        borrowerId: mainUser.id,
+        groupId: officeGroup.id,
+      },
+    }),
+    // elena ↔ frank standalone debts
+    prisma.debt.create({
+      data: {
+        amount: 110.0,
+        description: "Concert presale tickets",
+        status: "pending",
+        lenderId: elena.id,
+        borrowerId: frank.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 45.0,
+        description: "Uber pool rides (last 3 weeks)",
+        status: "pending",
+        lenderId: frank.id,
+        borrowerId: elena.id,
+      },
+    }),
+    // alice owes mainUser for book club dinner
+    prisma.debt.create({
+      data: {
+        amount: 38.0,
+        description: "Book club dinner host supplies",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: alice.id,
+        groupId: bookClub.id,
+      },
+    }),
+    // diana owes mainUser from book club
+    prisma.debt.create({
+      data: {
+        amount: 22.0,
+        description: "Shared audiobook subscription",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: diana.id,
+        groupId: bookClub.id,
+      },
+    }),
+  ]);
+  console.log(`Created ${extraDebts.length} extra debts (elena, frank, more cross-friend)`);
+
+  // ── Extra pending transactions ──────────────────────────────
+  await Promise.all([
+    // confirm_paid from elena on hiking boots debt
+    prisma.debtTransaction.create({
+      data: {
+        debtId: extraDebts[0].id,
+        type: "confirm_paid",
+        status: "pending",
+        requesterId: elena.id,
+        lenderApproved: false,
+        borrowerApproved: true,
+        reason: "Sent via Venmo yesterday",
+      },
+    }),
+    // frank wants to modify the Kindle book debt
+    prisma.debtTransaction.create({
+      data: {
+        debtId: extraDebts[1].id,
+        type: "modify",
+        status: "pending",
+        requesterId: frank.id,
+        lenderApproved: false,
+        borrowerApproved: true,
+        proposedAmount: 9.25,
+        proposedDescription: "Shared Kindle book (50/50 split)",
+        reason: "Should be split evenly, not full price",
+      },
+    }),
+  ]);
+  console.log("Created extra pending transactions (confirm_paid + modify)");
+
   // Create tabs for mainUser
   const tabs = await Promise.all([
     prisma.tab.create({
@@ -583,6 +775,36 @@ async function main() {
   });
   console.log("Created additional recurring payment");
 
+  // Recurring: mainUser pays Spotify, elena splits
+  await prisma.recurringPayment.create({
+    data: {
+      amount: 16.99,
+      description: "Spotify Family Plan",
+      status: "active",
+      lenderId: mainUser.id,
+      frequency: 30,
+      borrowers: {
+        create: [
+          { userId: elena.id, splitPercentage: 50 },
+        ],
+      },
+    },
+  });
+
+  // Recurring: frank pays gym, mainUser splits
+  await prisma.recurringPayment.create({
+    data: {
+      amount: 80.0,
+      description: "Gym membership duo",
+      status: "active",
+      lenderId: frank.id,
+      frequency: 30,
+      borrowers: {
+        create: [{ userId: mainUser.id, splitPercentage: 50 }],
+      },
+    },
+  });
+
   // Inactive recurring payment
   await prisma.recurringPayment.create({
     data: {
@@ -596,20 +818,29 @@ async function main() {
       },
     },
   });
-  console.log("Created inactive recurring payment");
+  console.log("Created recurring payments (6 total)");
 
-  console.log("\nSeed completed successfully!");
+  const totalDebts =
+    debtsAsLender.length + debtsAsBorrower.length + otherDebts.length + extraDebts.length;
+
+  console.log("\n✅ Seed completed successfully!");
   console.log("\nSummary:");
   console.log(`- Main user: ${mainUser.email}`);
-  console.log(`- Seed users: ${seedUsers.length}`);
-  console.log(`- Groups: ${groups.length}`);
-  console.log(
-    `- Debts: ${debtsAsLender.length + debtsAsBorrower.length + otherDebts.length} (2 paid, rest pending/settled)`
-  );
-  console.log(`- Alerts: 8 (7 active, 1 expired)`);
+  console.log(`- Seed users: ${seedUsers.length} (alice, bob, charlie, diana, elena, frank)`);
+  console.log(`- Friendships: ${friendPairs.length} accepted + 1 pending`);
+  console.log(`- Groups: ${groups.length} (Roommates, Vegas, Office, Hikers, Book Club)`);
+  console.log(`- Debts: ${totalDebts} (4 paid, rest pending/settled)`);
+  console.log(`- Alerts: 8 (7 active, 1 inactive)`);
   console.log(`- Tabs: ${tabs.length}`);
-  console.log(`- Debt transactions: ${debtTransactions.length}`);
-  console.log(`- Recurring payments: 4`);
+  console.log(`- Debt transactions: ${debtTransactions.length + 2} (pending + approved)`);
+  console.log(`- Recurring payments: 6 (5 active, 1 inactive)`);
+  console.log("\nFriend dashboard URLs (append friend user ID):");
+  console.log(`- Alice:   /friendsv2/${alice.id}`);
+  console.log(`- Bob:     /friendsv2/${bob.id}`);
+  console.log(`- Charlie: /friendsv2/${charlie.id}`);
+  console.log(`- Diana:   /friendsv2/${diana.id}`);
+  console.log(`- Elena:   /friendsv2/${elena.id}`);
+  console.log(`- Frank:   /friendsv2/${frank.id}`);
 }
 
 main()

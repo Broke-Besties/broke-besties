@@ -44,6 +44,10 @@
   --input: 0 0% 90%;
   --ring: 151 67% 67%;
 
+  --money-positive: var(--green);
+  --money-negative: var(--red);
+  --money-warning: var(--yellow);
+
   --radius: 0.9rem;
 
   --sidebar: hsl(0 0% 98%);
@@ -96,6 +100,10 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+
+  --color-money-positive: hsl(var(--money-positive));
+  --color-money-negative: hsl(var(--money-negative));
+  --color-money-warning: hsl(var(--money-warning));
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -189,6 +197,10 @@ body {
   --input: 0 0% 9%;
   --ring: 151 67% 67%;
 
+  --money-positive: var(--green);
+  --money-negative: var(--red);
+  --money-warning: var(--yellow);
+
   --sidebar: hsl(0 0% 7%);
   --sidebar-foreground: hsl(0 0% 100%);
   --sidebar-primary: hsl(0 0% 100%);
@@ -242,6 +254,30 @@ body {
   }
   .yellow-badge {
     @apply bg-amber-500/5 text-amber-600 dark:text-amber-400;
+  }
+
+  /* Callout / notice boxes */
+  .yellow-callout {
+    @apply rounded-lg border border-amber-500/20 bg-yellow-muted p-4 text-sm text-yellow;
+  }
+
+  /* Outlined badge variants (for Badge components) */
+  .green-badge-outline {
+    @apply border border-emerald-500/20 bg-green-muted text-green;
+  }
+  .red-badge-outline {
+    @apply border border-rose-500/20 bg-red-muted text-red;
+  }
+  .yellow-badge-outline {
+    @apply border border-amber-500/20 bg-yellow-muted text-yellow;
+  }
+  .muted-badge-outline {
+    @apply border border-border bg-muted text-muted-foreground;
+  }
+
+  /* Card variant for pending transaction banners */
+  .yellow-card {
+    @apply border border-amber-500/20 bg-yellow-muted;
   }
 
   /* Global button styling for all shadcn buttons */

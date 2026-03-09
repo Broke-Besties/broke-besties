@@ -415,7 +415,7 @@ export default function DebtDetailClient({
 
       {/* Pending Transaction Banner */}
       {pendingTransaction && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
+        <Card className="yellow-card">
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
               <div>
@@ -430,7 +430,7 @@ export default function DebtDetailClient({
               </div>
               <Badge
                 variant="outline"
-                className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                className="yellow-badge-outline"
               >
                 Awaiting approval
               </Badge>
@@ -476,7 +476,7 @@ export default function DebtDetailClient({
                   <Button
                     onClick={() => handleRespondToTransaction(true)}
                     disabled={submitting}
-                    className="bg-emerald-600 hover:bg-emerald-700"
+                    className=""
                   >
                     {submitting ? "Processing..." : "Approve"}
                   </Button>
@@ -526,10 +526,8 @@ export default function DebtDetailClient({
             <Badge
               variant="outline"
               className={cn(
-                debt.status === "pending" &&
-                  "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
-                debt.status === "paid" &&
-                  "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                debt.status === "pending" && "yellow-badge-outline",
+                debt.status === "paid" && "green-badge-outline"
               )}
             >
               {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
@@ -688,14 +686,10 @@ export default function DebtDetailClient({
                         <Badge
                           variant="outline"
                           className={cn(
-                            transaction.status === "pending" &&
-                              "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-                            transaction.status === "approved" &&
-                              "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                            transaction.status === "rejected" &&
-                              "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-                            transaction.status === "cancelled" &&
-                              "border-gray-500/30 bg-gray-500/10 text-gray-700 dark:text-gray-300"
+                            transaction.status === "pending" && "yellow-badge-outline",
+                            transaction.status === "approved" && "green-badge-outline",
+                            transaction.status === "rejected" && "red-badge-outline",
+                            transaction.status === "cancelled" && "muted-badge-outline"
                           )}
                         >
                           {transaction.status.charAt(0).toUpperCase() +

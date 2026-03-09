@@ -194,8 +194,8 @@ export default function RequestsPageClient({
 
                   {/* Proposed Changes (for modify type) */}
                   {transaction.type === 'modify' && (transaction.proposedAmount || transaction.proposedDescription) && (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
-                      <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Proposed Changes:</p>
+                    <div className="yellow-callout space-y-2">
+                      <p className="text-[13px] font-medium">Proposed Changes:</p>
                       {transaction.proposedAmount && (
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">New Amount</span>

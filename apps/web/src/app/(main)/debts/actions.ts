@@ -32,6 +32,7 @@ export async function createStandaloneDebt(data: {
     })
     revalidatePath('/debts')
     revalidatePath('/dashboard')
+    revalidatePath('/friendsv2')
     if (data.groupId) {
       revalidatePath(`/groups/${data.groupId}`)
     }
@@ -170,6 +171,7 @@ export async function respondToTransaction(transactionId: number, approve: boole
     })
     revalidatePath('/debts')
     revalidatePath('/dashboard')
+    revalidatePath('/friendsv2')
     return { success: true, ...result }
   } catch (error) {
     console.error('Respond to transaction error:', error)
