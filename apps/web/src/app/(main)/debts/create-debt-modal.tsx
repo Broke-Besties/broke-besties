@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, X } from 'lucide-react'
+import { Check, ChevronsUpDown, CalendarIcon } from 'lucide-react'
+import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -21,6 +21,35 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
+import * as z from 'zod'
+
+import { cn } from '@/lib/utils'
 import { createStandaloneDebt, searchFriendsForDebt, getRecentFriendsForDebt, getUserGroups } from './actions'
 
 type Friend = {
@@ -41,18 +70,27 @@ type CreateDebtModalProps = {
   currentUserId: string
 }
 
+const formSchema = z.object({
+  borrower: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+    })
+    .nullable()
+    .refine((val) => val !== null, { message: 'Please select a friend.' }),
+  amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+    message: 'Enter a valid amount greater than 0',
+  }),
+  description: z.string().optional(),
+  groupId: z.string().optional(),
+  alertMessage: z.string().optional(),
+  alertDeadline: z.date().optional(),
+})
+
 export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: CreateDebtModalProps) {
-  const [amount, setAmount] = useState('')
-  const [description, setDescription] = useState('')
-  const [borrower, setBorrower] = useState<Friend | null>(null)
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('')
   const [groups, setGroups] = useState<Group[]>([])
 
-  // Alert fields
-  const [alertMessage, setAlertMessage] = useState('')
-  const [alertDeadline, setAlertDeadline] = useState('')
-
-  // Receipt fields
+  // Receipt fields remain in local state for convenience with File preview
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
@@ -61,18 +99,31 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   const [searchResults, setSearchResults] = useState<Friend[]>([])
   const [recentFriends, setRecentFriends] = useState<Friend[]>([])
   const [searching, setSearching] = useState(false)
+  const [comboboxOpen, setComboboxOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      borrower: null,
+      amount: '',
+      description: '',
+      groupId: 'none',
+      alertMessage: '',
+      alertDeadline: undefined,
+    },
+  })
 
   // Load recent friends and groups when modal opens
   useEffect(() => {
     if (isOpen) {
-      getRecentFriendsForDebt().then(result => {
+      getRecentFriendsForDebt().then((result) => {
         if (result.success) {
-          setRecentFriends(result.friends.filter(f => f.id !== currentUserId))
+          setRecentFriends(result.friends.filter((f) => f.id !== currentUserId))
         }
       })
-      getUserGroups().then(result => {
+      getUserGroups().then((result) => {
         if (result.success) {
           setGroups(result.groups)
         }
@@ -92,7 +143,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
       try {
         const result = await searchFriendsForDebt(searchQuery)
         if (result.success) {
-          const filtered = result.friends.filter(f => f.id !== currentUserId)
+          const filtered = result.friends.filter((f) => f.id !== currentUserId)
           setSearchResults(filtered)
         }
       } catch (error) {
@@ -129,12 +180,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setError('')
   }
 
-  const handleSubmit = async () => {
-    if (!borrower || !amount || parseFloat(amount) <= 0) {
-      setError('Please select a borrower and enter a valid amount')
-      return
-    }
-
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setSubmitting(true)
     setError('')
 
@@ -145,10 +191,10 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         setUploadingReceipt(true)
         const formData = new FormData()
         formData.append('file', receiptFile)
-        
+
         // If there's a group, associate receipt with the group
-        if (selectedGroupId && selectedGroupId !== 'none') {
-          formData.append('groupId', selectedGroupId)
+        if (values.groupId && values.groupId !== 'none') {
+          formData.append('groupId', values.groupId)
         }
 
         const uploadResponse = await fetch('/api/receipts/upload', {
@@ -166,30 +212,31 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         setUploadingReceipt(false)
       }
 
+      const parsedAmount = Math.round(parseFloat(values.amount) * 100) / 100
+
       const result = await createStandaloneDebt({
-        amount: parseFloat(amount),
-        description: description || undefined,
-        borrowerId: borrower.id,
-        groupId: selectedGroupId && selectedGroupId !== 'none' ? parseInt(selectedGroupId) : undefined,
+        amount: parsedAmount,
+        description: values.description || undefined,
+        borrowerId: values.borrower!.id,
+        groupId: values.groupId && values.groupId !== 'none' ? parseInt(values.groupId) : undefined,
         receiptIds: receiptId ? [receiptId] : undefined,
       })
 
       if (result.success && result.debt) {
         // If alert fields are provided, create an alert for this debt
-        if (alertMessage || alertDeadline) {
+        if (values.alertMessage || values.alertDeadline) {
           try {
             await fetch('/api/alerts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 debtId: result.debt.id,
-                message: alertMessage || null,
-                deadline: alertDeadline || null,
+                message: values.alertMessage || null,
+                deadline: values.alertDeadline ? format(values.alertDeadline, 'yyyy-MM-dd') : null,
               }),
             })
           } catch (alertError) {
             console.error('Failed to create alert:', alertError)
-            // Don't fail the whole operation if alert creation fails
           }
         }
         onSuccess()
@@ -205,12 +252,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   }
 
   const handleClose = () => {
-    setAmount('')
-    setDescription('')
-    setBorrower(null)
-    setSelectedGroupId('')
-    setAlertMessage('')
-    setAlertDeadline('')
+    form.reset()
     setReceiptFile(null)
     setReceiptPreview(null)
     setSearchQuery('')
@@ -219,229 +261,273 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     onClose()
   }
 
-  const selectBorrower = (friend: Friend) => {
-    setBorrower(friend)
-    setSearchQuery('')
-    setSearchResults([])
-  }
-
-  const displayResults = searchQuery.trim() ? searchResults : recentFriends
-  const showDropdown = searchQuery.trim() || (!borrower && recentFriends.length > 0)
+  const displayFriends = searchQuery.trim() ? searchResults : recentFriends
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-h-[90vh] flex flex-col sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add New Debt</DialogTitle>
-          <DialogDescription className="text-[13px]">
-            Create a debt with a friend. They will owe you this amount.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 overflow-y-auto flex-1 px-1">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          {/* Friend Search */}
-          <div className="space-y-2">
-            <Label htmlFor="friendSearch" className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              Who owes you?
-            </Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="friendSearch"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search friends by name or email..."
-                className="pl-9 text-[13px]"
-                autoComplete="off"
-              />
-            </div>
-
-            {showDropdown && (
-              <div className="max-h-40 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-sm">
-                {searching ? (
-                  <div className="p-3 text-center text-[13px] text-muted-foreground">Searching...</div>
-                ) : displayResults.length > 0 ? (
-                  <>
-                    {!searchQuery.trim() && (
-                      <div className="px-3 py-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground border-b border-border/40">
-                        Recent friends
-                      </div>
-                    )}
-                    {displayResults.map((friend) => (
-                      <button
-                        key={friend.id}
-                        type="button"
-                        onClick={() => selectBorrower(friend)}
-                        className="w-full border-b border-border/40 p-3 text-left hover:bg-accent/50 transition-colors last:border-b-0 cursor-pointer"
-                      >
-                        <div className="font-medium text-[13px]">{friend.name}</div>
-                        <div className="text-[11px] text-muted-foreground">{friend.email}</div>
-                      </button>
-                    ))}
-                  </>
-                ) : searchQuery.trim() ? (
-                  <div className="p-3 text-center text-[13px] text-muted-foreground">No friends found</div>
-                ) : null}
-              </div>
-            )}
-          </div>
-
-          {/* Selected Borrower */}
-          {borrower && (
-            <div className="space-y-2">
-              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">Selected Person</Label>
-              <div className="rounded-lg border border-border/40 bg-muted/50 p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-[13px]">{borrower.name}</div>
-                    <div className="text-[11px] text-muted-foreground">{borrower.email}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setBorrower(null)}
-                    className="p-1 rounded hover:bg-background transition-colors cursor-pointer"
-                  >
-                    <X className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Amount */}
-          <div className="space-y-2">
-            <Label htmlFor="amount" className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              Amount ($)
-            </Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => {
-                const value = e.target.value
-                if (value && !isNaN(parseFloat(value))) {
-                  const rounded = Math.round(parseFloat(value) * 100) / 100
-                  setAmount(rounded.toString())
-                } else {
-                  setAmount(value)
-                }
-              }}
-              placeholder="0.00"
-              className="font-mono"
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description" className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              Description (optional)
-            </Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="What is this debt for?"
-              className="resize-none text-[13px]"
-            />
-          </div>
-
-          {/* Group Selector */}
-          <div className="space-y-2">
-            <Label htmlFor="group" className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              Group (optional)
-            </Label>
-            <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
-              <SelectTrigger id="group" className="text-[13px]">
-                <SelectValue placeholder="Select a group (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No group</SelectItem>
-                {groups.map((group) => (
-                  <SelectItem key={group.id} value={group.id.toString()}>
-                    {group.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              Associate this debt with a group, or leave empty for a personal debt
-            </p>
-          </div>
-
-          {/* Receipt Upload */}
-          <div className="space-y-2">
-            <Label htmlFor="receipt" className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              Receipt (optional)
-            </Label>
-            <input
-              id="receipt"
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
-              onChange={handleReceiptFileSelect}
-              className="block w-full text-[13px] text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-[13px] file:font-medium file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
-            />
-            {receiptPreview && (
-              <div className="mt-2 rounded-md border border-border/40 bg-muted/50 p-2">
-                <img
-                  src={receiptPreview}
-                  alt="Receipt preview"
-                  className="h-32 w-auto object-contain"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Alert Section */}
-          <div className="space-y-4 pt-4 border-t border-border/40">
-            <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              Payment Reminder (optional)
-            </Label>
-            <div className="space-y-2">
-              <Label htmlFor="alertMessage" className="text-[13px] text-muted-foreground">
-                Message
-              </Label>
-              <Textarea
-                id="alertMessage"
-                value={alertMessage}
-                onChange={(e) => setAlertMessage(e.target.value)}
-                rows={2}
-                placeholder="e.g., Please pay by end of month"
-                className="resize-none text-[13px]"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="alertDeadline" className="text-[13px] text-muted-foreground">
-                Deadline
-              </Label>
-              <Input
-                id="alertDeadline"
-                type="date"
-                value={alertDeadline}
-                onChange={(e) => setAlertDeadline(e.target.value)}
-                className="text-[13px]"
-              />
-            </div>
-          </div>
+      <DialogContent className="max-h-[90vh] flex flex-col p-0 sm:max-w-xl overflow-hidden">
+        <div className="p-6 pb-2">
+          <DialogHeader>
+            <DialogTitle>Add New Debt</DialogTitle>
+            <DialogDescription className="text-sm">
+              Create a debt with a friend. They will owe you this amount.
+            </DialogDescription>
+          </DialogHeader>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={submitting || uploadingReceipt}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={submitting || uploadingReceipt || !borrower || !amount}>
-            {uploadingReceipt ? 'Uploading...' : submitting ? 'Creating...' : 'Create Debt'}
-          </Button>
-        </DialogFooter>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-2 space-y-6">
+              {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+
+            {/* Friend Search (Borrower) */}
+            <FormField
+              control={form.control}
+              name="borrower"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Who owes you?</FormLabel>
+                  <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={comboboxOpen}
+                          className={cn(
+                            "w-full justify-between font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value ? field.value.name : "Select a friend..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    {/* align="start" causes layout shifts if the button moves, ensure it fits. modal requires care. */}
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search friends by name or email..."
+                          value={searchQuery}
+                          onValueChange={setSearchQuery}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            {searching ? "Searching..." : "No friends found."}
+                          </CommandEmpty>
+                          {displayFriends.length > 0 && (
+                            <CommandGroup heading={searchQuery.trim() ? "Search Results" : "Recent Friends"}>
+                              {displayFriends.map((friend) => (
+                                <CommandItem
+                                  key={friend.id}
+                                  value={friend.id}
+                                  onSelect={() => {
+                                    field.onChange(friend)
+                                    setComboboxOpen(false)
+                                  }}
+                                  className="flex flex-col items-start gap-1 cursor-pointer"
+                                >
+                                  <div className="flex items-center w-full justify-between">
+                                    <span className="font-medium text-sm">{friend.name}</span>
+                                    <Check
+                                      className={cn(
+                                        "h-4 w-4",
+                                        field.value?.id === friend.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">{friend.email}</span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Amount */}
+            <FormField
+              control={form.control}
+              name="amount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Amount ($)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="font-mono"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Description */}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="What is this debt for?"
+                      className="resize-none"
+                      rows={2}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Group Selector */}
+            <FormField
+              control={form.control}
+              name="groupId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Group (optional)</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a group" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">No group</SelectItem>
+                      {groups.map((group) => (
+                        <SelectItem key={group.id} value={group.id.toString()}>
+                          {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Associate this debt with a group, or leave empty for a personal debt.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Receipt Upload */}
+            <div className="space-y-3">
+              <FormLabel>Receipt (optional)</FormLabel>
+              <Input
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                onChange={handleReceiptFileSelect}
+                className="cursor-pointer file:h-full file:bg-primary file:text-primary-foreground file:border-0 hover:file:bg-primary/90 file:px-4 file:mr-4 file:rounded-md pt-0 pb-0 pl-0 border"
+              />
+              {receiptPreview && (
+                <div className="mt-2 rounded-md border border-border/40 bg-muted/50 p-2">
+                  <img
+                    src={receiptPreview}
+                    alt="Receipt preview"
+                    className="h-32 w-auto object-contain"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Alert Section */}
+            <div className="space-y-4 pt-4 border-t border-border/40">
+              <div className="flex flex-col gap-1">
+                <FormLabel className="text-sm font-medium">Payment Reminder (optional)</FormLabel>
+                <FormDescription>Set an optional deadline and reminder message.</FormDescription>
+              </div>
+              
+              <FormField
+                control={form.control}
+                name="alertMessage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs text-muted-foreground font-normal">Message</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., Please pay by end of month"
+                        className="resize-none"
+                        rows={2}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="alertDeadline"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-xs text-muted-foreground font-normal">Deadline</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full sm:w-[240px] pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date < new Date(new Date().setHours(0, 0, 0, 0))
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            </div>
+            <div className="p-6 pt-4 border-t border-border/40 bg-background">
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={handleClose} disabled={submitting || uploadingReceipt}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting || uploadingReceipt}>
+                  {uploadingReceipt ? 'Uploading...' : submitting ? 'Creating...' : 'Create Debt'}
+                </Button>
+              </DialogFooter>
+            </div>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
