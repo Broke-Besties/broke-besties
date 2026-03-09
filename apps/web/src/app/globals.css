@@ -42,7 +42,7 @@
 
   --border: 0 0% 90%;
   --input: 0 0% 90%;
-  --ring: 151 67% 67%;
+  --ring: 0 0% 9%;
 
   --money-positive: var(--green);
   --money-negative: var(--red);
@@ -195,7 +195,7 @@ body {
 
   --border: 0 0% 22%;
   --input: 0 0% 9%;
-  --ring: 151 67% 67%;
+  --ring: 0 0% 83%;
 
   --money-positive: var(--green);
   --money-negative: var(--red);
