@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, MouseEvent } from "react";
+import { useRef } from "react";
 import {
   ArrowRight,
   ScanLine,
@@ -10,18 +10,14 @@ import {
   PiggyBank,
   Repeat,
   GitGraph,
-  ShieldCheck,
   Github,
   Twitter,
   Linkedin,
 } from "lucide-react";
 import { motion, useInView } from "motion/react";
-
 import { Button } from "@/components/ui/button";
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  Utility: fade-up on scroll                                                 */
-/* ─────────────────────────────────────────────────────────────────────────── */
+/* ── Fade-up on scroll ── */
 function FadeUp({
   children,
   delay = 0,
@@ -32,14 +28,14 @@ function FadeUp({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
+  const inView = useInView(ref, { once: true, margin: "-60px" });
 
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 28 }}
+      initial={{ opacity: 0, y: 24 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
       className={className}
     >
       {children}
@@ -47,126 +43,118 @@ function FadeUp({
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  Dot Grid Background                                                        */
-/* ─────────────────────────────────────────────────────────────────────────── */
-function DotGrid() {
+/* ── Thin decorative divider ── */
+function Divider() {
   return (
-    <div
-      className="absolute inset-0 pointer-events-none"
-      style={{
-        backgroundImage: `radial-gradient(circle, hsl(var(--foreground) / 0.05) 1px, transparent 1px)`,
-        backgroundSize: "28px 28px",
-        maskImage:
-          "radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 100%)",
-        WebkitMaskImage:
-          "radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 100%)",
-      }}
-    />
+    <div className="flex items-center justify-center py-12">
+      <div className="w-12 h-px bg-border" />
+      <div className="w-1 h-1 rounded-full bg-primary mx-4" />
+      <div className="w-12 h-px bg-border" />
+    </div>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  1. Hero                                                                    */
-/* ─────────────────────────────────────────────────────────────────────────── */
+/* ── Hero ── */
 function Hero() {
   return (
-    <section className="relative min-h-[85vh] flex flex-col justify-center pb-16 overflow-hidden">
-      <DotGrid />
-      {/* Gradient glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
+    <section className="relative flex flex-col justify-center pb-16 pt-28 md:pt-32 min-h-[80vh] overflow-hidden">
+      {/* Subtle warm gradient bg */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-muted/30 pointer-events-none" />
 
-      <div className="relative max-w-5xl mx-auto px-6 w-full text-center space-y-8">
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
+      {/* Accent circle */}
+      <div className="absolute top-1/4 right-[10%] w-[min(35vw,400px)] h-[min(35vw,400px)] rounded-full border border-border/40 pointer-events-none opacity-40" />
+
+      {/* Thin vertical accent */}
+      <motion.div
+        initial={{ scaleY: 0 }}
+        animate={{ scaleY: 1 }}
+        transition={{ duration: 1.2, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="absolute top-0 right-[15%] w-px h-[35vh] bg-border/60 origin-top pointer-events-none hidden lg:block"
+      />
+
+      <div className="relative max-w-5xl mx-auto px-6 w-full">
+        {/* Eyebrow */}
+        <motion.p
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1.5"
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="text-xs font-medium tracking-[0.15em] uppercase text-muted-foreground mb-6"
         >
-          <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-          <span className="text-xs font-medium text-primary tracking-wide">
-            Bank-grade security &bull; SOC2 compliant
-          </span>
-        </motion.div>
+          Expense splitting — simplified
+        </motion.p>
 
-        {/* Headline */}
+        {/* Headline — Cormorant serif */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.06] tracking-tight text-foreground"
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="font-[var(--font-cormorant)] text-[clamp(2.75rem,7vw,5.5rem)] font-normal leading-[1.05] tracking-[-0.02em] text-foreground mb-6 max-w-3xl"
+          style={{ fontFamily: "var(--font-cormorant), serif" }}
         >
-          The smartest way to share{" "}
-          <span className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
-            expenses with your besties.
-          </span>
+          Split expenses with{" "}
+          <em className="text-primary not-italic">friends</em>,<br />
+          not friendships
         </motion.h1>
 
-        {/* Subtext */}
+        {/* Sub copy */}
         <motion.p
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-muted-foreground text-lg md:text-xl leading-relaxed max-w-2xl mx-auto"
+          transition={{ duration: 0.6, delay: 0.35 }}
+          className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-md font-light mb-10"
         >
-          Split receipts with AI, settle in crypto or e-Transfer, and never
-          lose track of who owes who — all in one beautiful app.
+          Track shared expenses, scan receipts with AI, settle in crypto or
+          e-Transfer — all without the awkward conversations.
         </motion.p>
 
-        {/* CTAs */}
+        {/* CTA — understated line-style */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="flex flex-wrap gap-3 justify-center pt-2"
+          transition={{ duration: 0.6, delay: 0.5 }}
+          className="flex flex-wrap items-center gap-6"
         >
           <Button
             asChild
             size="lg"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold px-7 h-12 text-base cursor-pointer"
+            className="bg-foreground text-background hover:bg-foreground/90 font-medium h-12 px-8 text-sm cursor-pointer"
           >
             <Link href="/signup">
-              Start for Free
-              <ArrowRight className="w-4 h-4 ml-1.5" />
+              Start for free
+              <ArrowRight className="w-4 h-4 ml-2" />
             </Link>
           </Button>
-          <Button
-            variant="outline"
-            asChild
-            size="lg"
-            className="border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground px-6 h-12 gap-2 cursor-pointer"
+          <a
+            href="#features"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer flex items-center gap-2 group"
           >
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Github className="w-4 h-4" />
-              View on GitHub
-            </a>
-          </Button>
+            See how it works
+            <span className="inline-block w-8 h-px bg-muted-foreground/40 transition-all duration-300 group-hover:w-12 group-hover:bg-foreground" />
+          </a>
         </motion.div>
 
-        {/* Social proof numbers */}
+        {/* Stats — minimal, inline */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="flex items-center justify-center gap-8 md:gap-12 pt-8"
+          transition={{ duration: 0.8, delay: 0.7 }}
+          className="flex items-center gap-8 md:gap-12 mt-16"
         >
           {[
             { value: "10K+", label: "Splits settled" },
             { value: "$2.4M", label: "Tracked" },
-            { value: "4.9★", label: "User rating" },
-          ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <p className="text-2xl md:text-3xl font-bold text-foreground tabular-nums">
+            { value: "4.9", label: "User rating" },
+          ].map((stat, i) => (
+            <div key={stat.label} className="flex flex-col">
+              <span
+                className="text-2xl md:text-3xl font-normal tracking-tight text-foreground tabular-nums"
+                style={{ fontFamily: "var(--font-cormorant), serif" }}
+              >
                 {stat.value}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
+              </span>
+              <span className="text-[11px] text-muted-foreground tracking-wide uppercase mt-0.5">
                 {stat.label}
-              </p>
+              </span>
             </div>
           ))}
         </motion.div>
@@ -175,70 +163,76 @@ function Hero() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  2. Feature Card (Bento with mouse glow)                                    */
-/* ─────────────────────────────────────────────────────────────────────────── */
-function FeatureCard({
-  icon: Icon,
-  title,
-  description,
-  tag,
-  className = "",
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  tag?: string;
-  className?: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  function handleMouseMove(e: MouseEvent<HTMLDivElement>) {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    ref.current.style.setProperty("--mx", `${e.clientX - rect.left}px`);
-    ref.current.style.setProperty("--my", `${e.clientY - rect.top}px`);
-  }
+/* ── How It Works ── */
+function HowItWorks() {
+  const steps = [
+    {
+      number: "01",
+      title: "Create a group",
+      description:
+        "Invite your roommates, trip crew, or dinner squad. Everyone sees the same shared ledger.",
+    },
+    {
+      number: "02",
+      title: "Log expenses",
+      description:
+        "Snap a receipt and let AI split it, or add amounts manually. Tax and tip are handled automatically.",
+    },
+    {
+      number: "03",
+      title: "Settle up",
+      description:
+        "Pay with e-Transfer, crypto, or cash. One tap to mark it done. No more chasing people.",
+    },
+  ];
 
   return (
-    <motion.div
-      ref={ref}
-      onMouseMove={handleMouseMove}
-      whileHover={{ y: -4, scale: 1.01 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`relative bg-card/60 border border-border rounded-2xl p-6 overflow-hidden group cursor-pointer ${className}`}
-      style={{ "--mx": "50%", "--my": "50%" } as React.CSSProperties}
+    <section
+      id="how-it-works"
+      className="py-20 md:py-28 bg-foreground text-background"
     >
-      {/* Mouse glow */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
-        style={{
-          background:
-            "radial-gradient(200px circle at var(--mx) var(--my), hsl(var(--primary) / 0.08), transparent 80%)",
-        }}
-      />
+      <div className="max-w-5xl mx-auto px-6">
+        <FadeUp className="text-center mb-16">
+          <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-background/50 mb-3">
+            How it works
+          </p>
+          <h2
+            className="text-3xl md:text-4xl font-normal text-background"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            Three steps to financial harmony
+          </h2>
+        </FadeUp>
 
-      {/* Content */}
-      <div className="relative space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
-            <Icon className="w-5 h-5 text-primary" />
-          </div>
-          {tag && (
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full">
-              {tag}
-            </span>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-background/10">
+          {steps.map((step, i) => (
+            <FadeUp key={step.number} delay={i * 0.1}>
+              <div className="bg-foreground p-8 md:p-10 flex flex-col">
+                <span
+                  className="text-4xl font-normal text-primary/40 mb-6"
+                  style={{ fontFamily: "var(--font-cormorant), serif" }}
+                >
+                  {step.number}
+                </span>
+                <h3
+                  className="text-xl font-medium text-background mb-3"
+                  style={{ fontFamily: "var(--font-cormorant), serif" }}
+                >
+                  {step.title}
+                </h3>
+                <p className="text-sm text-background/50 leading-relaxed font-light">
+                  {step.description}
+                </p>
+              </div>
+            </FadeUp>
+          ))}
         </div>
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {description}
-        </p>
       </div>
-    </motion.div>
+    </section>
   );
 }
 
+/* ── Features ── */
 const FEATURES = [
   {
     icon: ScanLine,
@@ -251,11 +245,11 @@ const FEATURES = [
     icon: ArrowLeftRight,
     title: "e-Transfer Ledger",
     description:
-      "A manual log for Interac e-Transfers to keep the group balances in sync without the guesswork.",
+      "A manual log for Interac e-Transfers to keep group balances in sync without guesswork.",
   },
   {
     icon: Wallet,
-    title: "Coinbase Wallet",
+    title: "Crypto Settlements",
     description:
       "Settle up in USDC or ETH with native Web3 wallet integration. Fast, borderless, zero-fee.",
     tag: "Web3",
@@ -274,33 +268,49 @@ const FEATURES = [
   },
   {
     icon: GitGraph,
-    title: "Social Debt Graph",
+    title: "Debt Graph",
     description:
-      'High-density view of \"who owes who\" across your entire circle. Simplify debts with one tap.',
+      "High-density view of who owes who across your entire circle. Simplify debts with one tap.",
   },
 ];
 
 function FeatureGrid() {
   return (
-    <section id="features" className="py-24 border-t border-border">
-      <div className="max-w-6xl mx-auto px-6">
-        <FadeUp className="text-center mb-14">
-          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
+    <section id="features" className="py-20 md:py-28">
+      <div className="max-w-5xl mx-auto px-6">
+        <FadeUp className="mb-16">
+          <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-muted-foreground mb-3">
             Features
           </p>
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-            Everything you need to split, save, and settle.
+          <h2
+            className="text-3xl md:text-4xl font-normal text-foreground max-w-lg"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            Everything you need to split, save, and settle
           </h2>
-          <p className="text-muted-foreground text-base max-w-2xl mx-auto">
-            Six powerful tools that handle every way your group shares money —
-            from receipts to rent to crypto.
-          </p>
         </FadeUp>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
           {FEATURES.map((feature, i) => (
-            <FadeUp key={feature.title} delay={i * 0.08}>
-              <FeatureCard {...feature} />
+            <FadeUp key={feature.title} delay={i * 0.06}>
+              <div className="group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+                    <feature.icon className="w-4 h-4 text-foreground" />
+                  </div>
+                  {feature.tag && (
+                    <span className="text-[10px] font-medium tracking-widest uppercase text-primary">
+                      {feature.tag}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-sm font-semibold text-foreground mb-1.5">
+                  {feature.title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed font-light">
+                  {feature.description}
+                </p>
+              </div>
             </FadeUp>
           ))}
         </div>
@@ -309,99 +319,80 @@ function FeatureGrid() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  3. Trust Bar                                                               */
-/* ─────────────────────────────────────────────────────────────────────────── */
-function TrustBar() {
+/* ── Testimonial ── */
+function Testimonial() {
   return (
-    <section className="py-16 border-t border-border">
-      <div className="max-w-4xl mx-auto px-6">
+    <section className="py-20 md:py-28 bg-muted/40 relative">
+      <div className="max-w-2xl mx-auto px-6 text-center">
         <FadeUp>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12">
-            {/* SOC2 Badge */}
-            <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-border bg-card/50">
-              <ShieldCheck className="w-6 h-6 text-primary shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-foreground leading-tight">
-                  SOC 2 Type II
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Audited annually
-                </p>
-              </div>
-            </div>
-
-            {/* HIPAA Badge */}
-            <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-border bg-card/50">
-              <ShieldCheck className="w-6 h-6 text-primary shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-foreground leading-tight">
-                  HIPAA Compliant
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Data encryption at rest & transit
-                </p>
-              </div>
-            </div>
-
-            {/* Bank-level */}
-            <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-border bg-card/50">
-              <ShieldCheck className="w-6 h-6 text-primary shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-foreground leading-tight">
-                  256-bit Encryption
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Bank-grade security
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* Large decorative quote */}
+          <span
+            className="text-[6rem] leading-none text-border select-none block -mb-8"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            &ldquo;
+          </span>
+          <blockquote
+            className="text-xl md:text-2xl font-normal text-foreground leading-relaxed mb-6"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            <em>
+              We used to dread splitting the bill after trips. Now it takes
+              thirty seconds and nobody gets weird about it.
+            </em>
+          </blockquote>
+          <p className="text-[11px] font-medium tracking-[0.12em] uppercase text-muted-foreground">
+            Sarah K. — Roommate group of 4
+          </p>
         </FadeUp>
       </div>
     </section>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  4. Bottom CTA                                                              */
-/* ─────────────────────────────────────────────────────────────────────────── */
+/* ── Bottom CTA ── */
 function BottomCTA() {
   return (
-    <section className="py-24 border-t border-border">
-      <div className="max-w-3xl mx-auto px-6 text-center">
+    <section className="py-24 md:py-32">
+      <div className="max-w-2xl mx-auto px-6 text-center">
         <FadeUp className="space-y-6">
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-foreground">
-            Stop splitting hairs.{" "}
-            <span className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
-              Start splitting bills.
-            </span>
-          </h2>
-          <p className="text-muted-foreground text-base max-w-lg mx-auto">
-            Join thousands of friend groups who settled up without the awkwardness.
+          <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Ready?
           </p>
-          <div className="pt-2 flex flex-wrap gap-3 justify-center">
+          <h2
+            className="text-4xl md:text-5xl lg:text-6xl font-normal leading-[1.08] text-foreground"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            Stop splitting hairs.
+            <br />
+            <span className="text-primary">Start splitting bills.</span>
+          </h2>
+          <p className="text-muted-foreground text-base font-light max-w-sm mx-auto leading-relaxed">
+            Join thousands of friend groups who settled up without the
+            awkwardness.
+          </p>
+          <div className="pt-4 flex flex-wrap gap-4 justify-center">
             <Button
               asChild
               size="lg"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold px-8 h-12 text-base cursor-pointer"
+              className="bg-foreground text-background hover:bg-foreground/90 font-medium px-8 h-12 text-sm cursor-pointer"
             >
               <Link href="/signup">
                 Create Free Account
-                <ArrowRight className="w-5 h-5 ml-1.5" />
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="border-border text-muted-foreground hover:bg-muted hover:text-foreground h-12 px-6 cursor-pointer"
+              className="border-border text-muted-foreground hover:text-foreground h-12 px-6 cursor-pointer"
             >
               <Link href="/login">Sign In</Link>
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground/60">
-            Free forever &bull; No credit card &bull; Real-time sync
+          <p className="text-[11px] text-muted-foreground/50 tracking-wide">
+            Free forever &middot; No credit card &middot; Real-time sync
           </p>
         </FadeUp>
       </div>
@@ -409,26 +400,14 @@ function BottomCTA() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  5. Footer                                                                  */
-/* ─────────────────────────────────────────────────────────────────────────── */
+/* ── Footer ── */
 const FOOTER_SECTIONS = [
   {
     title: "Product",
     links: [
       { label: "Smart Split", href: "#features" },
       { label: "Goal Pots", href: "#features" },
-      { label: "Recurring Splits", href: "#features" },
-      { label: "Pricing", href: "#" },
-    ],
-  },
-  {
-    title: "Solutions",
-    links: [
-      { label: "Roommates", href: "#" },
-      { label: "Travel Groups", href: "#" },
-      { label: "Couples", href: "#" },
-      { label: "Teams", href: "#" },
+      { label: "Recurring", href: "#features" },
     ],
   },
   {
@@ -437,38 +416,41 @@ const FOOTER_SECTIONS = [
       { label: "Help Center", href: "#" },
       { label: "Blog", href: "#" },
       { label: "Changelog", href: "#" },
-      { label: "Status", href: "#" },
-    ],
-  },
-  {
-    title: "Developers",
-    links: [
-      { label: "API Docs", href: "#" },
-      { label: "GitHub", href: "https://github.com" },
-      { label: "Self-Host", href: "#" },
-      { label: "Contributing", href: "#" },
     ],
   },
   {
     title: "Company",
     links: [
       { label: "About", href: "#" },
-      { label: "Careers", href: "#" },
-      { label: "Privacy Policy", href: "#" },
-      { label: "Terms of Service", href: "#" },
+      { label: "Privacy", href: "#" },
+      { label: "Terms", href: "#" },
     ],
   },
 ];
 
 function Footer() {
   return (
-    <footer className="border-t border-border bg-card/30">
-      <div className="max-w-6xl mx-auto px-6 py-16">
-        {/* Sitemap grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8">
+    <footer className="border-t border-border">
+      <div className="max-w-5xl mx-auto px-6 py-14">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
+          {/* Brand column */}
+          <div className="col-span-2 sm:col-span-1">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-2 h-2 rounded-full bg-primary" />
+              <span className="text-sm font-semibold text-foreground tracking-tight">
+                BrokeBesties
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed font-light max-w-[200px]">
+              Shared expenses,
+              <br />
+              without the drama.
+            </p>
+          </div>
+
           {FOOTER_SECTIONS.map((section) => (
             <div key={section.title}>
-              <h4 className="text-sm font-semibold text-foreground mb-3">
+              <h4 className="text-[11px] font-semibold tracking-[0.12em] uppercase text-foreground mb-4">
                 {section.title}
               </h4>
               <ul className="space-y-2">
@@ -476,7 +458,7 @@ function Footer() {
                   <li key={link.label}>
                     <a
                       href={link.href}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
                     >
                       {link.label}
                     </a>
@@ -487,47 +469,32 @@ function Footer() {
           ))}
         </div>
 
-        {/* Bottom bar */}
-        <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-primary" />
-            <span className="text-sm font-bold text-foreground tracking-tight">
-              BrokeBesties
-            </span>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
+        {/* Bottom */}
+        <div className="mt-10 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground">
             &copy; {new Date().getFullYear()} BrokeBesties. All rights reserved.
           </p>
-
-          <div className="flex items-center gap-3">
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
-              aria-label="GitHub"
-            >
-              <Github className="w-4 h-4" />
-            </a>
-            <a
-              href="https://twitter.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
-              aria-label="Twitter"
-            >
-              <Twitter className="w-4 h-4" />
-            </a>
-            <a
-              href="https://linkedin.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
-              aria-label="LinkedIn"
-            >
-              <Linkedin className="w-4 h-4" />
-            </a>
+          <div className="flex items-center gap-4">
+            {[
+              { Icon: Github, label: "GitHub", href: "https://github.com" },
+              { Icon: Twitter, label: "Twitter", href: "https://twitter.com" },
+              {
+                Icon: Linkedin,
+                label: "LinkedIn",
+                href: "https://linkedin.com",
+              },
+            ].map(({ Icon, label, href }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+                aria-label={label}
+              >
+                <Icon className="w-3.5 h-3.5" />
+              </a>
+            ))}
           </div>
         </div>
       </div>
@@ -535,15 +502,15 @@ function Footer() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*  Root                                                                       */
-/* ─────────────────────────────────────────────────────────────────────────── */
+/* ── Root ── */
 export function LandingPageClient() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Hero />
+      <Divider />
       <FeatureGrid />
-      <TrustBar />
+      <HowItWorks />
+      <Testimonial />
       <BottomCTA />
       <Footer />
     </div>

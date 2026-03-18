@@ -1,19 +1,12 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
-import type { User } from "@supabase/supabase-js";
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import type { User } from "@supabase/supabase-js"
+import { ArrowLeft } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import {
   DialogContent,
   DialogDescription,
@@ -21,76 +14,89 @@ import {
   DialogHeader,
   DialogOverlay,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   createInvite,
   createDebt,
-  createDebts,
   updateDebtStatus,
   getRecentFriends,
   searchFriendsForInvite,
   addFriendToGroup,
   cancelInvite,
-} from "./actions";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DebtFormItem } from "./debt-form-item";
-import { GroupDebtsList } from "./group-debts-list";
-import { GroupDebtChart } from "./group-debt-chart";
+} from "./actions"
+import { GroupDebtsList } from "./group-debts-list"
+import { GroupSummary } from "./group-summary"
 
 type Member = {
-  id: number;
+  id: number
   user: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
+    id: string
+    name: string
+    email: string
+  }
+}
 
 type Invite = {
-  id: number;
-  invitedEmail: string;
-  invitedBy: string;
-  status: string;
+  id: number
+  invitedEmail: string
+  invitedBy: string
+  status: string
   sender: {
-    id: string;
-    email: string;
-  };
-};
+    id: string
+    email: string
+  }
+}
 
 type Debt = {
-  id: number;
-  amount: number;
-  description: string | null;
-  status: string;
-  createdAt: Date | string;
+  id: number
+  amount: number
+  description: string | null
+  status: string
+  createdAt: Date | string
   lender: {
-    id: string;
-    name: string;
-    email: string;
-  };
+    id: string
+    name: string
+    email: string
+  }
   borrower: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
+    id: string
+    name: string
+    email: string
+  }
+}
 
 type Group = {
-  id: number;
-  name: string;
-  createdAt: Date | string;
-  members: Member[];
-  invites: Invite[];
-};
+  id: number
+  name: string
+  createdAt: Date | string
+  members: Member[]
+  invites: Invite[]
+}
 
 type GroupDetailPageClientProps = {
-  initialGroup: Group;
-  initialDebts: Debt[];
-  currentUser: User | null;
-  groupId: number;
-};
+  initialGroup: Group
+  initialDebts: Debt[]
+  currentUser: User | null
+  groupId: number
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
+}
 
 export default function GroupDetailPageClient({
   initialGroup,
@@ -98,847 +104,486 @@ export default function GroupDetailPageClient({
   currentUser,
   groupId,
 }: GroupDetailPageClientProps) {
-  const [group] = useState<Group>(initialGroup);
-  const [debts, setDebts] = useState<Debt[]>(initialDebts);
-  const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showDebtModal, setShowDebtModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
+  const [group] = useState<Group>(initialGroup)
+  const [debts, setDebts] = useState<Debt[]>(initialDebts)
+  const [error, setError] = useState("")
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showDebtModal, setShowDebtModal] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const router = useRouter()
 
-  // Friend invite state
-  const [inviteTab, setInviteTab] = useState<"friends" | "email">("friends");
-  const [friendSearch, setFriendSearch] = useState("");
+  // Invite state
+  const [inviteInput, setInviteInput] = useState("")
+  const [inviting, setInviting] = useState(false)
   const [recentFriends, setRecentFriends] = useState<
     Array<{ id: number; userId: string; name: string; email: string }>
-  >([]);
+  >([])
   const [searchResults, setSearchResults] = useState<
     Array<{ id: number; userId: string; name: string; email: string }>
-  >([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [searchingFriends, setSearchingFriends] = useState(false);
-  const [cancellingInviteId, setCancellingInviteId] = useState<number | null>(
-    null
-  );
-  const [creating, setCreating] = useState(false);
-  const [debtForms, setDebtForms] = useState([
-    {
-      amount: "",
-      description: "",
-      borrowerId: "",
-      borrower: null as { id: string; name: string; email: string } | null,
-      alertMessage: "",
-      alertDeadline: "",
-    },
-  ]);
-  const [currentDebtIndex, setCurrentDebtIndex] = useState(0);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [uploadingReceipt, setUploadingReceipt] = useState(false);
-  const router = useRouter();
+  >([])
+  const [loadingFriends, setLoadingFriends] = useState(false)
+  const [searchingFriends, setSearchingFriends] = useState(false)
+  const [cancellingInviteId, setCancellingInviteId] = useState<number | null>(null)
 
-  // Sync debts state with initialDebts when it changes (after refresh)
+  // Simple debt form state
+  const [debtBorrowerId, setDebtBorrowerId] = useState("")
+  const [debtAmount, setDebtAmount] = useState("")
+  const [debtDescription, setDebtDescription] = useState("")
+
+  // Sync debts with server
   useEffect(() => {
-    setDebts(initialDebts);
-  }, [initialDebts]);
+    setDebts(initialDebts)
+  }, [initialDebts])
 
   // Load recent friends when invite modal opens
   useEffect(() => {
     if (showInviteModal) {
-      setLoadingFriends(true);
+      setLoadingFriends(true)
       getRecentFriends(groupId)
         .then((result) => {
           if (result.success) {
-            setRecentFriends(result.friends);
+            setRecentFriends(result.friends)
           }
         })
-        .finally(() => setLoadingFriends(false));
+        .finally(() => setLoadingFriends(false))
     }
-  }, [showInviteModal, groupId]);
+  }, [showInviteModal, groupId])
 
   // Search friends with debounce
   useEffect(() => {
-    if (!friendSearch.trim()) {
-      setSearchResults([]);
-      return;
+    if (!inviteInput.trim()) {
+      setSearchResults([])
+      return
     }
 
     const timer = setTimeout(() => {
-      setSearchingFriends(true);
-      searchFriendsForInvite(groupId, friendSearch)
+      setSearchingFriends(true)
+      searchFriendsForInvite(groupId, inviteInput)
         .then((result) => {
           if (result.success) {
-            setSearchResults(result.friends);
+            setSearchResults(result.friends)
           }
         })
-        .finally(() => setSearchingFriends(false));
-    }, 300);
+        .finally(() => setSearchingFriends(false))
+    }, 300)
 
-    return () => clearTimeout(timer);
-  }, [friendSearch, groupId]);
+    return () => clearTimeout(timer)
+  }, [inviteInput, groupId])
 
   const handleAddFriend = async (friendUserId: string) => {
-    setInviting(true);
-    setError("");
-
+    setInviting(true)
+    setError("")
     try {
-      const result = await addFriendToGroup(groupId, friendUserId);
-
+      const result = await addFriendToGroup(groupId, friendUserId)
       if (!result.success) {
-        setError(result.error || "Failed to add friend to group");
-        return;
+        setError(result.error || "Failed to add friend")
+        return
       }
-
-      setShowInviteModal(false);
-      setFriendSearch("");
-      setInviteTab("friends");
-      router.refresh();
+      setShowInviteModal(false)
+      setInviteInput("")
+      router.refresh()
     } catch {
-      setError("An error occurred while adding friend to group");
+      setError("Failed to add friend to group")
     } finally {
-      setInviting(false);
+      setInviting(false)
     }
-  };
+  }
+
+  const handleInviteByEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inviteInput.includes("@")) return
+    setInviting(true)
+    setError("")
+    try {
+      const result = await createInvite(groupId, inviteInput)
+      if (!result.success) {
+        setError(result.error || "Failed to send invite")
+        return
+      }
+      setShowInviteModal(false)
+      setInviteInput("")
+      router.refresh()
+    } catch {
+      setError("Failed to send invite")
+    } finally {
+      setInviting(false)
+    }
+  }
 
   const handleCancelInvite = async (inviteId: number) => {
-    setCancellingInviteId(inviteId);
-    setError("");
-
+    setCancellingInviteId(inviteId)
     try {
-      const result = await cancelInvite(groupId, inviteId);
-
+      const result = await cancelInvite(groupId, inviteId)
       if (!result.success) {
-        setError(result.error || "Failed to cancel invite");
-        return;
+        setError(result.error || "Failed to cancel invite")
+        return
       }
-
-      router.refresh();
+      router.refresh()
     } catch {
-      setError("An error occurred while cancelling the invite");
+      setError("Failed to cancel invite")
     } finally {
-      setCancellingInviteId(null);
+      setCancellingInviteId(null)
     }
-  };
+  }
 
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviting(true);
-    setError("");
-
+  const handleCreateDebt = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!debtBorrowerId || !debtAmount) return
+    setCreating(true)
+    setError("")
     try {
-      const result = await createInvite(groupId, inviteEmail);
-
-      if (!result.success) {
-        setError(result.error || "Failed to send invite");
-        return;
-      }
-
-      setShowInviteModal(false);
-      setInviteEmail("");
-      router.refresh();
-    } catch {
-      setError("An error occurred while sending the invite");
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const handleReceiptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-    if (!validTypes.includes(file.type)) {
-      setError("Invalid file type. Only JPEG, PNG, and WebP are allowed");
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File too large. Maximum size is 10MB");
-      return;
-    }
-
-    setReceiptFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setReceiptPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-    setError("");
-  };
-
-  const handleCreateDebts = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreating(true);
-    setError("");
-
-    try {
-      // Validate all debts have required fields
-      for (let i = 0; i < debtForms.length; i++) {
-        const debt = debtForms[i];
-        if (!debt.borrowerId) {
-          setError(`Debt ${i + 1}: Please select a borrower`);
-          setCreating(false);
-          setCurrentDebtIndex(i);
-          return;
-        }
-        if (!debt.amount || parseFloat(debt.amount) <= 0) {
-          setError(`Debt ${i + 1}: Please enter a valid amount`);
-          setCreating(false);
-          setCurrentDebtIndex(i);
-          return;
-        }
-      }
-
-      // Upload receipt if there is one
-      let receiptId: string | undefined;
-      if (receiptFile) {
-        setUploadingReceipt(true);
-        const formData = new FormData();
-        formData.append("file", receiptFile);
-        formData.append("groupId", groupId.toString());
-
-        const uploadResponse = await fetch("/api/receipts/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json();
-          throw new Error(errorData.error || "Failed to upload receipt");
-        }
-
-        const uploadData = await uploadResponse.json();
-        receiptId = uploadData.data.id;
-        setUploadingReceipt(false);
-      }
-
-      // Prepare data for all debts
-      const debtsToCreate = debtForms.map((debt) => ({
-        amount: parseFloat(debt.amount),
-        description: debt.description || undefined,
-        borrowerId: debt.borrowerId,
+      const result = await createDebt({
+        amount: parseFloat(debtAmount),
+        description: debtDescription || undefined,
+        borrowerId: debtBorrowerId,
         groupId,
-        receiptId,
-      }));
-
-      // Use single or batch create based on number of debts
-      const result =
-        debtsToCreate.length === 1
-          ? await createDebt(debtsToCreate[0])
-          : await createDebts(debtsToCreate);
-
+      })
       if (!result.success) {
-        setError(result.error || "Failed to create debt(s)");
-        setCreating(false);
-        return;
+        setError(result.error || "Failed to create debt")
+        return
       }
-
-      // Create alerts for debts that have alert fields
-      if (result.success) {
-        // Handle both single and multiple debts
-        const createdDebts = 'debts' in result && result.debts
-          ? result.debts
-          : 'debt' in result && result.debt
-            ? [result.debt]
-            : [];
-
-        for (let i = 0; i < createdDebts.length; i++) {
-          const debt = createdDebts[i];
-          const debtForm = debtForms[i];
-
-          if (debt && debtForm && (debtForm.alertMessage || debtForm.alertDeadline)) {
-            try {
-              await fetch('/api/alerts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  debtId: debt.id,
-                  message: debtForm.alertMessage || null,
-                  deadline: debtForm.alertDeadline || null,
-                }),
-              });
-            } catch (alertError) {
-              console.error('Failed to create alert:', alertError);
-              // Don't fail the whole operation if alert creation fails
-            }
-          }
-        }
-      }
-
-      // Reset form and refresh
-      setShowDebtModal(false);
-      setDebtForms([
-        {
-          amount: "",
-          description: "",
-          borrowerId: "",
-          borrower: null,
-          alertMessage: "",
-          alertDeadline: "",
-        },
-      ]);
-      setCurrentDebtIndex(0);
-      setReceiptFile(null);
-      setReceiptPreview(null);
-      setCreating(false);
-
-      // Refresh the page to show new debts
-      router.refresh();
+      setShowDebtModal(false)
+      setDebtBorrowerId("")
+      setDebtAmount("")
+      setDebtDescription("")
+      router.refresh()
     } catch {
-      setError("An error occurred while creating the debt(s)");
-      setCreating(false);
+      setError("Failed to create debt")
+    } finally {
+      setCreating(false)
     }
-  };
-
-  const addNewDebt = () => {
-    setDebtForms([
-      ...debtForms,
-      {
-        amount: "",
-        description: "",
-        borrowerId: "",
-        borrower: null,
-        alertMessage: "",
-        alertDeadline: "",
-      },
-    ]);
-    setCurrentDebtIndex(debtForms.length);
-  };
-
-  const removeDebt = (index: number) => {
-    if (debtForms.length === 1) return;
-    const newDebts = debtForms.filter((_, i) => i !== index);
-    setDebtForms(newDebts);
-    if (currentDebtIndex >= newDebts.length) {
-      setCurrentDebtIndex(newDebts.length - 1);
-    }
-  };
-
-  const updateDebtForm = (index: number, data: (typeof debtForms)[0]) => {
-    const newDebts = [...debtForms];
-    newDebts[index] = data;
-    setDebtForms(newDebts);
-  };
-
-  const currentDebt = debtForms[currentDebtIndex];
-
-  // Check if all debts are valid
-  const allDebtsValid = debtForms.every(
-    (debt) => debt.borrowerId && debt.amount && parseFloat(debt.amount) > 0
-  );
+  }
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
-    // Store the old status in case we need to revert
-    const oldStatus = debts.find((d) => d.id === debtId)?.status;
-
-    // Optimistically update the UI
-    setDebts((prevDebts) =>
-      prevDebts.map((debt) =>
-        debt.id === debtId ? { ...debt, status: newStatus } : debt
-      )
-    );
-
+    const oldStatus = debts.find((d) => d.id === debtId)?.status
+    setDebts((prev) =>
+      prev.map((d) => (d.id === debtId ? { ...d, status: newStatus } : d))
+    )
     try {
-      const result = await updateDebtStatus(debtId, newStatus);
-
+      const result = await updateDebtStatus(debtId, newStatus)
       if (!result.success) {
-        setError(result.error || "Failed to update status");
-        // Revert to old status
+        setError(result.error || "Failed to update status")
         if (oldStatus) {
-          setDebts((prevDebts) =>
-            prevDebts.map((debt) =>
-              debt.id === debtId ? { ...debt, status: oldStatus } : debt
-            )
-          );
+          setDebts((prev) =>
+            prev.map((d) => (d.id === debtId ? { ...d, status: oldStatus } : d))
+          )
         }
-        return;
       }
     } catch {
-      setError("An error occurred while updating the status");
-      // Revert to old status
+      setError("Failed to update status")
       if (oldStatus) {
-        setDebts((prevDebts) =>
-          prevDebts.map((debt) =>
-            debt.id === debtId ? { ...debt, status: oldStatus } : debt
-          )
-        );
+        setDebts((prev) =>
+          prev.map((d) => (d.id === debtId ? { ...d, status: oldStatus } : d))
+        )
       }
     }
-  };
+  }
+
+  // Members who are not the current user (for debt creation dropdown)
+  const otherMembers = group.members.filter((m) => m.user.id !== currentUser?.id)
+
+  // Friends to display in invite modal
+  const friendsToShow = inviteInput.trim()
+    ? searchResults
+    : recentFriends
+  const isEmailInput = inviteInput.includes("@")
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4">
-        <Button
-          variant="ghost"
-          className="w-fit px-0"
+    <main className="min-h-screen bg-background">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+        {/* Back */}
+        <button
           onClick={() => router.push("/groups")}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit cursor-pointer"
         >
-          ← Back to groups
-        </Button>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-semibold tracking-tight">
+          <ArrowLeft size={14} />
+          Back to groups
+        </button>
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-lg font-semibold text-foreground leading-tight">
               {group.name}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
+              {group.members.length} {group.members.length === 1 ? "member" : "members"}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setShowDebtModal(true)}>
-              Create debts
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-sm h-9"
+              onClick={() => setShowInviteModal(true)}
+            >
+              Invite
             </Button>
             <Button
-              variant="secondary"
-              onClick={() => router.push(`/ai?group=${groupId}`)}
+              size="sm"
+              className="text-sm h-9"
+              onClick={() => setShowDebtModal(true)}
             >
-              <Sparkles className="h-4 w-4" />
-              Create with AI
-            </Button>
-            <Button onClick={() => setShowInviteModal(true)}>
-              Invite member
+              Add debt
             </Button>
           </div>
         </div>
-      </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+        {error && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="members">Members</TabsTrigger>
-        </TabsList>
+        <div className="border-t border-border" />
 
-        <TabsContent value="overview" className="space-y-6">
-          <GroupDebtChart
-            members={group.members}
-            debts={debts}
-            currentUserId={currentUser?.id}
-          />
-
+        {/* Main content - single column stacked */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8">
+          {/* Left: Debt Ledger */}
           <GroupDebtsList
             debts={debts}
             currentUser={currentUser}
             onUpdateStatus={handleUpdateStatus}
           />
-        </TabsContent>
 
-        <TabsContent value="members" className="space-y-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="flex-row items-start justify-between space-y-0">
-                <div className="space-y-1">
-                  <CardTitle>Members</CardTitle>
-                  <CardDescription>
-                    {group.members.length} total
-                  </CardDescription>
-                </div>
-                <Badge variant="secondary">{group.members.length}</Badge>
-              </CardHeader>
-              <CardContent className="space-y-2">
+          {/* Right: Summary + Members */}
+          <div className="flex flex-col gap-6">
+            <GroupSummary
+              members={group.members}
+              debts={debts}
+              currentUserId={currentUser?.id}
+            />
+
+            {/* Members */}
+            <div>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                Members
+              </h3>
+              <div className="flex flex-col gap-1">
                 {group.members.map((member) => (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between rounded-md border bg-background p-3"
+                    className="flex items-center gap-2.5 py-2 px-2.5 -mx-2.5 rounded-md"
                   >
+                    <Avatar className="h-7 w-7 rounded-full border border-border">
+                      <AvatarFallback className="bg-muted text-foreground rounded-full text-[10px] font-semibold">
+                        {getInitials(member.user.name)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="min-w-0">
-                      <div className="truncate font-medium">
+                      <p className="text-sm text-foreground truncate">
                         {member.user.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {member.user.email}
-                      </div>
+                        {member.user.id === currentUser?.id && (
+                          <span className="text-muted-foreground"> (you)</span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="flex-row items-start justify-between space-y-0">
-                <div className="space-y-1">
-                  <CardTitle>Pending invites</CardTitle>
-                  <CardDescription>
-                    {group.invites.length} outstanding
-                  </CardDescription>
-                </div>
-                <Badge variant="secondary">{group.invites.length}</Badge>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {group.invites.length === 0 ? (
-                  <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
-                    No pending invites.
-                  </div>
-                ) : (
-                  group.invites.map((invite) => (
-                    <div
-                      key={invite.id}
-                      className="flex items-center justify-between rounded-md border bg-background p-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">
-                          {invite.invitedEmail}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Invited by {invite.sender.email}
-                        </div>
+                {/* Pending invites inline */}
+                {group.invites.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center justify-between py-2 px-2.5 -mx-2.5 rounded-md"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-7 w-7 rounded-full border border-dashed border-border flex items-center justify-center">
+                        <span className="text-[10px] text-muted-foreground">?</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
-                        >
-                          Pending
-                        </Badge>
-                        {currentUser?.id === invite.invitedBy && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            disabled={cancellingInviteId === invite.id}
-                            onClick={() => handleCancelInvite(invite.id)}
-                          >
-                            {cancellingInviteId === invite.id
-                              ? "Cancelling…"
-                              : "Cancel"}
-                          </Button>
-                        )}
+                      <div className="min-w-0">
+                        <p className="text-sm text-muted-foreground truncate">
+                          {invite.invitedEmail}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Pending invite</p>
                       </div>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Invite member</DialogTitle>
-            </DialogHeader>
-            <div className="px-6 pb-6">
-              {/* Tab Switcher */}
-              <div className="mb-4 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={inviteTab === "friends" ? "default" : "outline"}
-                  onClick={() => setInviteTab("friends")}
-                >
-                  Friends
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={inviteTab === "email" ? "default" : "outline"}
-                  onClick={() => setInviteTab("email")}
-                >
-                  Email
-                </Button>
-              </div>
-
-              {/* Friends Tab */}
-              {inviteTab === "friends" && (
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="friendSearch">Search friends</Label>
-                    <Input
-                      id="friendSearch"
-                      type="text"
-                      value={friendSearch}
-                      onChange={(e) => setFriendSearch(e.target.value)}
-                      placeholder="Search by name or email..."
-                    />
-                  </div>
-
-                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {loadingFriends ? (
-                      <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                        Loading friends...
-                      </div>
-                    ) : friendSearch.trim() ? (
-                      // Show search results
-                      searchingFriends ? (
-                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                          Searching...
-                        </div>
-                      ) : searchResults.length === 0 ? (
-                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                          No friends found matching your search.
-                        </div>
-                      ) : (
-                        searchResults.map((friend) => (
-                          <div
-                            key={friend.id}
-                            className="flex items-center justify-between rounded-md border bg-background p-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">
-                                {friend.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {friend.email}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              disabled={inviting}
-                              onClick={() => handleAddFriend(friend.userId)}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        ))
-                      )
-                    ) : // Show recent friends
-                    recentFriends.length === 0 ? (
-                      <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                        No friends available to add. Add friends or use the
-                        Email tab to invite by email.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-sm font-medium text-muted-foreground">
-                          Recent friends
-                        </div>
-                        {recentFriends.map((friend) => (
-                          <div
-                            key={friend.id}
-                            className="flex items-center justify-between rounded-md border bg-background p-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">
-                                {friend.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {friend.email}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              disabled={inviting}
-                              onClick={() => handleAddFriend(friend.userId)}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        ))}
-                      </>
+                    {currentUser?.id === invite.invitedBy && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                        disabled={cancellingInviteId === invite.id}
+                        onClick={() => handleCancelInvite(invite.id)}
+                      >
+                        {cancellingInviteId === invite.id ? "..." : "Cancel"}
+                      </Button>
                     )}
                   </div>
-
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setShowInviteModal(false);
-                        setFriendSearch("");
-                        setInviteTab("friends");
-                        setError("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </DialogFooter>
-                </div>
-              )}
-
-              {/* Email Tab */}
-              {inviteTab === "email" && (
-                <form onSubmit={handleInvite} className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="inviteEmail">Email address</Label>
-                    <Input
-                      id="inviteEmail"
-                      type="email"
-                      required
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="member@example.com"
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setShowInviteModal(false);
-                        setInviteEmail("");
-                        setInviteTab("friends");
-                        setError("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={inviting}>
-                      {inviting ? "Sending…" : "Send invite"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              )}
+                ))}
+              </div>
             </div>
-          </DialogContent>
+          </div>
         </div>
-      )}
 
-      {showDebtModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent className="max-h-[90vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>
-                Create new debt
-                {debtForms.length > 1 &&
-                  ` (${currentDebtIndex + 1} of ${debtForms.length})`}
-              </DialogTitle>
-              <DialogDescription>
-                Create a debt with a group member. They will owe you this amount.
-              </DialogDescription>
-            </DialogHeader>
+        {/* Invite Modal */}
+        {showInviteModal && (
+          <div className="fixed inset-0 z-50">
+            <DialogOverlay onClick={() => { setShowInviteModal(false); setInviteInput("") }} />
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Invite member</DialogTitle>
+                <DialogDescription>
+                  Search for a friend or enter an email address.
+                </DialogDescription>
+              </DialogHeader>
 
-            <div className="px-6 pb-4 space-y-4 overflow-y-auto">
-              {error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              <DebtFormItem
-                debtData={currentDebt}
-                groupId={groupId}
-                currentUserId={currentUser?.id}
-                onChange={(data) => updateDebtForm(currentDebtIndex, data)}
-              />
-
-              {/* Receipt Upload (shown on all debts - same receipt applies to all) */}
-              <div className="space-y-2">
-                <Label htmlFor="receipt">Receipt (optional)</Label>
-                {currentDebtIndex === 0 ? (
-                  <input
-                    id="receipt"
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={handleReceiptFileSelect}
-                    className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+              <form onSubmit={handleInviteByEmail} className="flex flex-col gap-4 pt-1">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-sm">Name or email</Label>
+                  <Input
+                    type="text"
+                    value={inviteInput}
+                    onChange={(e) => setInviteInput(e.target.value)}
+                    placeholder="Search friends or enter email..."
+                    className="h-9 text-sm"
+                    autoComplete="off"
                   />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {receiptFile ? `Using receipt: ${receiptFile.name}` : 'No receipt uploaded'}
-                  </p>
-                )}
-                {receiptPreview && (
-                  <div className="mt-2 rounded-md border bg-muted/50 p-2">
-                    <img
-                      src={receiptPreview}
-                      alt="Receipt preview"
-                      className="h-32 w-auto object-contain"
+                </div>
+
+                {/* Results */}
+                <div className="max-h-48 overflow-y-auto">
+                  {loadingFriends || searchingFriends ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      {loadingFriends ? "Loading..." : "Searching..."}
+                    </p>
+                  ) : friendsToShow.length > 0 ? (
+                    <div className="flex flex-col">
+                      {!inviteInput.trim() && (
+                        <p className="text-xs text-muted-foreground mb-2">Recent friends</p>
+                      )}
+                      {friendsToShow.map((friend) => (
+                        <div
+                          key={friend.id}
+                          className="flex items-center justify-between py-2 px-2.5 -mx-2.5 rounded-md hover:bg-muted transition-colors"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground truncate">{friend.name}</p>
+                            <p className="text-xs text-muted-foreground">{friend.email}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 px-2.5 text-xs"
+                            disabled={inviting}
+                            onClick={() => handleAddFriend(friend.userId)}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : inviteInput.trim() && !isEmailInput ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No friends found. Enter a full email to invite.
+                    </p>
+                  ) : null}
+                </div>
+
+                <DialogFooter className="pt-1 gap-2 flex-row">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-sm"
+                    onClick={() => { setShowInviteModal(false); setInviteInput("") }}
+                  >
+                    Cancel
+                  </Button>
+                  {isEmailInput && (
+                    <Button type="submit" size="sm" className="text-sm flex-1" disabled={inviting}>
+                      {inviting ? "Sending..." : "Send invite"}
+                    </Button>
+                  )}
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </div>
+        )}
+
+        {/* Add Debt Modal */}
+        {showDebtModal && (
+          <div className="fixed inset-0 z-50">
+            <DialogOverlay onClick={() => { setShowDebtModal(false); setError("") }} />
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add debt</DialogTitle>
+                <DialogDescription>
+                  Create a debt with a group member.
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleCreateDebt} className="flex flex-col gap-4 pt-1">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-sm">Who owes you</Label>
+                  <Select value={debtBorrowerId} onValueChange={setDebtBorrowerId}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {otherMembers.map((m) => (
+                        <SelectItem key={m.user.id} value={m.user.id} className="text-sm cursor-pointer">
+                          {m.user.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-sm">Amount</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
+                    <Input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={debtAmount}
+                      onChange={(e) => setDebtAmount(e.target.value)}
+                      className="pl-6 h-9 text-sm tabular-nums"
+                      required
                     />
                   </div>
-                )}
-              </div>
-
-              {debtForms.length > 1 && (
-                <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))
-                    }
-                    disabled={currentDebtIndex === 0}
-                  >
-                    ← Prev
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Debt {currentDebtIndex + 1} of {debtForms.length}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentDebtIndex(
-                        Math.min(debtForms.length - 1, currentDebtIndex + 1)
-                      )
-                    }
-                    disabled={currentDebtIndex === debtForms.length - 1}
-                  >
-                    Next →
-                  </Button>
                 </div>
-              )}
 
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addNewDebt}
-                  className="flex-1"
-                >
-                  + Add another debt
-                </Button>
-                {debtForms.length > 1 && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-sm">Description</Label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Dinner, Uber, Groceries..."
+                    value={debtDescription}
+                    onChange={(e) => setDebtDescription(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+
+                <DialogFooter className="pt-1 gap-2 flex-row">
                   <Button
                     type="button"
-                    variant="outline"
-                    onClick={() => removeDebt(currentDebtIndex)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-sm"
+                    onClick={() => { setShowDebtModal(false); setDebtBorrowerId(""); setDebtAmount(""); setDebtDescription(""); setError("") }}
                   >
-                    Remove this debt
+                    Cancel
                   </Button>
-                )}
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDebtModal(false);
-                  setDebtForms([
-                    {
-                      amount: "",
-                      description: "",
-                      borrowerId: "",
-                      borrower: null,
-                      alertMessage: "",
-                      alertDeadline: "",
-                    },
-                  ]);
-                  setCurrentDebtIndex(0);
-                  setError("");
-                }}
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateDebts}
-                disabled={creating || !allDebtsValid}
-              >
-                {creating
-                  ? "Creating…"
-                  : `Create ${debtForms.length} debt${
-                      debtForms.length > 1 ? "s" : ""
-                    }`}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </div>
-      )}
-    </div>
-  );
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="text-sm flex-1"
+                    disabled={creating || !debtBorrowerId || !debtAmount}
+                  >
+                    {creating ? "Adding..." : "Add debt"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </div>
+        )}
+      </div>
+    </main>
+  )
 }

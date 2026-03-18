@@ -82,8 +82,8 @@ export function FriendDashboard({ data }: FriendDashboardProps) {
   }
 
   return (
-    <main className="min-h-screen bg-background font-sans">
-      <div className="max-w-6xl mx-auto px-6 py-6 flex flex-col gap-5">
+    <main className="min-h-screen bg-background">
+      <div className="max-w-5xl mx-auto px-6 py-6 flex flex-col gap-6">
         <FriendHeader
           data={data}
           onSettleUp={handleSettleUp}
@@ -92,7 +92,9 @@ export function FriendDashboard({ data }: FriendDashboardProps) {
           onAddDebt={() => setAddDebtOpen(true)}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+        <div className="border-t border-border" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
           <DebtLedger
             data={data}
             onConfirmTransaction={handleConfirmTransaction}

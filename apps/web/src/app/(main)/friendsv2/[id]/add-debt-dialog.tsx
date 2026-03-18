@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Split, User } from "lucide-react"
 import type { FriendDashboardData } from "./types"
 
 interface AddDebtDialogProps {
@@ -63,7 +62,6 @@ export function AddDebtDialog({
       borrowerId,
       isSplit,
     })
-    // Reset
     setAmount("")
     setDescription("")
     setBorrowerId(friend.id)
@@ -76,55 +74,36 @@ export function AddDebtDialog({
   return (
     <div className="fixed inset-0 z-50">
       <DialogOverlay onClick={() => onOpenChange(false)} />
-      <DialogContent className="bg-card border-border/50 max-w-md">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-[15px] font-bold text-foreground">
-            Add New Debt
-          </DialogTitle>
-          <DialogDescription className="text-[12px] text-muted-foreground">
-            Log a debt with{" "}
-            <span className="text-foreground font-medium">{friend.name}</span>.
-            Both parties will be notified.
+          <DialogTitle>Add debt</DialogTitle>
+          <DialogDescription>
+            Log a debt with {friend.name}. Both parties will be notified.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 pt-1">
-          {/* Borrower */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
-              Who Owes
-            </Label>
+            <Label className="text-sm">Who owes</Label>
             <Select value={borrowerId} onValueChange={setBorrowerId}>
-              <SelectTrigger className="h-9 text-[13px] bg-secondary border-border/40">
-                <div className="flex items-center gap-2">
-                  <User size={12} className="text-muted-foreground" />
-                  <SelectValue />
-                </div>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-card border-border/50">
-                <SelectItem
-                  value={friend.id}
-                  className="text-[13px] cursor-pointer"
-                >
-                  {friend.name} (them)
+              <SelectContent>
+                <SelectItem value={friend.id} className="text-sm cursor-pointer">
+                  {friend.name} owes me
                 </SelectItem>
-                <SelectItem
-                  value={currentUserId}
-                  className="text-[13px] cursor-pointer"
-                >
-                  Me (you owe them)
+                <SelectItem value={currentUserId} className="text-sm cursor-pointer">
+                  I owe {friend.name}
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Amount */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
-              Amount
-            </Label>
+            <Label className="text-sm">Amount</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground font-mono">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
                 $
               </span>
               <Input
@@ -134,50 +113,41 @@ export function AddDebtDialog({
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="pl-6 h-9 text-[13px] bg-secondary border-border/40 font-mono"
+                className="pl-6 h-9 text-sm tabular-nums"
                 required
               />
             </div>
             {isSplit && amount && (
-              <p className="text-[11px] text-muted-foreground/70 font-mono">
-                Each person pays{" "}
-                <span className="text-foreground">${displayAmount}</span>
+              <p className="text-xs text-muted-foreground">
+                Each person pays ${displayAmount}
               </p>
             )}
           </div>
 
-          {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
-              Description
-            </Label>
+            <Label className="text-sm">Description</Label>
             <Input
               type="text"
-              placeholder="e.g. Dinner at Nobu, Uber home..."
+              placeholder="e.g. Dinner, Uber, Groceries..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="h-9 text-[13px] bg-secondary border-border/40"
+              className="h-9 text-sm"
               required
             />
           </div>
 
-          {/* Split 50/50 toggle */}
-          <div className="flex items-center justify-between py-2.5 px-3 rounded-md bg-secondary/50 border border-border/30">
-            <div className="flex items-center gap-2">
-              <Split size={13} className="text-muted-foreground" />
-              <div>
-                <p className="text-[13px] font-medium text-foreground">
-                  Split 50/50
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Divide the amount equally between you both
-                </p>
-              </div>
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-md bg-muted/50 border border-border">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Split 50/50
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Divide equally between both of you
+              </p>
             </div>
             <Switch
               checked={isSplit}
               onCheckedChange={setIsSplit}
-              className="data-[state=checked]:bg-primary"
             />
           </div>
 
@@ -186,7 +156,7 @@ export function AddDebtDialog({
               type="button"
               variant="ghost"
               size="sm"
-              className="text-[13px] h-8 text-muted-foreground"
+              className="text-sm"
               onClick={() => onOpenChange(false)}
             >
               Cancel
@@ -194,10 +164,10 @@ export function AddDebtDialog({
             <Button
               type="submit"
               size="sm"
-              className="text-[13px] h-8 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold flex-1"
+              className="text-sm flex-1"
               disabled={loading}
             >
-              {loading ? "Adding..." : "Add Debt"}
+              {loading ? "Adding..." : "Add debt"}
             </Button>
           </DialogFooter>
         </form>

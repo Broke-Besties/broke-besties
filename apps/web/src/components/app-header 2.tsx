@@ -21,7 +21,7 @@ export function AppHeader({ user }: AppHeaderProps) {
         </div>
         <div className="flex items-center gap-2">
           {user ? (
-            <UserDropdown user={user} />
+            <UserDropdown user={user} userName={user.user_metadata?.full_name ?? user.email ?? ""} />
           ) : (
             <>
               <ModeToggle />

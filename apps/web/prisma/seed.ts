@@ -820,8 +820,251 @@ async function main() {
   });
   console.log("Created recurring payments (6 total)");
 
+  // ── More group debts for fuller dashboards ─────────────────
+  const moreGroupDebts = await Promise.all([
+    // Roommates - more activity
+    prisma.debt.create({
+      data: {
+        amount: 180.0,
+        description: "Rent overpayment correction",
+        status: "pending",
+        lenderId: alice.id,
+        borrowerId: mainUser.id,
+        groupId: roommatesGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 14.5,
+        description: "Toilet paper & paper towels",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: bob.id,
+        groupId: roommatesGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 62.0,
+        description: "Wifi router replacement",
+        status: "paid",
+        lenderId: bob.id,
+        borrowerId: alice.id,
+        groupId: roommatesGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 95.0,
+        description: "Couch cushion covers",
+        status: "paid",
+        lenderId: mainUser.id,
+        borrowerId: alice.id,
+        groupId: roommatesGroup.id,
+      },
+    }),
+
+    // Vegas - more activity
+    prisma.debt.create({
+      data: {
+        amount: 340.0,
+        description: "Pool cabana rental",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: diana.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 78.0,
+        description: "Buffet dinner for 4",
+        status: "pending",
+        lenderId: elena.id,
+        borrowerId: mainUser.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 55.0,
+        description: "Late night tacos",
+        status: "pending",
+        lenderId: charlie.id,
+        borrowerId: elena.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 250.0,
+        description: "Show tickets (Cirque)",
+        status: "paid",
+        lenderId: diana.id,
+        borrowerId: mainUser.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 42.0,
+        description: "Rental car gas fill-up",
+        status: "paid",
+        lenderId: mainUser.id,
+        borrowerId: elena.id,
+        groupId: vegasGroup.id,
+      },
+    }),
+
+    // Office Lunch Club - more activity
+    prisma.debt.create({
+      data: {
+        amount: 19.75,
+        description: "Pho takeout",
+        status: "pending",
+        lenderId: frank.id,
+        borrowerId: mainUser.id,
+        groupId: officeGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 33.0,
+        description: "Team birthday cake",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: charlie.id,
+        groupId: officeGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 27.5,
+        description: "Friday pizza order",
+        status: "pending",
+        lenderId: alice.id,
+        borrowerId: frank.id,
+        groupId: officeGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 45.0,
+        description: "Catered meeting lunch",
+        status: "paid",
+        lenderId: mainUser.id,
+        borrowerId: frank.id,
+        groupId: officeGroup.id,
+      },
+    }),
+
+    // Hikers - more activity
+    prisma.debt.create({
+      data: {
+        amount: 85.0,
+        description: "Trail pass annual fee split",
+        status: "pending",
+        lenderId: bob.id,
+        borrowerId: mainUser.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 24.0,
+        description: "Energy bars & trail mix",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: frank.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 130.0,
+        description: "Campsite reservation",
+        status: "pending",
+        lenderId: elena.id,
+        borrowerId: bob.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 50.0,
+        description: "First aid kit restock",
+        status: "paid",
+        lenderId: frank.id,
+        borrowerId: elena.id,
+        groupId: hikersGroup.id,
+      },
+    }),
+
+    // Book Club - more activity
+    prisma.debt.create({
+      data: {
+        amount: 16.99,
+        description: "This month's book (Klara and the Sun)",
+        status: "pending",
+        lenderId: alice.id,
+        borrowerId: mainUser.id,
+        groupId: bookClub.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 45.0,
+        description: "Wine & cheese for meeting",
+        status: "pending",
+        lenderId: mainUser.id,
+        borrowerId: diana.id,
+        groupId: bookClub.id,
+      },
+    }),
+    prisma.debt.create({
+      data: {
+        amount: 12.0,
+        description: "Last month's book (Piranesi)",
+        status: "paid",
+        lenderId: diana.id,
+        borrowerId: alice.id,
+        groupId: bookClub.id,
+      },
+    }),
+  ]);
+  console.log(`Created ${moreGroupDebts.length} additional group debts`);
+
+  // ── Group invites ─────────────────────────────────────────
+  await Promise.all([
+    prisma.groupInvite.create({
+      data: {
+        groupId: roommatesGroup.id,
+        invitedEmail: "grace@example.com",
+        invitedBy: mainUser.id,
+        status: "pending",
+      },
+    }),
+    prisma.groupInvite.create({
+      data: {
+        groupId: vegasGroup.id,
+        invitedEmail: "henry@example.com",
+        invitedBy: charlie.id,
+        status: "pending",
+      },
+    }),
+    prisma.groupInvite.create({
+      data: {
+        groupId: hikersGroup.id,
+        invitedEmail: "iris@example.com",
+        invitedBy: mainUser.id,
+        status: "pending",
+      },
+    }),
+  ]);
+  console.log("Created 3 pending group invites");
+
   const totalDebts =
-    debtsAsLender.length + debtsAsBorrower.length + otherDebts.length + extraDebts.length;
+    debtsAsLender.length + debtsAsBorrower.length + otherDebts.length + extraDebts.length + moreGroupDebts.length;
 
   console.log("\n✅ Seed completed successfully!");
   console.log("\nSummary:");
