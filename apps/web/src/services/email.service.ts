@@ -15,6 +15,7 @@ import { FriendRequestAcceptedEmail } from "@/components/emails/friend-request-a
 import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-rejected";
 import { TabCreatedEmail } from "@/components/emails/tab-created";
 import { TabMarkedPaidEmail } from "@/components/emails/tab-marked-paid";
+import { AlertReminderEmail } from "@/components/emails/email";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -643,6 +644,51 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send debt request rejected email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendAlertReminder(params: {
+    to: string;
+    borrowerName: string;
+    lenderName: string;
+    amount: number;
+    description?: string | null;
+    message?: string | null;
+    deadline?: Date | string | null;
+    groupName?: string | null;
+    debtLink: string;
+    manageAlertsLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `Reminder: you owe ${params.lenderName} $${params.amount.toFixed(2)}`,
+        react: AlertReminderEmail({
+          borrowerName: params.borrowerName,
+          lenderName: params.lenderName,
+          amount: params.amount,
+          description: params.description,
+          message: params.message,
+          deadline: params.deadline,
+          groupName: params.groupName,
+          debtLink: params.debtLink,
+          manageAlertsLink: params.manageAlertsLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send alert reminder email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send alert reminder email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

@@ -51,6 +51,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   // Alert fields
   const [alertMessage, setAlertMessage] = useState('')
   const [alertDeadline, setAlertDeadline] = useState('')
+  const [alertFrequency, setAlertFrequency] = useState<string>('off')
 
   // Receipt fields
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
@@ -176,7 +177,9 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
       if (result.success && result.debt) {
         // If alert fields are provided, create an alert for this debt
-        if (alertMessage || alertDeadline) {
+        const reminderFrequencyDays =
+          alertFrequency === 'off' ? null : parseInt(alertFrequency, 10)
+        if (alertMessage || alertDeadline || reminderFrequencyDays) {
           try {
             await fetch('/api/alerts', {
               method: 'POST',
@@ -185,6 +188,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                 debtId: result.debt.id,
                 message: alertMessage || null,
                 deadline: alertDeadline || null,
+                reminderFrequencyDays,
               }),
             })
           } catch (alertError) {
@@ -211,6 +215,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setSelectedGroupId('')
     setAlertMessage('')
     setAlertDeadline('')
+    setAlertFrequency('off')
     setReceiptFile(null)
     setReceiptPreview(null)
     setSearchQuery('')
@@ -415,6 +420,23 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                 value={alertDeadline}
                 onChange={(e) => setAlertDeadline(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="alertFrequency" className="text-sm">Email reminder frequency</Label>
+              <Select value={alertFrequency} onValueChange={setAlertFrequency}>
+                <SelectTrigger id="alertFrequency">
+                  <SelectValue placeholder="Off" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">Off (no email reminders)</SelectItem>
+                  <SelectItem value="7">Weekly (every 7 days)</SelectItem>
+                  <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
+                  <SelectItem value="30">Monthly (every 30 days)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Borrower receives an email reminder on this cadence.
+              </p>
             </div>
           </div>
         </div>

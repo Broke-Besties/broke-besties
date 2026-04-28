@@ -1,0 +1,18 @@
+name: Alert Reminders
+
+on:
+  schedule:
+    # 14:00 UTC daily (~9am ET / 7am MT). Adjust to whatever local time you prefer.
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+jobs:
+  send:
+    name: Trigger reminder cron
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/alert-reminders
+        run: |
+          curl -fsSL --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/alert-reminders"

@@ -21,6 +21,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +48,7 @@ type Alert = {
   message: string | null;
   deadline: Date | string | null;
   isActive: boolean;
+  reminderFrequencyDays: number | null;
 };
 
 type Debt = {
@@ -129,6 +137,11 @@ export default function DebtDetailClient({
     debt.alert?.deadline
       ? new Date(debt.alert.deadline).toISOString().split("T")[0]
       : ""
+  );
+  const [alertFrequency, setAlertFrequency] = useState<string>(
+    debt.alert?.reminderFrequencyDays != null
+      ? String(debt.alert.reminderFrequencyDays)
+      : "off"
   );
   const [alertSubmitting, setAlertSubmitting] = useState(false);
 
@@ -303,6 +316,9 @@ export default function DebtDetailClient({
     setError("");
 
     try {
+      const reminderFrequencyDays =
+        alertFrequency === "off" ? null : parseInt(alertFrequency, 10);
+
       if (debt.alert) {
         // Update existing alert
         const response = await fetch(`/api/alerts/${debt.alert.id}`, {
@@ -311,6 +327,7 @@ export default function DebtDetailClient({
           body: JSON.stringify({
             message: alertMessage || null,
             deadline: alertDeadline || null,
+            reminderFrequencyDays,
           }),
         });
 
@@ -327,6 +344,7 @@ export default function DebtDetailClient({
             debtId: debt.id,
             message: alertMessage || null,
             deadline: alertDeadline || null,
+            reminderFrequencyDays,
           }),
         });
 
@@ -654,11 +672,22 @@ export default function DebtDetailClient({
                 </p>
               </div>
             )}
-            {!debt.alert.message && !debt.alert.deadline && (
-              <p className="text-sm text-muted-foreground">
-                Alert is set but no message or deadline configured.
+            <div>
+              <Label className="text-muted-foreground">Email reminders</Label>
+              <p className="mt-1">
+                {debt.alert.reminderFrequencyDays
+                  ? `Every ${debt.alert.reminderFrequencyDays} days`
+                  : "Off"}
               </p>
-            )}
+            </div>
+            {!debt.alert.message &&
+              !debt.alert.deadline &&
+              !debt.alert.reminderFrequencyDays && (
+                <p className="text-sm text-muted-foreground">
+                  Alert is set but no message, deadline, or email reminders
+                  configured.
+                </p>
+              )}
           </CardContent>
         )}
       </Card>
@@ -919,6 +948,27 @@ export default function DebtDetailClient({
                   value={alertDeadline}
                   onChange={(e) => setAlertDeadline(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="alertFrequency">Email reminder frequency</Label>
+                <Select
+                  value={alertFrequency}
+                  onValueChange={setAlertFrequency}
+                >
+                  <SelectTrigger id="alertFrequency">
+                    <SelectValue placeholder="Off" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">Off (no email reminders)</SelectItem>
+                    <SelectItem value="7">Weekly (every 7 days)</SelectItem>
+                    <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
+                    <SelectItem value="30">Monthly (every 30 days)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The borrower receives an email reminder on this cadence.
+                </p>
               </div>
             </div>
 

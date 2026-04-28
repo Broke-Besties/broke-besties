@@ -27,12 +27,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { debtId, recurringPaymentId, message, deadline } = await request.json();
+    const { debtId, recurringPaymentId, message, deadline, reminderFrequencyDays } =
+      await request.json();
 
     // Must specify either debtId or recurringPaymentId, but not both
     if ((!debtId && !recurringPaymentId) || (debtId && recurringPaymentId)) {
       return NextResponse.json(
         { error: "Must specify either debtId or recurringPaymentId" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      reminderFrequencyDays !== undefined &&
+      reminderFrequencyDays !== null &&
+      (!Number.isInteger(reminderFrequencyDays) || reminderFrequencyDays <= 0)
+    ) {
+      return NextResponse.json(
+        { error: "reminderFrequencyDays must be a positive integer or null" },
         { status: 400 }
       );
     }
@@ -44,12 +56,14 @@ export async function POST(request: NextRequest) {
         debtId,
         message,
         deadline: deadline ? new Date(deadline) : null,
+        reminderFrequencyDays: reminderFrequencyDays ?? null,
         userId: user.id,
       });
     } else {
       alert = await alertService.createAlertForRecurringPayment({
         recurringPaymentId,
         message,
+        reminderFrequencyDays: reminderFrequencyDays ?? null,
         userId: user.id,
       });
     }
