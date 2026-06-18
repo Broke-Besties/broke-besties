@@ -3,11 +3,28 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-import { Doughnut } from "react-chartjs-2";
+import { Label, Pie, PieChart } from "recharts";
 import NumberFlow from "@number-flow/react";
-import { TrendingUp, TrendingDown, Repeat, Calendar, Plus, AlertTriangle, X } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Repeat,
+  CalendarClock,
+  Plus,
+  AlertTriangle,
+  FileClock,
+  Users,
+  Receipt,
+  Inbox,
+  X,
+} from "lucide-react";
 
+import {
+  Alert as AlertBanner,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,33 +33,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { chartColor } from "@/lib/chart-colors";
 import { updateTabStatus } from "./actions";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
-
-// Contrasting color palette
-const CHART_COLORS = [
-  "hsl(210 70% 55%)",  // Blue
-  "hsl(340 65% 55%)",  // Pink
-  "hsl(45 85% 55%)",   // Yellow/Gold
-  "hsl(160 50% 45%)",  // Teal
-  "hsl(270 50% 55%)",  // Purple
-  "hsl(25 80% 55%)",   // Orange
-  "hsl(190 60% 45%)",  // Cyan
-  "hsl(0 65% 55%)",    // Red
-];
-
-const CHART_BORDER_COLORS = [
-  "hsl(210 70% 45%)",
-  "hsl(340 65% 45%)",
-  "hsl(45 85% 45%)",
-  "hsl(160 50% 35%)",
-  "hsl(270 50% 45%)",
-  "hsl(25 80% 45%)",
-  "hsl(190 60% 35%)",
-  "hsl(0 65% 45%)",
-];
 
 type Debt = {
   id: number
@@ -207,6 +223,12 @@ function getDaysUntil(date: Date): number {
   return Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function initials(value: string): string {
+  const parts = value.split(/[\s._-]+/).filter(Boolean);
+  const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  return (letters || value.slice(0, 2)).toUpperCase();
+}
+
 export default function DashboardPageClient({
   initialDebts,
   initialGroups,
@@ -229,7 +251,6 @@ export default function DashboardPageClient({
   const [showPendingBanner, setShowPendingBanner] = useState(
     initialPendingTransactions.length > 0
   );
-  const [error, setError] = useState("");
   const [chartView, setChartView] = useState<"owed" | "owing">("owed");
   const router = useRouter();
 
@@ -242,22 +263,7 @@ export default function DashboardPageClient({
       )
     );
 
-    try {
-      const result = await updateTabStatus(tabId, newStatus);
-
-      if (!result.success) {
-        setError(result.error || "Failed to update tab status");
-        if (oldStatus) {
-          setTabs((prevTabs) =>
-            prevTabs.map((tab) =>
-              tab.id === tabId ? { ...tab, status: oldStatus } : tab
-            )
-          );
-        }
-        return;
-      }
-    } catch {
-      setError("An error occurred while updating the tab status");
+    const revert = () => {
       if (oldStatus) {
         setTabs((prevTabs) =>
           prevTabs.map((tab) =>
@@ -265,6 +271,17 @@ export default function DashboardPageClient({
           )
         );
       }
+    };
+
+    try {
+      const result = await updateTabStatus(tabId, newStatus);
+      if (!result.success) {
+        toast.error(result.error || "Failed to update tab status");
+        revert();
+      }
+    } catch {
+      toast.error("An error occurred while updating the tab status");
+      revert();
     }
   };
 
@@ -297,363 +314,343 @@ export default function DashboardPageClient({
   // Next renewal date (soonest)
   const nextRenewalDate = useMemo(() => {
     if (recurringPayments.length === 0) return null;
-
     const dates = recurringPayments.map((p) => getNextRenewalDate(p));
-    const soonest = dates.reduce((min, d) => (d < min ? d : min), dates[0]);
-    return soonest;
+    return dates.reduce((min, d) => (d < min ? d : min), dates[0]);
   }, [recurringPayments]);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  };
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   // Chart data based on selected view
-  const { chartData, chartDescriptions } = useMemo(() => {
+  const { chartData, chartConfig, chartTotal } = useMemo(() => {
     const relevantDebts =
       chartView === "owed"
         ? lendingDebts.filter((d) => d.status === "pending")
         : borrowingDebts.filter((d) => d.status === "pending");
 
-    if (relevantDebts.length === 0) {
-      return {
-        chartData: {
-          labels: [chartView === "owed" ? "No one owes you" : "You owe no one"],
-          datasets: [
-            {
-              data: [1],
-              backgroundColor: ["rgba(156, 163, 175, 0.3)"],
-              borderColor: ["rgba(156, 163, 175, 0.5)"],
-              borderWidth: 1,
-            },
-          ],
-        },
-        chartDescriptions: [] as string[][],
-      };
-    }
-
-    // Group by person with descriptions
-    const personData = new Map<string, { amount: number; descriptions: string[] }>();
+    const personData = new Map<string, number>();
     for (const debt of relevantDebts) {
       const personObj = chartView === "owed" ? debt.borrower : debt.lender;
       const person = personObj.name || personObj.email;
-      const existing = personData.get(person) || { amount: 0, descriptions: [] };
-      existing.amount += debt.amount;
-      if (debt.description) {
-        existing.descriptions.push(debt.description);
-      } else if (debt.group?.name) {
-        existing.descriptions.push(debt.group.name);
-      }
-      personData.set(person, existing);
+      personData.set(person, (personData.get(person) ?? 0) + debt.amount);
     }
 
     const entries = Array.from(personData.entries()).sort(
-      (a, b) => b[1].amount - a[1].amount
+      (a, b) => b[1] - a[1]
     );
 
-    return {
-      chartData: {
-        labels: entries.map(([person]) => person),
-        datasets: [
-          {
-            data: entries.map(([, data]) => data.amount),
-            backgroundColor: entries.map(
-              (_, i) => CHART_COLORS[i % CHART_COLORS.length]
-            ),
-            borderColor: entries.map(
-              (_, i) => CHART_BORDER_COLORS[i % CHART_BORDER_COLORS.length]
-            ),
-            borderWidth: 2,
-          },
-        ],
-      },
-      chartDescriptions: entries.map(([, data]) => data.descriptions),
-    };
+    const data = entries.map(([person, amount], i) => ({
+      key: `person-${i}`,
+      person,
+      amount,
+      fill: chartColor(i),
+    }));
+
+    const config: ChartConfig = { amount: { label: "Amount" } };
+    entries.forEach(([person], i) => {
+      config[`person-${i}`] = { label: person, color: chartColor(i) };
+    });
+
+    const total = entries.reduce((sum, [, amount]) => sum + amount, 0);
+
+    return { chartData: data, chartConfig: config, chartTotal: total };
   }, [chartView, lendingDebts, borrowingDebts]);
 
-  const chartOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: true,
-          position: "right" as const,
-          labels: {
-            boxWidth: 12,
-            padding: 8,
-            font: {
-              size: 11,
-            },
-          },
-        },
-        tooltip: {
-          callbacks: {
-            title: (context: { label?: string }[]) => context[0]?.label || "",
-            label: (context: { parsed: number; dataset: { data: number[] } }) => {
-              const value = context.parsed;
-              const total = context.dataset.data.reduce(
-                (a: number, b: number) => a + b,
-                0
-              );
-              const percentage = ((value / total) * 100).toFixed(1);
-              return `$${value.toFixed(2)} (${percentage}%)`;
-            },
-            afterLabel: (context: { dataIndex: number }) => {
-              const descriptions = chartDescriptions[context.dataIndex];
-              if (!descriptions || descriptions.length === 0) return "";
-              const truncate = (s: string, len: number) =>
-                s.length > len ? s.slice(0, len) + "..." : s;
-              const shown = descriptions.slice(0, 2).map((d) => `• ${truncate(d, 25)}`);
-              if (descriptions.length > 2) {
-                shown.push(`  +${descriptions.length - 2} more`);
-              }
-              return shown;
-            },
-          },
-        },
-      },
-      cutout: "60%",
-    }),
-    [chartDescriptions]
-  );
-
-  const overduePayments = alerts.filter(a => a.debt !== null);
+  const overduePayments = alerts.filter((a) => a.debt !== null);
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      {/* Notification Banners */}
-      <div className="space-y-2">
-        {/* Overdue Payments Banner */}
-        {showOverdueBanner && overduePayments.length > 0 && (
-          <div
-            className="relative rounded-lg p-2.5 animate-in fade-in slide-in-from-top-4 duration-500 bg-red-500/10 border border-red-500/30"
+    <div className="space-y-6">
+      {/* Notification banners */}
+      {showOverdueBanner && overduePayments.length > 0 && (
+        <AlertBanner>
+          <AlertTriangle />
+          <AlertTitle>
+            You have {overduePayments.length} overdue payment
+            {overduePayments.length > 1 ? "s" : ""}
+          </AlertTitle>
+          <AlertDescription>
+            Review them on your debts to avoid late reminders.
+          </AlertDescription>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 size-7"
+            onClick={() => setShowOverdueBanner(false)}
+            aria-label="Dismiss"
           >
-            <button
-              onClick={() => setShowOverdueBanner(false)}
-              className="absolute top-2 right-2 p-1 rounded-md hover:bg-black/10 transition-colors"
-              aria-label="Dismiss notification"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-            <div className="flex items-center gap-2 pr-7">
-              <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-red-100">
-                  You have {overduePayments.length} overdue payment{overduePayments.length > 1 ? 's' : ''}!
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+            <X />
+          </Button>
+        </AlertBanner>
+      )}
 
-        {/* Pending Approvals Banner */}
-        {showPendingBanner && pendingTransactions.length > 0 && (
-          <div
-            className="relative rounded-lg p-2.5 animate-in fade-in slide-in-from-top-4 duration-500 bg-emerald-500/10 border border-emerald-500/30"
+      {showPendingBanner && pendingTransactions.length > 0 && (
+        <AlertBanner>
+          <FileClock />
+          <AlertTitle>
+            {pendingTransactions.length} transaction
+            {pendingTransactions.length > 1 ? "s" : ""} waiting for your approval
+          </AlertTitle>
+          <AlertDescription>
+            Approve or decline them from the related debt.
+          </AlertDescription>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 size-7"
+            onClick={() => setShowPendingBanner(false)}
+            aria-label="Dismiss"
           >
-            <button
-              onClick={() => setShowPendingBanner(false)}
-              className="absolute top-2 right-2 p-1 rounded-md hover:bg-black/10 transition-colors"
-              aria-label="Dismiss notification"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-            <div className="flex items-center gap-2 pr-7">
-              <AlertTriangle className="h-4 w-4 text-emerald-600 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-emerald-100">
-                  You have {pendingTransactions.length} transaction{pendingTransactions.length > 1 ? 's' : ''} waiting for your approval!
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+            <X />
+          </Button>
+        </AlertBanner>
+      )}
 
-      {/* Welcome Section */}
-      <div
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
-        style={{ animationDelay: "0ms", animationFillMode: "both" }}
-      >
-        <div className="flex items-center gap-4 sm:gap-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
           <Image
             src="/mascot/mascot.png"
             alt="Mascot"
-            width={100}
-            height={100}
-            className="shrink-0 w-16 h-16 sm:w-[100px] sm:h-[100px]"
+            width={64}
+            height={64}
+            className="size-14 shrink-0 sm:size-16"
           />
-          <div className="space-y-0.5 sm:space-y-1 min-w-0">
-            <h1 className="text-xl sm:text-3xl font-semibold tracking-tight">
-              Welcome back, {userName}!
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Welcome back, {userName}
             </h1>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              Here&apos;s an overview of your debts and recurring payments
+            <p className="text-sm text-muted-foreground">
+              An overview of your debts and recurring payments
             </p>
           </div>
         </div>
-        <Button onClick={() => router.push("/debts")} className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-2" />
+        <Button onClick={() => router.push("/debts")} className="sm:w-auto">
+          <Plus />
           Add debt
         </Button>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {/* Four Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {/* Card 1: You are owed */}
-        <button
-          type="button"
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <Card
+          role="button"
+          tabIndex={0}
           onClick={() => setChartView("owed")}
+          onKeyDown={(e) => e.key === "Enter" && setChartView("owed")}
           className={cn(
-            "relative rounded-xl p-3 md:p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
-            chartView === "owed" ? "green-box-active" : "green-box"
+            "cursor-pointer transition-colors hover:bg-accent/50",
+            chartView === "owed" && "border-ring ring-1 ring-ring"
           )}
-          style={{ animationDelay: "100ms", animationFillMode: "both" }}
         >
-          <TrendingUp className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-emerald-600 dark:text-emerald-400" />
-          <p className="text-xs md:text-sm text-emerald-700 dark:text-emerald-300">
-            You are owed
-          </p>
-          <p className="text-lg md:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              You are owed
+            </CardTitle>
+            <TrendingUp className="size-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold tabular-nums">
             <NumberFlow
               value={calculateTotal(lendingDebts)}
               format={{ style: "currency", currency: "USD" }}
             />
-          </p>
-        </button>
+          </CardContent>
+        </Card>
 
-        {/* Card 2: You owe */}
-        <button
-          type="button"
+        <Card
+          role="button"
+          tabIndex={0}
           onClick={() => setChartView("owing")}
+          onKeyDown={(e) => e.key === "Enter" && setChartView("owing")}
           className={cn(
-            "relative rounded-xl p-3 md:p-4 text-left transition-all animate-in fade-in slide-in-from-bottom-4 duration-500",
-            chartView === "owing" ? "red-box-active" : "red-box"
+            "cursor-pointer transition-colors hover:bg-accent/50",
+            chartView === "owing" && "border-ring ring-1 ring-ring"
           )}
-          style={{ animationDelay: "150ms", animationFillMode: "both" }}
         >
-          <TrendingDown className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-rose-600 dark:text-rose-400" />
-          <p className="text-xs md:text-sm text-rose-700 dark:text-rose-300">You owe</p>
-          <p className="text-lg md:text-2xl font-bold text-rose-600 dark:text-rose-400">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              You owe
+            </CardTitle>
+            <TrendingDown className="size-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold tabular-nums">
             <NumberFlow
               value={calculateTotal(borrowingDebts)}
               format={{ style: "currency", currency: "USD" }}
             />
-          </p>
-        </button>
-
-        {/* Card 3: Active recurring payments */}
-        <div
-          className="relative rounded-xl p-3 md:p-4 border bg-card/50 animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "200ms", animationFillMode: "both" }}
-        >
-          <Repeat className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
-          <p className="text-xs md:text-sm text-muted-foreground">Active</p>
-          <p className="text-lg md:text-2xl font-bold">
-            <NumberFlow value={recurringPayments.length} />
-          </p>
-        </div>
-
-        {/* Card 4: Next renewal date */}
-        <div
-          className="relative rounded-xl p-3 md:p-4 border bg-card/50 animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "250ms", animationFillMode: "both" }}
-        >
-          <Calendar className="absolute top-3 right-3 md:top-4 md:right-4 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
-          <p className="text-xs md:text-sm text-muted-foreground">Next renewal</p>
-          <p className="text-lg md:text-2xl font-bold">
-            {nextRenewalDate ? formatDate(nextRenewalDate) : "None"}
-          </p>
-        </div>
-      </div>
-
-      {/* Doughnut Chart & Upcoming Payments Side-by-Side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Doughnut Chart */}
-        <Card
-          className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "350ms", animationFillMode: "both" }}
-        >
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              {chartView === "owed" ? "Who owes you" : "Who you owe"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-48">
-              <Doughnut data={chartData} options={chartOptions} />
-            </div>
           </CardContent>
         </Card>
 
-        {/* Upcoming Recurring Payments */}
-        <Card
-          className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "400ms", animationFillMode: "both" }}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Upcoming Payments</CardTitle>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Active recurring
+            </CardTitle>
+            <Repeat className="size-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold tabular-nums">
+            <NumberFlow value={recurringPayments.length} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Next renewal
+            </CardTitle>
+            <CalendarClock className="size-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">
+            {nextRenewalDate ? formatDate(nextRenewalDate) : "None"}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Chart + upcoming payments */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>
+              {chartView === "owed" ? "Who owes you" : "Who you owe"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1">
+            {chartData.length === 0 ? (
+              <Empty className="h-full">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Inbox />
+                  </EmptyMedia>
+                  <EmptyTitle>
+                    {chartView === "owed" ? "No one owes you" : "You owe no one"}
+                  </EmptyTitle>
+                  <EmptyDescription>
+                    Pending debts will appear here.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <ChartContainer
+                config={chartConfig}
+                className="mx-auto aspect-square max-h-[220px]"
+              >
+                <PieChart>
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        nameKey="key"
+                        formatter={(value, name, item) => (
+                          <span className="flex w-full items-center justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              {item.payload.person}
+                            </span>
+                            <span className="font-mono tabular-nums">
+                              ${Number(value).toFixed(2)}
+                            </span>
+                          </span>
+                        )}
+                      />
+                    }
+                  />
+                  <Pie
+                    data={chartData}
+                    dataKey="amount"
+                    nameKey="key"
+                    innerRadius={60}
+                    strokeWidth={5}
+                  >
+                    <Label
+                      content={({ viewBox }) => {
+                        if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                          return (
+                            <text
+                              x={viewBox.cx}
+                              y={viewBox.cy}
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                            >
+                              <tspan
+                                x={viewBox.cx}
+                                y={viewBox.cy}
+                                className="fill-foreground text-2xl font-bold tabular-nums"
+                              >
+                                ${chartTotal.toFixed(0)}
+                              </tspan>
+                              <tspan
+                                x={viewBox.cx}
+                                y={(viewBox.cy || 0) + 22}
+                                className="fill-muted-foreground text-xs"
+                              >
+                                {chartView === "owed" ? "owed to you" : "you owe"}
+                              </tspan>
+                            </text>
+                          );
+                        }
+                      }}
+                    />
+                  </Pie>
+                </PieChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Upcoming payments</CardTitle>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push("/recurring")}
+              onClick={() => router.push("/recurring-payments")}
             >
               View all
             </Button>
           </CardHeader>
           <CardContent>
             {upcomingPayments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No payments due in the next 7 days
-              </p>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <CalendarClock />
+                  </EmptyMedia>
+                  <EmptyTitle>Nothing due soon</EmptyTitle>
+                  <EmptyDescription>
+                    No payments due in the next 7 days.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              <div className="space-y-3">
+              <ItemGroup className="gap-2">
                 {upcomingPayments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="font-medium">
+                  <Item key={payment.id} variant="outline" size="sm">
+                    <ItemContent>
+                      <ItemTitle>
                         {payment.description || "Recurring payment"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
+                      </ItemTitle>
+                      <ItemDescription>
                         {payment.daysUntil === 0
                           ? "Due today"
                           : payment.daysUntil === 1
                           ? "Due tomorrow"
                           : `Due in ${payment.daysUntil} days`}
-                      </p>
-                    </div>
-                    <p className="font-semibold">
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions className="font-semibold tabular-nums">
                       ${payment.amount.toFixed(2)}
-                    </p>
-                  </div>
+                    </ItemActions>
+                  </Item>
                 ))}
-              </div>
+              </ItemGroup>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Groups & Tabs Side-by-Side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Groups Card */}
-        <Card
-          className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "450ms", animationFillMode: "both" }}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Your Groups</CardTitle>
+      {/* Groups + tabs */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Your groups</CardTitle>
             <Button
               variant="outline"
               size="sm"
@@ -664,34 +661,49 @@ export default function DashboardPageClient({
           </CardHeader>
           <CardContent>
             {groups.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No groups yet</p>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Users />
+                  </EmptyMedia>
+                  <EmptyTitle>No groups yet</EmptyTitle>
+                  <EmptyDescription>
+                    Create a group to split shared costs.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              <div className="space-y-3">
+              <ItemGroup className="gap-2">
                 {groups.slice(0, 3).map((group) => (
-                  <div
-                    key={group.id}
-                    onClick={() => router.push(`/groups/${group.id}`)}
-                    className="flex items-center justify-between rounded-lg border p-3 cursor-pointer hover:bg-accent/50 transition-colors"
-                  >
-                    <span className="font-medium">{group.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {group._count.members}{" "}
-                      {group._count.members === 1 ? "member" : "members"}
-                    </span>
-                  </div>
+                  <Item key={group.id} variant="outline" size="sm" asChild>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/groups/${group.id}`)}
+                      className="w-full text-left"
+                    >
+                      <ItemMedia>
+                        <Avatar className="size-9">
+                          <AvatarFallback>{initials(group.name)}</AvatarFallback>
+                        </Avatar>
+                      </ItemMedia>
+                      <ItemContent>
+                        <ItemTitle>{group.name}</ItemTitle>
+                        <ItemDescription>
+                          {group._count.members}{" "}
+                          {group._count.members === 1 ? "member" : "members"}
+                        </ItemDescription>
+                      </ItemContent>
+                    </button>
+                  </Item>
                 ))}
-              </div>
+              </ItemGroup>
             )}
           </CardContent>
         </Card>
 
-        {/* Tabs Card */}
-        <Card
-          className="animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style={{ animationDelay: "500ms", animationFillMode: "both" }}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Your Tabs</CardTitle>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Your tabs</CardTitle>
             <Button
               variant="outline"
               size="sm"
@@ -702,26 +714,36 @@ export default function DashboardPageClient({
           </CardHeader>
           <CardContent>
             {activeTabs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active tabs</p>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Receipt />
+                  </EmptyMedia>
+                  <EmptyTitle>No active tabs</EmptyTitle>
+                  <EmptyDescription>
+                    Quick IOUs you track yourself show up here.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              <div className="space-y-3">
+              <ItemGroup className="gap-2">
                 {activeTabs.slice(0, 3).map((tab) => (
-                  <div
-                    key={tab.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{tab.personName}</span>
-                      <Badge
-                        variant={
-                          tab.status === "lending" ? "default" : "secondary"
-                        }
-                      >
-                        {tab.status === "lending" ? "Owes you" : "You owe"}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">
+                  <Item key={tab.id} variant="outline" size="sm">
+                    <ItemMedia>
+                      <Avatar className="size-9">
+                        <AvatarFallback>{initials(tab.personName)}</AvatarFallback>
+                      </Avatar>
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{tab.personName}</ItemTitle>
+                      <ItemDescription>
+                        <Badge variant="secondary">
+                          {tab.status === "lending" ? "Owes you" : "You owe"}
+                        </Badge>
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <span className="font-semibold tabular-nums">
                         ${tab.amount.toFixed(2)}
                       </span>
                       <Button
@@ -731,10 +753,10 @@ export default function DashboardPageClient({
                       >
                         Paid
                       </Button>
-                    </div>
-                  </div>
+                    </ItemActions>
+                  </Item>
                 ))}
-              </div>
+              </ItemGroup>
             )}
           </CardContent>
         </Card>
