@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-import { Doughnut } from "react-chartjs-2";
+import { Pie, PieChart } from "recharts";
 
 import {
   Card,
@@ -11,13 +10,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { chartColor } from "@/lib/chart-colors";
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "paid";
 type ViewFilter = "all" | "owe" | "owed";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
 
 type Member = {
   id: number;
@@ -58,29 +62,6 @@ type BalanceEntry = {
   toName: string;
   amount: number;
 };
-
-// Blue/slate color palette matching the app's muted theme
-const COLORS = [
-  "hsl(210 45% 70%)", // light blue
-  "hsl(210 35% 60%)", // medium blue
-  "hsl(215 30% 50%)", // slate blue
-  "hsl(220 25% 40%)", // dark slate
-  "hsl(215 20% 35%)", // darker slate
-  "hsl(205 40% 65%)", // soft sky blue
-  "hsl(200 30% 55%)", // muted cyan-blue
-  "hsl(225 20% 45%)", // blue-gray
-];
-
-const BORDER_COLORS = [
-  "hsl(210 45% 60%)",
-  "hsl(210 35% 50%)",
-  "hsl(215 30% 40%)",
-  "hsl(220 25% 30%)",
-  "hsl(215 20% 25%)",
-  "hsl(205 40% 55%)",
-  "hsl(200 30% 45%)",
-  "hsl(225 20% 35%)",
-];
 
 export function GroupDebtChart({
   members,
@@ -213,62 +194,23 @@ export function GroupDebtChart({
     return entries.sort((a, b) => b.amount - a.amount);
   }, [debts, statusFilter, viewFilter, currentUserId, selectedLenders, selectedBorrowers]);
 
-  // Chart data
-  const chartData = useMemo(() => {
-    if (balances.length === 0) {
-      return {
-        labels: ["No outstanding debts"],
-        datasets: [
-          {
-            data: [1],
-            backgroundColor: ["rgba(156, 163, 175, 0.3)"],
-            borderColor: ["rgba(156, 163, 175, 0.5)"],
-            borderWidth: 1,
-          },
-        ],
+  // Chart data (recharts)
+  const { chartData, chartConfig } = useMemo(() => {
+    const data = balances.map((b, i) => ({
+      key: `bal-${i}`,
+      label: `${b.fromName} → ${b.toName}`,
+      amount: b.amount,
+      fill: chartColor(i),
+    }));
+    const config: ChartConfig = { amount: { label: "Amount" } };
+    balances.forEach((b, i) => {
+      config[`bal-${i}`] = {
+        label: `${b.fromName} → ${b.toName}`,
+        color: chartColor(i),
       };
-    }
-
-    return {
-      labels: balances.map((b) => `${b.fromName} → ${b.toName}`),
-      datasets: [
-        {
-          data: balances.map((b) => b.amount),
-          backgroundColor: balances.map((_, i) => COLORS[i % COLORS.length]),
-          borderColor: balances.map(
-            (_, i) => BORDER_COLORS[i % BORDER_COLORS.length]
-          ),
-          borderWidth: 2,
-        },
-      ],
-    };
+    });
+    return { chartData: data, chartConfig: config };
   }, [balances]);
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "bottom" as const,
-        labels: {
-          padding: 16,
-          usePointStyle: true,
-          font: {
-            size: 12,
-          },
-        },
-      },
-      tooltip: {
-        callbacks: {
-          label: (context: any) => {
-            const value = context.parsed;
-            return ` $${value.toFixed(2)}`;
-          },
-        },
-      },
-    },
-    cutout: "60%",
-  };
 
   const totalOwed = balances.reduce((sum, b) => sum + b.amount, 0);
 
@@ -384,9 +326,44 @@ export function GroupDebtChart({
         </div>
 
         {/* Chart */}
-        <div className="h-64">
-          <Doughnut data={chartData} options={chartOptions} />
-        </div>
+        {balances.length > 0 ? (
+          <ChartContainer
+            config={chartConfig}
+            className="mx-auto aspect-square max-h-[240px]"
+          >
+            <PieChart>
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    nameKey="key"
+                    formatter={(value, name, item) => (
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {item.payload.label}
+                        </span>
+                        <span className="font-mono tabular-nums">
+                          ${Number(value).toFixed(2)}
+                        </span>
+                      </span>
+                    )}
+                  />
+                }
+              />
+              <Pie
+                data={chartData}
+                dataKey="amount"
+                nameKey="key"
+                innerRadius={60}
+                strokeWidth={5}
+              />
+            </PieChart>
+          </ChartContainer>
+        ) : (
+          <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+            No outstanding debts to chart.
+          </div>
+        )}
 
         {/* Summary */}
         {balances.length > 0 && (
