@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowLeft, UserPlus, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +15,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   sendFriendRequestByEmail,
   acceptFriendRequest,
@@ -56,6 +77,12 @@ type FriendsPageClientProps = {
 
 type Tab = "friends" | "requests" | "add";
 
+function initials(value: string): string {
+  const parts = value.split(/[\s._-]+/).filter(Boolean);
+  const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  return (letters || value.slice(0, 2)).toUpperCase();
+}
+
 export default function FriendsPageClient({
   initialFriends,
   initialPendingRequests,
@@ -67,8 +94,6 @@ export default function FriendsPageClient({
   const [sentRequests, setSentRequests] =
     useState<FriendRequest[]>(initialSentRequests);
   const [activeTab, setActiveTab] = useState<Tab>("friends");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [email, setEmail] = useState("");
   const [addLoading, setAddLoading] = useState(false);
@@ -76,17 +101,12 @@ export default function FriendsPageClient({
 
   const handleAccept = async (requestId: number) => {
     setProcessingId(requestId);
-    setError("");
-
     try {
       const result = await acceptFriendRequest(requestId);
-
       if (!result.success) {
-        setError(result.error || "Failed to accept request");
-        setProcessingId(null);
+        toast.error(result.error || "Failed to accept request");
         return;
       }
-
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
       if (result.friend) {
         setFriends((prev) => [
@@ -94,10 +114,9 @@ export default function FriendsPageClient({
           { ...result.friend, friend: result.friend.requester },
         ]);
       }
-      setSuccess("Friend request accepted!");
-      setTimeout(() => setSuccess(""), 3000);
+      toast.success("Friend request accepted");
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -105,20 +124,15 @@ export default function FriendsPageClient({
 
   const handleReject = async (requestId: number) => {
     setProcessingId(requestId);
-    setError("");
-
     try {
       const result = await rejectFriendRequest(requestId);
-
       if (!result.success) {
-        setError(result.error || "Failed to reject request");
-        setProcessingId(null);
+        toast.error(result.error || "Failed to reject request");
         return;
       }
-
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -126,20 +140,15 @@ export default function FriendsPageClient({
 
   const handleCancel = async (requestId: number) => {
     setProcessingId(requestId);
-    setError("");
-
     try {
       const result = await cancelFriendRequest(requestId);
-
       if (!result.success) {
-        setError(result.error || "Failed to cancel request");
-        setProcessingId(null);
+        toast.error(result.error || "Failed to cancel request");
         return;
       }
-
       setSentRequests((prev) => prev.filter((r) => r.id !== requestId));
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -147,20 +156,15 @@ export default function FriendsPageClient({
 
   const handleRemove = async (friendshipId: number) => {
     setProcessingId(friendshipId);
-    setError("");
-
     try {
       const result = await removeFriend(friendshipId);
-
       if (!result.success) {
-        setError(result.error || "Failed to remove friend");
-        setProcessingId(null);
+        toast.error(result.error || "Failed to remove friend");
         return;
       }
-
       setFriends((prev) => prev.filter((f) => f.id !== friendshipId));
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setProcessingId(null);
     }
@@ -171,32 +175,25 @@ export default function FriendsPageClient({
     if (!email.trim()) return;
 
     setAddLoading(true);
-    setError("");
-
     try {
       const result = await sendFriendRequestByEmail(email.trim());
-
       if (!result.success) {
-        setError(result.error || "Failed to add friend");
-        setAddLoading(false);
+        toast.error(result.error || "Failed to add friend");
         return;
       }
-
       if (result.autoAccepted && result.friend) {
         setFriends((prev) => [
           ...prev,
           { ...result.friend, friend: result.friend.requester },
         ]);
-        setSuccess("You are now friends!");
+        toast.success("You are now friends");
       } else if (result.friend) {
         setSentRequests((prev) => [result.friend, ...prev]);
-        setSuccess("Friend request sent!");
+        toast.success("Friend request sent");
       }
-
       setEmail("");
-      setTimeout(() => setSuccess(""), 3000);
     } catch {
-      setError("An error occurred");
+      toast.error("An error occurred");
     } finally {
       setAddLoading(false);
     }
@@ -205,234 +202,216 @@ export default function FriendsPageClient({
   const totalRequests = pendingRequests.length + sentRequests.length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3">
         <Button
           variant="ghost"
-          className="w-fit px-0"
+          size="sm"
+          className="w-fit px-2"
           onClick={() => router.push("/dashboard")}
         >
-          &larr; Back to dashboard
+          <ArrowLeft />
+          Back to dashboard
         </Button>
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Friends</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Friends
+          </h1>
           <p className="text-sm text-muted-foreground">
             Manage your friends and friend requests.
           </p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b">
-        <button
-          onClick={() => setActiveTab("friends")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === "friends"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Friends
-          {friends.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {friends.length}
-            </Badge>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("requests")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === "requests"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Requests
-          {totalRequests > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {totalRequests}
-            </Badge>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("add")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === "add"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Add Friend
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList>
+          <TabsTrigger value="friends">
+            Friends
+            {friends.length > 0 && (
+              <Badge variant="secondary">{friends.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="requests">
+            Requests
+            {totalRequests > 0 && (
+              <Badge variant="secondary">{totalRequests}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="add">Add friend</TabsTrigger>
+        </TabsList>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600">
-          {success}
-        </div>
-      )}
-
-      {/* Friends Tab */}
-      {activeTab === "friends" && (
-        <>
+        {/* Friends */}
+        <TabsContent value="friends">
           {friends.length === 0 ? (
-            <Card className="border-dashed">
-              <CardHeader>
-                <CardTitle>No friends yet</CardTitle>
-                <CardDescription>
-                  Start by adding friends using their email address.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => setActiveTab("add")}>Add a friend</Button>
-              </CardContent>
-            </Card>
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Users />
+                </EmptyMedia>
+                <EmptyTitle>No friends yet</EmptyTitle>
+                <EmptyDescription>
+                  Add friends using their email address.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={() => setActiveTab("add")}>
+                  <UserPlus />
+                  Add a friend
+                </Button>
+              </EmptyContent>
+            </Empty>
           ) : (
-            <div className="grid gap-4">
+            <ItemGroup className="gap-3">
               {friends.map((friendship) => (
-                <Card key={friendship.id}>
-                  <CardHeader className="flex-row items-center justify-between space-y-0">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">
-                        {friendship.friend.name}
-                      </CardTitle>
-                      <CardDescription>{friendship.friend.email}</CardDescription>
-                    </div>
+                <Item key={friendship.id} variant="outline">
+                  <ItemMedia>
+                    <Avatar className="size-10">
+                      <AvatarFallback>
+                        {initials(friendship.friend.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>{friendship.friend.name}</ItemTitle>
+                    <ItemDescription>{friendship.friend.email}</ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleRemove(friendship.id)}
                       disabled={processingId === friendship.id}
                     >
-                      {processingId === friendship.id ? "Removing..." : "Remove"}
+                      {processingId === friendship.id ? "Removing…" : "Remove"}
                     </Button>
-                  </CardHeader>
-                </Card>
+                  </ItemActions>
+                </Item>
               ))}
-            </div>
+            </ItemGroup>
           )}
-        </>
-      )}
+        </TabsContent>
 
-      {/* Requests Tab */}
-      {activeTab === "requests" && (
-        <div className="space-y-6">
-          {/* Incoming Requests */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium">
-              Incoming Requests ({pendingRequests.length})
+        {/* Requests */}
+        <TabsContent value="requests" className="space-y-6">
+          <div className="space-y-3">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Incoming ({pendingRequests.length})
             </h2>
             {pendingRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No pending friend requests.
               </p>
             ) : (
-              <div className="grid gap-4">
+              <ItemGroup className="gap-3">
                 {pendingRequests.map((request) => (
-                  <Card key={request.id}>
-                    <CardHeader className="flex-row items-center justify-between space-y-0">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">
-                          {request.requester.name}
-                        </CardTitle>
-                        <CardDescription>
-                          {request.requester.email}
-                        </CardDescription>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleAccept(request.id)}
-                          disabled={processingId === request.id}
-                        >
-                          {processingId === request.id ? "..." : "Accept"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleReject(request.id)}
-                          disabled={processingId === request.id}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </CardHeader>
-                  </Card>
+                  <Item key={request.id} variant="outline">
+                    <ItemMedia>
+                      <Avatar className="size-10">
+                        <AvatarFallback>
+                          {initials(request.requester.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{request.requester.name}</ItemTitle>
+                      <ItemDescription>
+                        {request.requester.email}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAccept(request.id)}
+                        disabled={processingId === request.id}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReject(request.id)}
+                        disabled={processingId === request.id}
+                      >
+                        Reject
+                      </Button>
+                    </ItemActions>
+                  </Item>
                 ))}
-              </div>
+              </ItemGroup>
             )}
           </div>
 
-          {/* Sent Requests */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium">
-              Sent Requests ({sentRequests.length})
+          <div className="space-y-3">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Sent ({sentRequests.length})
             </h2>
             {sentRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No pending sent requests.
               </p>
             ) : (
-              <div className="grid gap-4">
+              <ItemGroup className="gap-3">
                 {sentRequests.map((request) => (
-                  <Card key={request.id}>
-                    <CardHeader className="flex-row items-center justify-between space-y-0">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">
-                          {request.recipient.name}
-                        </CardTitle>
-                        <CardDescription>
-                          {request.recipient.email}
-                        </CardDescription>
-                      </div>
+                  <Item key={request.id} variant="outline">
+                    <ItemMedia>
+                      <Avatar className="size-10">
+                        <AvatarFallback>
+                          {initials(request.recipient.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{request.recipient.name}</ItemTitle>
+                      <ItemDescription>
+                        {request.recipient.email}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleCancel(request.id)}
                         disabled={processingId === request.id}
                       >
-                        {processingId === request.id ? "..." : "Cancel"}
+                        Cancel
                       </Button>
-                    </CardHeader>
-                  </Card>
+                    </ItemActions>
+                  </Item>
                 ))}
-              </div>
+              </ItemGroup>
             )}
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      {/* Add Friend Tab */}
-      {activeTab === "add" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Add a Friend</CardTitle>
-            <CardDescription>
-              Enter their email address to send a friend request.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddFriend} className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="friend@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1"
-              />
-              <Button type="submit" disabled={addLoading || !email.trim()}>
-                {addLoading ? "Adding..." : "Add Friend"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+        {/* Add friend */}
+        <TabsContent value="add">
+          <Card>
+            <CardHeader>
+              <CardTitle>Add a friend</CardTitle>
+              <CardDescription>
+                Enter their email address to send a friend request.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={handleAddFriend}
+                className="flex flex-col gap-2 sm:flex-row"
+              >
+                <Input
+                  type="email"
+                  placeholder="friend@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <Button type="submit" disabled={addLoading || !email.trim()}>
+                  {addLoading ? "Adding…" : "Add friend"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
