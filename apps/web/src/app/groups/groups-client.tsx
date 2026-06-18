@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Plus, Users } from "lucide-react";
+import { toast } from "sonner";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,13 +16,21 @@ import {
 } from "@/components/ui/card";
 import {
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { createGroup } from "@/app/groups/actions";
 
 type Group = {
@@ -32,12 +43,17 @@ type Group = {
 };
 
 type GroupsPageClientProps = {
-  initialGroups: any[];
+  initialGroups: Group[];
 };
+
+function initials(value: string): string {
+  const parts = value.split(/[\s._-]+/).filter(Boolean);
+  const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  return (letters || value.slice(0, 2)).toUpperCase();
+}
 
 export default function GroupsPageClient({ initialGroups }: GroupsPageClientProps) {
   const [groups] = useState<Group[]>(initialGroups);
-  const [error, setError] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -46,83 +62,99 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
-    setError("");
 
     try {
       const result = await createGroup(newGroupName);
-
       if (!result.success) {
-        setError(result.error || "Failed to create group");
+        toast.error(result.error || "Failed to create group");
         return;
       }
-
       setShowCreateModal(false);
       setNewGroupName("");
       router.refresh();
-    } catch (err) {
-      setError("An error occurred while creating the group");
+    } catch {
+      toast.error("An error occurred while creating the group");
     } finally {
       setCreating(false);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">My groups</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            My groups
+          </h1>
           <p className="text-sm text-muted-foreground">
             Manage your groups and invitations.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => router.push("/dashboard")}>
-            Dashboard
-          </Button>
-          <Button variant="secondary" onClick={() => router.push("/invites")}>
+          <Button variant="outline" onClick={() => router.push("/invites")}>
             Invites
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>Create group</Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus />
+            Create group
+          </Button>
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
       {groups.length === 0 ? (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>No groups yet</CardTitle>
-            <CardDescription>
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Users />
+            </EmptyMedia>
+            <EmptyTitle>No groups yet</EmptyTitle>
+            <EmptyDescription>
               You haven&apos;t joined any groups. Create one to get started.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
             <Button onClick={() => setShowCreateModal(true)}>
+              <Plus />
               Create your first group
             </Button>
-          </CardContent>
-        </Card>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => (
             <Card
               key={group.id}
-              className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer transition hover:bg-accent/40"
               onClick={() => router.push(`/groups/${group.id}`)}
+              onKeyDown={(e) =>
+                e.key === "Enter" && router.push(`/groups/${group.id}`)
+              }
             >
               <CardHeader>
-                <CardTitle className="text-lg">{group.name}</CardTitle>
-                <CardDescription>
-                  {group._count.members}{" "}
-                  {group._count.members === 1 ? "member" : "members"}
-                </CardDescription>
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-10">
+                    <AvatarFallback>{initials(group.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <CardTitle className="truncate text-base">
+                      {group.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {group._count.members}{" "}
+                      {group._count.members === 1 ? "member" : "members"}
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
+                Created{" "}
+                {new Date(group.createdAt).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "numeric",
+                  day: "numeric",
+                })}
               </CardContent>
             </Card>
           ))}
@@ -131,42 +163,51 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
 
       {showCreateModal && (
         <div className="fixed inset-0 z-50">
-          <DialogOverlay />
+          <DialogOverlay
+            onClick={() => {
+              setShowCreateModal(false);
+              setNewGroupName("");
+            }}
+          />
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create new group</DialogTitle>
+              <DialogDescription>
+                Name your group, then invite friends to split costs.
+              </DialogDescription>
             </DialogHeader>
-            <div className="px-6 pb-6">
-              <form onSubmit={handleCreateGroup} className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="groupName">Group name</Label>
-                  <Input
-                    id="groupName"
-                    type="text"
-                    required
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    placeholder="e.g. Roommates"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setShowCreateModal(false);
-                      setNewGroupName("");
-                      setError("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={creating}>
-                    {creating ? "Creating…" : "Create group"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </div>
+            <form
+              onSubmit={handleCreateGroup}
+              className="space-y-4 px-6 pb-6"
+            >
+              <Field>
+                <FieldLabel htmlFor="groupName">Group name</FieldLabel>
+                <Input
+                  id="groupName"
+                  type="text"
+                  required
+                  autoFocus
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="e.g. Roommates"
+                />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewGroupName("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creating}>
+                  {creating ? "Creating…" : "Create group"}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </div>
       )}
