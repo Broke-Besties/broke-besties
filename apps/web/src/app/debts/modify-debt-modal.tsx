@@ -1,19 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { Pencil } from 'lucide-react'
+import { Pencil, CircleAlert } from 'lucide-react'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
-  DialogOverlay,
+  Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { createDebtTransaction } from '@/app/groups/[id]/actions'
 
 type ModifyDebtModalProps = {
@@ -30,18 +31,25 @@ type ModifyDebtModalProps = {
   isLender: boolean
 }
 
-export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: ModifyDebtModalProps) {
+export function ModifyDebtModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  debt,
+  isLender,
+}: ModifyDebtModalProps) {
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const handleOpen = () => {
-    if (debt) {
-      setAmount(debt.amount.toString())
-      setDescription(debt.description || '')
-    }
+  const handleClose = () => {
+    setAmount('')
+    setDescription('')
+    setReason('')
+    setError('')
+    onClose()
   }
 
   const handleConfirm = async () => {
@@ -86,99 +94,99 @@ export function ModifyDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     }
   }
 
-  const handleClose = () => {
-    setAmount('')
-    setDescription('')
-    setReason('')
-    setError('')
-    onClose()
-  }
-
-  if (!isOpen || !debt) return null
+  if (!debt) return null
 
   const otherPerson = isLender ? debt.borrower : debt.lender
 
-  // Initialize values when modal opens
-  if (amount === '' && debt) {
-    handleOpen()
+  // Initialize values when the modal opens.
+  if (isOpen && amount === '') {
+    setAmount(debt.amount.toString())
+    setDescription(debt.description || '')
   }
 
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay onClick={handleClose} />
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full yellow-badge">
-              <Pencil className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+              <Pencil className="size-5 text-muted-foreground" />
             </div>
             <div>
-              <DialogTitle>Modify Debt</DialogTitle>
+              <DialogTitle>Modify debt</DialogTitle>
               <DialogDescription>
-                Request changes to this debt
+                Request changes to this debt.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="px-6 pb-4 space-y-4">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+        {error && (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>{error}</AlertTitle>
+          </Alert>
+        )}
 
-          <div className="space-y-2">
-            <Label htmlFor="modifyAmount">Amount ($)</Label>
-            <Input
-              id="modifyAmount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
+        <Field>
+          <FieldLabel htmlFor="modifyAmount">Amount ($)</FieldLabel>
+          <Input
+            id="modifyAmount"
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="modifyDescription">Description</Label>
-            <Textarea
-              id="modifyDescription"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="resize-none"
-            />
-          </div>
+        <Field>
+          <FieldLabel htmlFor="modifyDescription">Description</FieldLabel>
+          <Textarea
+            id="modifyDescription"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="resize-none"
+          />
+        </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="modifyReason">Reason for change (optional)</Label>
-            <Textarea
-              id="modifyReason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={2}
-              placeholder="Why are you requesting this change?"
-              className="resize-none"
-            />
-          </div>
+        <Field>
+          <FieldLabel htmlFor="modifyReason">
+            Reason for change (optional)
+          </FieldLabel>
+          <Textarea
+            id="modifyReason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="Why are you requesting this change?"
+            className="resize-none"
+          />
+        </Field>
 
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              This will send a request to <strong>{otherPerson.name || otherPerson.email}</strong> to approve these changes.
-            </p>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          This will send a request to{' '}
+          <strong className="text-foreground">
+            {otherPerson.name || otherPerson.email}
+          </strong>{' '}
+          to approve these changes.
+        </p>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={submitting}>
-            {submitting ? 'Requesting...' : 'Request Changes'}
+            {submitting ? 'Requesting…' : 'Request changes'}
           </Button>
         </DialogFooter>
       </DialogContent>
-    </div>
+    </Dialog>
   )
 }

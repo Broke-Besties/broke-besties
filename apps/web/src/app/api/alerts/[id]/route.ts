@@ -48,12 +48,25 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid alert ID" }, { status: 400 });
     }
 
-    const { message, deadline, isActive } = await request.json();
+    const { message, deadline, isActive, reminderFrequencyDays } =
+      await request.json();
+
+    if (
+      reminderFrequencyDays !== undefined &&
+      reminderFrequencyDays !== null &&
+      (!Number.isInteger(reminderFrequencyDays) || reminderFrequencyDays <= 0)
+    ) {
+      return NextResponse.json(
+        { error: "reminderFrequencyDays must be a positive integer or null" },
+        { status: 400 }
+      );
+    }
 
     const alert = await alertService.updateAlert(alertId, user.id, {
       message,
       deadline: deadline ? new Date(deadline) : deadline === null ? null : undefined,
       isActive,
+      reminderFrequencyDays,
     });
 
     return NextResponse.json({ message: "Alert updated successfully", alert });

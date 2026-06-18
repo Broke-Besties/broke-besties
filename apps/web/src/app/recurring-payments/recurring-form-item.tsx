@@ -1,14 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, CircleAlert } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { createRecurringPayment } from './actions'
 import { recurringPaymentService } from '@/services/recurring-payment.service'
@@ -44,6 +52,7 @@ export default function RecurringFormItem({
     dollarAmount: 0,
   }])
   const [alertMessage, setAlertMessage] = useState('')
+  const [alertFrequency, setAlertFrequency] = useState<string>('off')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -130,6 +139,7 @@ export default function RecurringFormItem({
       dollarAmount: 0,
     }])
     setAlertMessage('')
+    setAlertFrequency('off')
     setError('')
   }
 
@@ -185,8 +195,10 @@ export default function RecurringFormItem({
       })
 
       if (result.success) {
-        // If alert message is provided, create an alert for this recurring payment
-        if (alertMessage) {
+        // If alert message or frequency is provided, create an alert for this recurring payment
+        const reminderFrequencyDays =
+          alertFrequency === 'off' ? null : parseInt(alertFrequency, 10)
+        if (alertMessage || reminderFrequencyDays) {
           try {
             await fetch('/api/alerts', {
               method: 'POST',
@@ -194,6 +206,7 @@ export default function RecurringFormItem({
               body: JSON.stringify({
                 recurringPaymentId: result.recurringPayment.id,
                 message: alertMessage || null,
+                reminderFrequencyDays,
               }),
             })
           } catch (alertError) {
@@ -224,20 +237,23 @@ export default function RecurringFormItem({
   const allBorrowersSelected = isForSelf || borrowers.every(b => b.email)
   const canSubmit = parseFloat(amount) > 0 && parseInt(frequency) >= 1 && allBorrowersSelected && (isForSelf || isPercentageValid)
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay />
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Recurring Payment</DialogTitle>
+          <DialogTitle>Create recurring payment</DialogTitle>
         </DialogHeader>
-        <div className="px-6 pb-6">
+        <div>
           {error && (
-            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
+            <Alert variant="destructive" className="mb-4">
+              <CircleAlert />
+              <AlertTitle>{error}</AlertTitle>
+            </Alert>
           )}
 
           <form onSubmit={handleSubmit} className="grid gap-6">
@@ -323,6 +339,22 @@ export default function RecurringFormItem({
               />
               <p className="text-xs text-muted-foreground">
                 Set a reminder message for this recurring payment
+              </p>
+
+              <Label htmlFor="recurringAlertFrequency">Email reminder frequency</Label>
+              <Select value={alertFrequency} onValueChange={setAlertFrequency}>
+                <SelectTrigger id="recurringAlertFrequency">
+                  <SelectValue placeholder="Off" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">Off (no email reminders)</SelectItem>
+                  <SelectItem value="7">Weekly (every 7 days)</SelectItem>
+                  <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
+                  <SelectItem value="30">Monthly (every 30 days)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The borrower receives an email reminder on this cadence.
               </p>
             </div>
 
@@ -424,12 +456,12 @@ export default function RecurringFormItem({
                 Cancel
               </Button>
               <Button type="submit" disabled={!canSubmit || submitting}>
-                {submitting ? 'Creating...' : 'Create Recurring Payment'}
+                {submitting ? 'Creating…' : 'Create recurring payment'}
               </Button>
             </DialogFooter>
           </form>
         </div>
       </DialogContent>
-    </div>
+    </Dialog>
   )
 }

@@ -2,10 +2,31 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+} from '@/components/ui/item'
 import { updateProfile } from './actions'
 
 type User = {
@@ -20,127 +41,157 @@ type ProfilePageClientProps = {
   user: User
 }
 
+function initials(value: string): string {
+  const parts = value.split(/[\s._-]+/).filter(Boolean)
+  const letters = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
+  return (letters || value.slice(0, 2)).toUpperCase()
+}
+
+function formatDate(date: Date | string) {
+  return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  })
+}
+
 export default function ProfilePageClient({ user }: ProfilePageClientProps) {
   const [name, setName] = useState(user.name)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
     setIsLoading(true)
 
     try {
       const result = await updateProfile({ name })
-
       if (!result.success) {
-        setError(result.error || 'Failed to update profile')
+        toast.error(result.error || 'Failed to update profile')
         return
       }
-
-      setSuccess('Profile updated successfully!')
+      toast.success('Profile updated')
       router.refresh()
-    } catch (err) {
-      setError('An error occurred while updating your profile')
+    } catch {
+      toast.error('An error occurred while updating your profile')
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
-        <p className="text-sm text-muted-foreground">Manage your account settings.</p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Profile
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Manage your account settings.
+        </p>
       </div>
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Personal Information</CardTitle>
+          <CardTitle>Personal information</CardTitle>
           <CardDescription>Update your profile details below.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
+          <form onSubmit={handleSubmit}>
+            <FieldGroup>
+              <div className="flex items-center gap-4">
+                <Avatar className="size-14">
+                  <AvatarFallback className="text-lg">
+                    {initials(user.name || user.email)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{user.name}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {user.email}
+                  </p>
+                </div>
               </div>
-            )}
 
-            {success && (
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-                {success}
-              </div>
-            )}
+              <Field>
+                <FieldLabel htmlFor="name">Name</FieldLabel>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter your name"
+                  required
+                  disabled={isLoading}
+                />
+              </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                required
-                disabled={isLoading}
-              />
-            </div>
+              <Field>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  value={user.email}
+                  disabled
+                />
+                <FieldDescription>Email cannot be changed.</FieldDescription>
+              </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={user.email}
-                placeholder="Enter your email"
-                disabled
-                className="bg-muted"
-              />
-              <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Saving...' : 'Save Changes'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.push('/dashboard')}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-            </div>
+              <Field orientation="horizontal">
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Saving…' : 'Save changes'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push('/dashboard')}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+              </Field>
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Account Information</CardTitle>
+          <CardTitle>Account information</CardTitle>
           <CardDescription>View your account details.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <span className="text-sm text-muted-foreground">User ID</span>
-            <span className="text-sm font-medium">{user.id}</span>
-          </div>
-          <div className="flex items-center justify-between border-b pb-3">
-            <span className="text-sm text-muted-foreground">Member Since</span>
-            <span className="text-sm font-medium">
-              {new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Last Updated</span>
-            <span className="text-sm font-medium">
-              {new Date(user.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
-            </span>
-          </div>
+        <CardContent>
+          <ItemGroup>
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle className="font-normal text-muted-foreground">
+                  User ID
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions className="font-medium tabular-nums">
+                {user.id}
+              </ItemActions>
+            </Item>
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle className="font-normal text-muted-foreground">
+                  Member since
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions className="font-medium">
+                {formatDate(user.createdAt)}
+              </ItemActions>
+            </Item>
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle className="font-normal text-muted-foreground">
+                  Last updated
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions className="font-medium">
+                {formatDate(user.updatedAt)}
+              </ItemActions>
+            </Item>
+          </ItemGroup>
         </CardContent>
       </Card>
     </div>

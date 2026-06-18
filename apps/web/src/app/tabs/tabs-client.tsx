@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,16 +11,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Plus, Receipt } from "lucide-react";
+import { toast } from "sonner";
 import { createTab, updateTab, deleteTab } from "@/app/tabs/actions";
 
 type Tab = {
@@ -39,7 +48,6 @@ type TabsPageClientProps = {
 
 export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
   const [tabs, setTabs] = useState<Tab[]>(initialTabs);
-  const [error, setError] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTab, setNewTab] = useState({
@@ -48,12 +56,9 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
     personName: "",
     status: "borrowing" as "lending" | "borrowing",
   });
-  const router = useRouter();
-
   const handleCreateTab = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
-    setError("");
 
     try {
       const result = await createTab({
@@ -64,7 +69,7 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
       });
 
       if (!result.success) {
-        setError(result.error || "Failed to create tab");
+        toast.error(result.error || "Failed to create tab");
         return;
       }
 
@@ -75,8 +80,8 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
 
       setShowCreateModal(false);
       setNewTab({ amount: "", description: "", personName: "", status: "borrowing" });
-    } catch (err) {
-      setError("An error occurred while creating the tab");
+    } catch {
+      toast.error("An error occurred while creating the tab");
     } finally {
       setCreating(false);
     }
@@ -103,17 +108,17 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
             tab.id === tabId ? { ...tab, status: originalStatus || "borrowing" } : tab
           )
         );
-        setError(result.error || "Failed to update tab");
+        toast.error(result.error || "Failed to update tab");
         return;
       }
-    } catch (err) {
+    } catch {
       // Revert on error
       setTabs((prevTabs) =>
         prevTabs.map((tab) =>
           tab.id === tabId ? { ...tab, status: originalStatus || "borrowing" } : tab
         )
       );
-      setError("An error occurred while updating the tab");
+      toast.error("An error occurred while updating the tab");
     }
   };
 
@@ -131,15 +136,15 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         if (deletedTab) {
           setTabs((prevTabs) => [...prevTabs, deletedTab]);
         }
-        setError(result.error || "Failed to delete tab");
+        toast.error(result.error || "Failed to delete tab");
         return;
       }
-    } catch (err) {
+    } catch {
       // Revert on error
       if (deletedTab) {
         setTabs((prevTabs) => [...prevTabs, deletedTab]);
       }
-      setError("An error occurred while deleting the tab");
+      toast.error("An error occurred while deleting the tab");
     }
   };
 
@@ -151,27 +156,21 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
   const totalBorrowing = borrowingTabs.reduce((sum, tab) => sum + tab.amount, 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">My Tabs</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            My tabs
+          </h1>
           <p className="text-sm text-muted-foreground">
             Track money you lend or borrow outside the platform.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => router.push("/dashboard")}>
-            Dashboard
-          </Button>
-          <Button onClick={() => setShowCreateModal(true)}>Add Tab</Button>
-        </div>
+        <Button onClick={() => setShowCreateModal(true)}>
+          <Plus />
+          Add tab
+        </Button>
       </div>
-
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
 
       {(totalBorrowing > 0 || totalLending > 0) && (
         <div className="grid gap-4 md:grid-cols-2">
@@ -199,19 +198,24 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
       )}
 
       {tabs.length === 0 ? (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>No tabs yet</CardTitle>
-            <CardDescription>
-              You haven&apos;t added any tabs. Create one to track money you lend or borrow.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Receipt />
+            </EmptyMedia>
+            <EmptyTitle>No tabs yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any tabs. Create one to track money you lend
+              or borrow.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
             <Button onClick={() => setShowCreateModal(true)}>
+              <Plus />
               Add your first tab
             </Button>
-          </CardContent>
-        </Card>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="space-y-6">
           {borrowingTabs.length > 0 && (
@@ -340,14 +344,12 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         </div>
       )}
 
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add new tab</DialogTitle>
-            </DialogHeader>
-            <div className="px-6 pb-6">
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add new tab</DialogTitle>
+          </DialogHeader>
+          <div>
               <form onSubmit={handleCreateTab} className="grid gap-4">
                 <div className="grid gap-2">
                   <Label>Type</Label>
@@ -425,20 +427,19 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                     onClick={() => {
                       setShowCreateModal(false);
                       setNewTab({ amount: "", description: "", personName: "", status: "borrowing" });
-                      setError("");
+                      toast.error("");
                     }}
                   >
                     Cancel
                   </Button>
                   <Button type="submit" disabled={creating}>
-                    {creating ? "Adding..." : "Add Tab"}
+                    {creating ? "Adding…" : "Add tab"}
                   </Button>
                 </DialogFooter>
               </form>
             </div>
           </DialogContent>
-        </div>
-      )}
+      </Dialog>
     </div>
   );
 }

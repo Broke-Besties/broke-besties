@@ -1,16 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, CircleAlert } from 'lucide-react'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
-  DialogOverlay,
+  Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+} from '@/components/ui/item'
 import { createConfirmPaidTransaction } from './actions'
 
 type ConfirmPaidModalProps = {
@@ -27,7 +34,13 @@ type ConfirmPaidModalProps = {
   isLender: boolean
 }
 
-export function ConfirmPaidModal({ isOpen, onClose, onSuccess, debt, isLender }: ConfirmPaidModalProps) {
+export function ConfirmPaidModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  debt,
+  isLender,
+}: ConfirmPaidModalProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -39,7 +52,6 @@ export function ConfirmPaidModal({ isOpen, onClose, onSuccess, debt, isLender }:
 
     try {
       const result = await createConfirmPaidTransaction(debt.id)
-
       if (result.success) {
         onSuccess()
         onClose()
@@ -53,70 +65,89 @@ export function ConfirmPaidModal({ isOpen, onClose, onSuccess, debt, isLender }:
     }
   }
 
-  if (!isOpen || !debt) return null
+  if (!debt) return null
 
   const otherPerson = isLender ? debt.borrower : debt.lender
 
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay onClick={onClose} />
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+              <CheckCircle2 className="size-5 text-muted-foreground" />
             </div>
             <div>
-              <DialogTitle>Mark as Paid</DialogTitle>
+              <DialogTitle>Mark as paid</DialogTitle>
               <DialogDescription>
-                Confirm this debt has been settled
+                Confirm this debt has been settled.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="px-6 pb-4 space-y-4">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
+        {error && (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>{error}</AlertTitle>
+          </Alert>
+        )}
+
+        <ItemGroup className="gap-0 rounded-lg border">
+          <Item size="sm">
+            <ItemContent>
+              <ItemTitle className="font-normal text-muted-foreground">
+                Amount
+              </ItemTitle>
+            </ItemContent>
+            <span className="font-semibold tabular-nums">
+              ${debt.amount.toFixed(2)}
+            </span>
+          </Item>
+          {debt.description && (
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle className="font-normal text-muted-foreground">
+                  Description
+                </ItemTitle>
+              </ItemContent>
+              <span className="text-sm">{debt.description}</span>
+            </Item>
           )}
-
-          <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Amount</span>
-              <span className="font-semibold text-lg">${debt.amount.toFixed(2)}</span>
-            </div>
-            {debt.description && (
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Description</span>
-                <span className="text-sm">{debt.description}</span>
-              </div>
-            )}
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">
+          <Item size="sm">
+            <ItemContent>
+              <ItemTitle className="font-normal text-muted-foreground">
                 {isLender ? 'Borrower' : 'Lender'}
-              </span>
-              <span className="text-sm">{otherPerson.name || otherPerson.email}</span>
-            </div>
-          </div>
+              </ItemTitle>
+            </ItemContent>
+            <span className="text-sm">
+              {otherPerson.name || otherPerson.email}
+            </span>
+          </Item>
+        </ItemGroup>
 
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              This will send a request to <strong>{otherPerson.name || otherPerson.email}</strong> to confirm this payment has been settled.
-            </p>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          This will send a request to{' '}
+          <strong className="text-foreground">
+            {otherPerson.name || otherPerson.email}
+          </strong>{' '}
+          to confirm this payment has been settled.
+        </p>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={submitting}>
-            {submitting ? 'Requesting...' : 'Request Confirmation'}
+            {submitting ? 'Requesting…' : 'Request confirmation'}
           </Button>
         </DialogFooter>
       </DialogContent>
-    </div>
+    </Dialog>
   )
 }

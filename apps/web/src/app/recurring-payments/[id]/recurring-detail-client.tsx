@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
-  DialogOverlay,
+  Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -379,56 +379,51 @@ export default function RecurringDetailClient({
       )}
 
       {/* Alert Modal */}
-      {showAlertModal && (
-        <>
-          <DialogOverlay onClick={() => setShowAlertModal(false)} />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {payment.alert ? 'Edit Alert' : 'Add Alert'}
-              </DialogTitle>
-              <DialogDescription>
-                Set a reminder message for this recurring payment.
-              </DialogDescription>
-            </DialogHeader>
+      <Dialog open={showAlertModal} onOpenChange={setShowAlertModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {payment.alert ? 'Edit alert' : 'Add alert'}
+            </DialogTitle>
+            <DialogDescription>
+              Set a reminder message for this recurring payment.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="p-6 pt-0 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="alertMessage">Message (optional)</Label>
-                <Textarea
-                  id="alertMessage"
-                  value={alertMessage}
-                  onChange={(e) => setAlertMessage(e.target.value)}
-                  placeholder="e.g., Monthly subscription reminder"
-                  rows={3}
-                />
-              </div>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="alertMessage">Message (optional)</Label>
+            <Textarea
+              id="alertMessage"
+              value={alertMessage}
+              onChange={(e) => setAlertMessage(e.target.value)}
+              placeholder="e.g., Monthly subscription reminder"
+              rows={3}
+            />
+          </div>
 
-            <DialogFooter>
-              {payment.alert && (
-                <Button
-                  variant="destructive"
-                  onClick={handleDeleteAlert}
-                  disabled={alertSubmitting}
-                >
-                  Delete Alert
-                </Button>
-              )}
+          <DialogFooter>
+            {payment.alert && (
               <Button
-                variant="secondary"
-                onClick={() => setShowAlertModal(false)}
+                variant="destructive"
+                onClick={handleDeleteAlert}
                 disabled={alertSubmitting}
               >
-                Cancel
+                Delete alert
               </Button>
-              <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
-                {alertSubmitting ? 'Saving...' : 'Save Alert'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </>
-      )}
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setShowAlertModal(false)}
+              disabled={alertSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
+              {alertSubmitting ? 'Saving…' : 'Save alert'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

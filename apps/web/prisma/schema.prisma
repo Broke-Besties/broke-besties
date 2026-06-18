@@ -102,15 +102,17 @@ model Debt {
 }
 
 model Alert {
-  id         Int       @id @default(autoincrement())
-  message    String?
-  deadline   DateTime?
-  groupId    Int?
-  lenderId   String
-  borrowerId String
-  isActive   Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                    Int       @id @default(autoincrement())
+  message               String?
+  deadline              DateTime?
+  groupId               Int?
+  lenderId              String
+  borrowerId            String
+  isActive              Boolean   @default(false)
+  reminderFrequencyDays Int?
+  lastReminderSentAt    DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   group    Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   lender   User   @relation("AlertLender", fields: [lenderId], references: [id], onDelete: Cascade)
@@ -124,6 +126,7 @@ model Alert {
   @@index([borrowerId])
   @@index([isActive])
   @@index([deadline])
+  @@index([reminderFrequencyDays])
 }
 
 model Receipt {

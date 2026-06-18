@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { Overpass, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { Suspense } from "react";
-import Link from "next/link";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
+import { AppHeader } from "@/components/app-header";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppLoading } from "@/components/app-loading";
-import { LogoutButton } from "@/components/logout-button";
 import { NotificationsWrapper } from "@/components/notifications-wrapper";
+import { Toaster } from "@/components/ui/sonner";
 import { getUser } from "@/lib/supabase";
 
 const overpass = Overpass({
@@ -34,56 +34,37 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const user = await getUser();
+  const defaultOpen =
+    (await cookies()).get("sidebar_state")?.value === "true";
 
   return (
     <html lang="en">
       <body
         className={`${overpass.variable} ${geistMono.variable} antialiased`}
       >
-        <SidebarProvider defaultOpen={false}>
-          {user && <AppSidebar user={user} />}
-          <SidebarInset>
-            <header
-              className={`sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60 ${
-                user ? "md:px-8 md:ml-52 md:mr-52" : "md:px-8 max-w-5xl mx-auto w-full"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {user && <SidebarTrigger />}
-                <span className="text-lg font-semibold">Broke Besties</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {user ? (
-                  <>
-                    <Suspense fallback={null}>
-                      <NotificationsWrapper />
-                    </Suspense>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href="/profile">Profile</Link>
-                    </Button>
-                    <LogoutButton />
-                  </>
-                ) : (
-                  <>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href="/login">Log in</Link>
-                    </Button>
-                    <Button asChild size="sm">
-                      <Link href="/signup">Sign up</Link>
-                    </Button>
-                  </>
-                )}
-              </div>
-            </header>
-            <main
-              className={`flex-1 overflow-auto p-4 ${
-                user ? "md:py-6 md:px-8 md:ml-52 md:mr-52" : "md:py-6 md:px-8 max-w-5xl mx-auto w-full"
-              }`}
-            >
-              <Suspense fallback={<AppLoading />}>{children}</Suspense>
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
+        <div className="[--header-height:--spacing(14)]">
+          <SidebarProvider defaultOpen={defaultOpen} className="flex flex-col">
+            <AppHeader
+              user={user}
+              notifications={
+                <Suspense fallback={null}>
+                  <NotificationsWrapper />
+                </Suspense>
+              }
+            />
+            <div className="flex flex-1">
+              {user && <AppSidebar />}
+              <SidebarInset>
+                <main className="flex-1 overflow-auto">
+                  <div className="mx-auto w-full max-w-6xl p-4 md:p-6 lg:p-8">
+                    <Suspense fallback={<AppLoading />}>{children}</Suspense>
+                  </div>
+                </main>
+              </SidebarInset>
+            </div>
+          </SidebarProvider>
+        </div>
+        <Toaster />
       </body>
     </html>
   );

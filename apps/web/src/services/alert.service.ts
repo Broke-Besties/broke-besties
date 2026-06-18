@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AlertPolicy } from "@/policies";
 
@@ -5,12 +6,14 @@ type CreateAlertForDebtParams = {
   debtId: number;
   message?: string | null;
   deadline?: Date | null;
+  reminderFrequencyDays?: number | null;
   userId: string;
 };
 
 type CreateAlertForRecurringPaymentParams = {
   recurringPaymentId: number;
   message?: string | null;
+  reminderFrequencyDays?: number | null;
   userId: string;
 };
 
@@ -18,6 +21,7 @@ type UpdateAlertParams = {
   message?: string | null;
   deadline?: Date | null;
   isActive?: boolean;
+  reminderFrequencyDays?: number | null;
 };
 
 export class AlertService {
@@ -25,7 +29,7 @@ export class AlertService {
    * Create an alert for a debt
    */
   async createAlertForDebt(params: CreateAlertForDebtParams) {
-    const { debtId, message, deadline, userId } = params;
+    const { debtId, message, deadline, reminderFrequencyDays, userId } = params;
 
     // Get the debt to verify ownership and get borrower info
     const debt = await prisma.debt.findUnique({
@@ -57,6 +61,7 @@ export class AlertService {
           borrowerId: debt.borrowerId,
           groupId: debt.groupId,
           isActive: true,
+          reminderFrequencyDays: reminderFrequencyDays ?? null,
         },
       });
 
@@ -76,7 +81,7 @@ export class AlertService {
    * Create an alert for a recurring payment (no deadline)
    */
   async createAlertForRecurringPayment(params: CreateAlertForRecurringPaymentParams) {
-    const { recurringPaymentId, message, userId } = params;
+    const { recurringPaymentId, message, reminderFrequencyDays, userId } = params;
 
     // Get the recurring payment to verify ownership
     const payment = await prisma.recurringPayment.findUnique({
@@ -118,6 +123,7 @@ export class AlertService {
           borrowerId: firstBorrower.userId,
           groupId: payment.groupId,
           isActive: true,
+          reminderFrequencyDays: reminderFrequencyDays ?? null,
         },
       });
 
@@ -166,7 +172,7 @@ export class AlertService {
       throw new Error("You don't have permission to update this alert");
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.AlertUpdateInput = {};
 
     if (updates.message !== undefined) {
       updateData.message = updates.message;
@@ -180,6 +186,10 @@ export class AlertService {
       updateData.isActive = updates.isActive;
     }
 
+    if (updates.reminderFrequencyDays !== undefined) {
+      updateData.reminderFrequencyDays = updates.reminderFrequencyDays;
+    }
+
     const alert = await prisma.alert.update({
       where: { id: alertId },
       data: updateData,
@@ -190,6 +200,30 @@ export class AlertService {
     });
 
     return alert;
+  }
+
+  /**
+   * Allow the borrower of an alert to opt out of email reminders.
+   * Sets reminderFrequencyDays to null without requiring lender permission.
+   */
+  async optOutOfReminders(alertId: number, userId: string) {
+    const alert = await prisma.alert.findUnique({
+      where: { id: alertId },
+      select: { id: true, borrowerId: true },
+    });
+
+    if (!alert) {
+      throw new Error("Alert not found");
+    }
+
+    if (alert.borrowerId !== userId) {
+      throw new Error("Only the borrower can opt out of reminders for this alert");
+    }
+
+    return prisma.alert.update({
+      where: { id: alertId },
+      data: { reminderFrequencyDays: null },
+    });
   }
 
   /**
@@ -229,6 +263,98 @@ export class AlertService {
     });
 
     return alerts;
+  }
+
+  /**
+   * Get all active alerts where user is the lender (for the manage page)
+   */
+  async getActiveAlertsForLender(userId: string) {
+    return prisma.alert.findMany({
+      where: {
+        lenderId: userId,
+        isActive: true,
+      },
+      include: {
+        lender: { select: { id: true, email: true, name: true } },
+        borrower: { select: { id: true, email: true, name: true } },
+        debt: {
+          select: { id: true, amount: true, description: true, status: true },
+        },
+        recurringPayment: {
+          select: { id: true, amount: true, description: true, status: true },
+        },
+        group: { select: { id: true, name: true } },
+      },
+      orderBy: [{ deadline: "asc" }, { createdAt: "desc" }],
+    });
+  }
+
+  /**
+   * Find alerts that are due for an email reminder.
+   * Sends when daysSinceCreation > 0, daysSinceCreation % reminderFrequencyDays === 0,
+   * and a reminder hasn't already been sent in the last `reminderFrequencyDays` days.
+   */
+  async getAlertsDueForReminder(now: Date) {
+    const candidates = await prisma.alert.findMany({
+      where: {
+        isActive: true,
+        reminderFrequencyDays: { not: null },
+      },
+      include: {
+        lender: { select: { id: true, email: true, name: true } },
+        borrower: { select: { id: true, email: true, name: true } },
+        debt: {
+          select: { id: true, amount: true, description: true, status: true },
+        },
+        recurringPayment: {
+          select: { id: true, amount: true, description: true, status: true },
+        },
+        group: { select: { id: true, name: true } },
+      },
+    });
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    return candidates.filter((alert) => {
+      const freq = alert.reminderFrequencyDays;
+      if (!freq || freq <= 0) return false;
+
+      const daysSinceCreated = Math.floor(
+        (now.getTime() - alert.createdAt.getTime()) / DAY_MS
+      );
+
+      if (daysSinceCreated <= 0) return false;
+      if (daysSinceCreated % freq !== 0) return false;
+
+      // Dedup: only send once per cadence window. If we already sent within
+      // the last `freq` days, skip — this also covers the cron running twice in a day.
+      if (alert.lastReminderSentAt) {
+        const daysSinceSent = Math.floor(
+          (now.getTime() - alert.lastReminderSentAt.getTime()) / DAY_MS
+        );
+        if (daysSinceSent < freq) return false;
+      }
+
+      // If there's a deadline that has already passed, skip.
+      if (alert.deadline && alert.deadline.getTime() < now.getTime()) {
+        return false;
+      }
+
+      // Skip alerts whose underlying debt is already paid.
+      if (alert.debt && alert.debt.status === "paid") return false;
+
+      return true;
+    });
+  }
+
+  /**
+   * Mark an alert as having had a reminder email sent at the given time.
+   */
+  async markReminderSent(alertId: number, sentAt: Date) {
+    return prisma.alert.update({
+      where: { id: alertId },
+      data: { lastReminderSentAt: sentAt },
+    });
   }
 
   /**

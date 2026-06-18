@@ -3,16 +3,25 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft, Inbox } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import {
   respondToDebtTransaction,
   cancelDebtTransaction,
@@ -64,27 +73,20 @@ export default function DebtTransactionsClient({
   transactions,
   currentUserId,
 }: DebtTransactionsClientProps) {
-  const [error, setError] = useState('')
   const [processingId, setProcessingId] = useState<number | null>(null)
   const router = useRouter()
 
   const handleRespond = async (transactionId: number, approve: boolean) => {
     setProcessingId(transactionId)
-    setError('')
-
     try {
       const result = await respondToDebtTransaction(transactionId, approve)
-
       if (!result.success) {
-        setError(result.error || 'Failed to respond')
-        setProcessingId(null)
+        toast.error(result.error || 'Failed to respond')
         return
       }
-
       router.refresh()
-    } catch (err) {
-      setError('An error occurred')
-      setProcessingId(null)
+    } catch {
+      toast.error('An error occurred')
     } finally {
       setProcessingId(null)
     }
@@ -92,21 +94,15 @@ export default function DebtTransactionsClient({
 
   const handleCancel = async (transactionId: number) => {
     setProcessingId(transactionId)
-    setError('')
-
     try {
       const result = await cancelDebtTransaction(transactionId)
-
       if (!result.success) {
-        setError(result.error || 'Failed to cancel')
-        setProcessingId(null)
+        toast.error(result.error || 'Failed to cancel')
         return
       }
-
       router.refresh()
-    } catch (err) {
-      setError('An error occurred')
-      setProcessingId(null)
+    } catch {
+      toast.error('An error occurred')
     } finally {
       setProcessingId(null)
     }
@@ -122,18 +118,20 @@ export default function DebtTransactionsClient({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3">
         <Button
           variant="ghost"
-          className="w-fit px-0"
+          size="sm"
+          className="w-fit px-2"
           onClick={() => router.push('/dashboard')}
         >
-          ← Back to dashboard
+          <ArrowLeft />
+          Back to dashboard
         </Button>
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Pending Requests
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Pending requests
           </h1>
           <p className="text-sm text-muted-foreground">
             You have {transactions.length} pending{' '}
@@ -142,27 +140,24 @@ export default function DebtTransactionsClient({
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
       {transactions.length === 0 ? (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>No pending requests</CardTitle>
-            <CardDescription>
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Inbox />
+            </EmptyMedia>
+            <EmptyTitle>No pending requests</EmptyTitle>
+            <EmptyDescription>
               When someone requests to modify or delete a shared debt, it will
               show up here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
             <Button onClick={() => router.push('/dashboard')}>
               View my debts
             </Button>
-          </CardContent>
-        </Card>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="grid gap-4">
           {transactions.map((transaction) => {
@@ -174,40 +169,34 @@ export default function DebtTransactionsClient({
               <Card key={transaction.id}>
                 <CardHeader className="flex-row items-start justify-between space-y-0">
                   <div className="space-y-1">
-                    <CardTitle className="text-lg">
+                    <CardTitle className="text-base">
                       {transaction.type === 'drop'
-                        ? 'Delete Request'
-                        : 'Modify Request'}
+                        ? 'Delete request'
+                        : 'Modify request'}
                     </CardTitle>
-                    <CardDescription>
+                    <p className="text-sm text-muted-foreground">
                       <Link
                         href={`/debts/${transaction.debt.id}`}
-                        className="hover:underline"
+                        className="font-medium text-foreground tabular-nums hover:underline"
                       >
                         ${transaction.debt.amount.toFixed(2)}
                       </Link>{' '}
-                      - {isLender ? 'You lent to' : 'You borrowed from'}{' '}
+                      · {isLender ? 'You lent to' : 'You borrowed from'}{' '}
                       <span className="font-medium text-foreground">
                         {isLender
                           ? transaction.debt.borrower.email
                           : transaction.debt.lender.email}
                       </span>
-                    </CardDescription>
+                    </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                  >
-                    Pending
-                  </Badge>
+                  <Badge variant="secondary">Pending</Badge>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Show proposed changes for modify type */}
                   {transaction.type === 'modify' && (
                     <div className="rounded-md border bg-muted/50 p-3 text-sm">
-                      <div className="font-medium mb-2">Proposed changes:</div>
+                      <div className="mb-2 font-medium">Proposed changes</div>
                       {transaction.proposedAmount !== null && (
-                        <div>
+                        <div className="tabular-nums">
                           Amount: ${transaction.debt.amount.toFixed(2)} → $
                           {transaction.proposedAmount.toFixed(2)}
                         </div>
@@ -222,7 +211,6 @@ export default function DebtTransactionsClient({
                     </div>
                   )}
 
-                  {/* Reason */}
                   {transaction.reason && (
                     <div className="text-sm text-muted-foreground">
                       <span className="font-medium">Reason:</span>{' '}
@@ -230,7 +218,6 @@ export default function DebtTransactionsClient({
                     </div>
                   )}
 
-                  {/* Meta info */}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     <div>
                       Requested by{' '}
@@ -241,15 +228,16 @@ export default function DebtTransactionsClient({
                     <div>
                       {new Date(transaction.createdAt).toLocaleDateString()}
                     </div>
-                    <div>
-                      Group:{' '}
-                      <span className="font-medium text-foreground">
-                        {transaction.debt.group?.name}
-                      </span>
-                    </div>
+                    {transaction.debt.group?.name && (
+                      <div>
+                        Group:{' '}
+                        <span className="font-medium text-foreground">
+                          {transaction.debt.group.name}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Approval status */}
                   <div className="text-sm text-muted-foreground">
                     <span className="font-medium">Status:</span>{' '}
                     {transaction.lenderApproved
@@ -261,17 +249,15 @@ export default function DebtTransactionsClient({
                       : 'Borrower pending'}
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {needsApproval && (
                       <>
                         <Button
                           onClick={() => handleRespond(transaction.id, true)}
                           disabled={processingId === transaction.id}
-                          className="bg-emerald-600 hover:bg-emerald-700"
                         >
                           {processingId === transaction.id
-                            ? 'Processing...'
+                            ? 'Processing…'
                             : 'Approve'}
                         </Button>
                         <Button
@@ -289,7 +275,7 @@ export default function DebtTransactionsClient({
                         onClick={() => handleCancel(transaction.id)}
                         disabled={processingId === transaction.id}
                       >
-                        Cancel Request
+                        Cancel request
                       </Button>
                     )}
                     <Button
@@ -298,7 +284,7 @@ export default function DebtTransactionsClient({
                         router.push(`/debts/${transaction.debt.id}`)
                       }
                     >
-                      View Debt
+                      View debt
                     </Button>
                   </div>
                 </CardContent>

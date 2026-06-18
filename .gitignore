@@ -2,3 +2,12 @@
 .worktrees
 .agent
 .mcp.json
+
+# screenshots / playwright artifacts
+.playwright-mcp/
+.pw-*.png
+hero-desktop.png
+
+# supabase cli scratch state
+supabase/.branches
+supabase/.temp
