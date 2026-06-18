@@ -12,10 +12,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -340,14 +340,12 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
         </div>
       )}
 
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add new tab</DialogTitle>
-            </DialogHeader>
-            <div className="px-6 pb-6">
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add new tab</DialogTitle>
+          </DialogHeader>
+          <div>
               <form onSubmit={handleCreateTab} className="grid gap-4">
                 <div className="grid gap-2">
                   <Label>Type</Label>
@@ -431,14 +429,13 @@ export default function TabsPageClient({ initialTabs }: TabsPageClientProps) {
                     Cancel
                   </Button>
                   <Button type="submit" disabled={creating}>
-                    {creating ? "Adding..." : "Add Tab"}
+                    {creating ? "Adding…" : "Add tab"}
                   </Button>
                 </DialogFooter>
               </form>
             </div>
           </DialogContent>
-        </div>
-      )}
+      </Dialog>
     </div>
   );
 }

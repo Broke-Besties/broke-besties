@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, CircleAlert } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { DialogContent, DialogFooter, DialogHeader, DialogOverlay, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -236,20 +237,23 @@ export default function RecurringFormItem({
   const allBorrowersSelected = isForSelf || borrowers.every(b => b.email)
   const canSubmit = parseFloat(amount) > 0 && parseInt(frequency) >= 1 && allBorrowersSelected && (isForSelf || isPercentageValid)
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay />
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Recurring Payment</DialogTitle>
+          <DialogTitle>Create recurring payment</DialogTitle>
         </DialogHeader>
-        <div className="px-6 pb-6">
+        <div>
           {error && (
-            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
+            <Alert variant="destructive" className="mb-4">
+              <CircleAlert />
+              <AlertTitle>{error}</AlertTitle>
+            </Alert>
           )}
 
           <form onSubmit={handleSubmit} className="grid gap-6">
@@ -452,12 +456,12 @@ export default function RecurringFormItem({
                 Cancel
               </Button>
               <Button type="submit" disabled={!canSubmit || submitting}>
-                {submitting ? 'Creating...' : 'Create Recurring Payment'}
+                {submitting ? 'Creating…' : 'Create recurring payment'}
               </Button>
             </DialogFooter>
           </form>
         </div>
       </DialogContent>
-    </div>
+    </Dialog>
   )
 }

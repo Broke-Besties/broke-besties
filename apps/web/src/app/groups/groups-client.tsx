@@ -15,10 +15,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -161,56 +163,46 @@ export default function GroupsPageClient({ initialGroups }: GroupsPageClientProp
         </div>
       )}
 
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay
-            onClick={() => {
-              setShowCreateModal(false);
-              setNewGroupName("");
-            }}
-          />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create new group</DialogTitle>
-              <DialogDescription>
-                Name your group, then invite friends to split costs.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={handleCreateGroup}
-              className="space-y-4 px-6 pb-6"
-            >
-              <Field>
-                <FieldLabel htmlFor="groupName">Group name</FieldLabel>
-                <Input
-                  id="groupName"
-                  type="text"
-                  required
-                  autoFocus
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="e.g. Roommates"
-                />
-              </Field>
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setNewGroupName("");
-                  }}
-                >
+      <Dialog
+        open={showCreateModal}
+        onOpenChange={(open) => {
+          setShowCreateModal(open);
+          if (!open) setNewGroupName("");
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create new group</DialogTitle>
+            <DialogDescription>
+              Name your group, then invite friends to split costs.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateGroup} className="space-y-4">
+            <Field>
+              <FieldLabel htmlFor="groupName">Group name</FieldLabel>
+              <Input
+                id="groupName"
+                type="text"
+                required
+                autoFocus
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="e.g. Roommates"
+              />
+            </Field>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={creating}>
-                  {creating ? "Creating…" : "Create group"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </div>
-      )}
+              </DialogClose>
+              <Button type="submit" disabled={creating}>
+                {creating ? "Creating…" : "Create group"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

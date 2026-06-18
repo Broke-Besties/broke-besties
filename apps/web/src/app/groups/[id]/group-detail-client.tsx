@@ -15,11 +15,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -621,14 +621,12 @@ export default function GroupDetailPageClient({
         </TabsContent>
       </Tabs>
 
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Invite member</DialogTitle>
-            </DialogHeader>
-            <div className="px-6 pb-6">
+      <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite member</DialogTitle>
+          </DialogHeader>
+          <div>
               {/* Tab Switcher */}
               <div className="mb-4 flex gap-2">
                 <Button
@@ -791,13 +789,10 @@ export default function GroupDetailPageClient({
               )}
             </div>
           </DialogContent>
-        </div>
-      )}
+      </Dialog>
 
-      {showDebtModal && (
-        <div className="fixed inset-0 z-50">
-          <DialogOverlay />
-          <DialogContent className="max-h-[90vh] flex flex-col">
+      <Dialog open={showDebtModal} onOpenChange={setShowDebtModal}>
+          <DialogContent className="flex max-h-[90vh] flex-col overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 Create new debt
@@ -809,7 +804,7 @@ export default function GroupDetailPageClient({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="px-6 pb-4 space-y-4 overflow-y-auto">
+            <div className="space-y-4">
               {error && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
@@ -937,8 +932,7 @@ export default function GroupDetailPageClient({
               </Button>
             </DialogFooter>
           </DialogContent>
-        </div>
-      )}
+      </Dialog>
     </div>
   );
 }

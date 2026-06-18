@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  DialogOverlay,
+  Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -815,10 +815,8 @@ export default function DebtDetailClient({
       </Card>
 
       {/* Transaction Request Modal */}
-      {showTransactionModal && (
-        <>
-          <DialogOverlay onClick={() => setShowTransactionModal(false)} />
-          <DialogContent>
+      <Dialog open={showTransactionModal} onOpenChange={setShowTransactionModal}>
+        <DialogContent>
             <DialogHeader>
               <DialogTitle>Request Change</DialogTitle>
               <DialogDescription>
@@ -827,7 +825,7 @@ export default function DebtDetailClient({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="p-6 pt-0 space-y-4">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Change Type</Label>
                 <div className="flex gap-2">
@@ -907,18 +905,15 @@ export default function DebtDetailClient({
                 Cancel
               </Button>
               <Button onClick={handleCreateTransaction} disabled={submitting}>
-                {submitting ? "Submitting..." : "Submit Request"}
+                {submitting ? "Submitting…" : "Submit request"}
               </Button>
             </DialogFooter>
           </DialogContent>
-        </>
-      )}
+      </Dialog>
 
       {/* Alert Modal */}
-      {showAlertModal && (
-        <>
-          <DialogOverlay onClick={() => setShowAlertModal(false)} />
-          <DialogContent>
+      <Dialog open={showAlertModal} onOpenChange={setShowAlertModal}>
+        <DialogContent>
             <DialogHeader>
               <DialogTitle>
                 {debt.alert ? "Edit Alert" : "Add Alert"}
@@ -928,7 +923,7 @@ export default function DebtDetailClient({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="p-6 pt-0 space-y-4">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="alertMessage">Message (optional)</Label>
                 <Textarea
@@ -990,12 +985,11 @@ export default function DebtDetailClient({
                 Cancel
               </Button>
               <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
-                {alertSubmitting ? "Saving..." : "Save Alert"}
+                {alertSubmitting ? "Saving…" : "Save alert"}
               </Button>
             </DialogFooter>
           </DialogContent>
-        </>
-      )}
+      </Dialog>
     </div>
   );
 }

@@ -1,18 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, CircleAlert } from 'lucide-react'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import {
-  DialogOverlay,
+  Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
+import { Field, FieldLabel } from '@/components/ui/field'
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+} from '@/components/ui/item'
+import { Textarea } from '@/components/ui/textarea'
 import { createDebtTransaction } from '@/app/groups/[id]/actions'
 
 type DeleteDebtModalProps = {
@@ -29,10 +36,22 @@ type DeleteDebtModalProps = {
   isLender: boolean
 }
 
-export function DeleteDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: DeleteDebtModalProps) {
+export function DeleteDebtModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  debt,
+  isLender,
+}: DeleteDebtModalProps) {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const handleClose = () => {
+    setReason('')
+    setError('')
+    onClose()
+  }
 
   const handleConfirm = async () => {
     if (!debt) return
@@ -60,88 +79,105 @@ export function DeleteDebtModal({ isOpen, onClose, onSuccess, debt, isLender }: 
     }
   }
 
-  const handleClose = () => {
-    setReason('')
-    setError('')
-    onClose()
-  }
-
-  if (!isOpen || !debt) return null
+  if (!debt) return null
 
   const otherPerson = isLender ? debt.borrower : debt.lender
 
   return (
-    <div className="fixed inset-0 z-50">
-      <DialogOverlay onClick={handleClose} />
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full red-badge">
-              <Trash2 className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+              <Trash2 className="size-5 text-muted-foreground" />
             </div>
             <div>
-              <DialogTitle>Delete Debt</DialogTitle>
-              <DialogDescription>
-                Request to remove this debt
-              </DialogDescription>
+              <DialogTitle>Delete debt</DialogTitle>
+              <DialogDescription>Request to remove this debt.</DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="px-6 pb-4 space-y-4">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
+        {error && (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>{error}</AlertTitle>
+          </Alert>
+        )}
+
+        <ItemGroup className="gap-0 rounded-lg border">
+          <Item size="sm">
+            <ItemContent>
+              <ItemTitle className="font-normal text-muted-foreground">
+                Amount
+              </ItemTitle>
+            </ItemContent>
+            <span className="font-semibold tabular-nums">
+              ${debt.amount.toFixed(2)}
+            </span>
+          </Item>
+          {debt.description && (
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle className="font-normal text-muted-foreground">
+                  Description
+                </ItemTitle>
+              </ItemContent>
+              <span className="text-sm">{debt.description}</span>
+            </Item>
           )}
-
-          <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Amount</span>
-              <span className="font-semibold text-lg">${debt.amount.toFixed(2)}</span>
-            </div>
-            {debt.description && (
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Description</span>
-                <span className="text-sm">{debt.description}</span>
-              </div>
-            )}
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">
+          <Item size="sm">
+            <ItemContent>
+              <ItemTitle className="font-normal text-muted-foreground">
                 {isLender ? 'Borrower' : 'Lender'}
-              </span>
-              <span className="text-sm">{otherPerson.name || otherPerson.email}</span>
-            </div>
-          </div>
+              </ItemTitle>
+            </ItemContent>
+            <span className="text-sm">
+              {otherPerson.name || otherPerson.email}
+            </span>
+          </Item>
+        </ItemGroup>
 
-          <div className="space-y-2">
-            <Label htmlFor="deleteReason">Reason for deletion (optional)</Label>
-            <Textarea
-              id="deleteReason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={2}
-              placeholder="Why should this debt be deleted?"
-              className="resize-none"
-            />
-          </div>
+        <Field>
+          <FieldLabel htmlFor="deleteReason">
+            Reason for deletion (optional)
+          </FieldLabel>
+          <Textarea
+            id="deleteReason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="Why should this debt be deleted?"
+            className="resize-none"
+          />
+        </Field>
 
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              This will send a request to <strong>{otherPerson.name || otherPerson.email}</strong> to approve the deletion.
-            </p>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          This will send a request to{' '}
+          <strong className="text-foreground">
+            {otherPerson.name || otherPerson.email}
+          </strong>{' '}
+          to approve the deletion.
+        </p>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={submitting}>
-            {submitting ? 'Requesting...' : 'Request Deletion'}
+          <Button
+            variant="destructive"
+            onClick={handleConfirm}
+            disabled={submitting}
+          >
+            {submitting ? 'Requesting…' : 'Request deletion'}
           </Button>
         </DialogFooter>
       </DialogContent>
-    </div>
+    </Dialog>
   )
 }
