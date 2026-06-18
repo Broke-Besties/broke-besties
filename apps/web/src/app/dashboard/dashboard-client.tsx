@@ -58,6 +58,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { chartColor } from "@/lib/chart-colors";
+import { ActivityChart } from "./activity-chart";
 import { updateTabStatus } from "./actions";
 
 type Debt = {
@@ -646,6 +647,9 @@ export default function DashboardPageClient({
         </Card>
       </div>
 
+      {/* Activity over time */}
+      <ActivityChart debts={debts} currentUserId={currentUser.id} />
+
       {/* Groups + tabs */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
@@ -736,11 +740,9 @@ export default function DashboardPageClient({
                     </ItemMedia>
                     <ItemContent>
                       <ItemTitle>{tab.personName}</ItemTitle>
-                      <ItemDescription>
-                        <Badge variant="secondary">
-                          {tab.status === "lending" ? "Owes you" : "You owe"}
-                        </Badge>
-                      </ItemDescription>
+                      <Badge variant="secondary" className="w-fit">
+                        {tab.status === "lending" ? "Owes you" : "You owe"}
+                      </Badge>
                     </ItemContent>
                     <ItemActions>
                       <span className="font-semibold tabular-nums">

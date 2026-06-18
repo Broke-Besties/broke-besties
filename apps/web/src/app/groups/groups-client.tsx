@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { createClient } from "@/lib/supabase-client";
 import { Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,12 +56,38 @@ function initials(value: string): string {
   return (letters || value.slice(0, 2)).toUpperCase();
 }
 
-export default function GroupsPageClient({ initialGroups }: GroupsPageClientProps) {
-  const [groups] = useState<Group[]>(initialGroups);
+export default function GroupsPageClient({
+  initialGroups,
+}: GroupsPageClientProps) {
+  // Use the prop directly so router.refresh()'s new data renders.
+  const groups = initialGroups;
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [creating, setCreating] = useState(false);
   const router = useRouter();
+
+  // Live-refresh the list when group membership changes. The server component
+  // re-fetches (scoped to this user), so realtime is only a "refetch now" nudge.
+  // ponytail: no postgres_changes filter — Supabase Realtime's filter parser
+  // doesn't match Prisma's camelCase "userId" column, so we refresh on any
+  // GroupMember change. Fine at this scale. To scope it (and stop broadcasting
+  // membership to every client), enable RLS on GroupMember with a self-scoped
+  // policy; Realtime then only delivers rows this user can see.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("groups-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "GroupMember" },
+        () => router.refresh()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [router]);
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -196,10 +196,10 @@ export class DebtService {
       where: { id: debtId },
       include: {
         lender: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         borrower: {
-          select: { id: true, email: true },
+          select: { id: true, email: true, name: true },
         },
         group: {
           select: { id: true, name: true },

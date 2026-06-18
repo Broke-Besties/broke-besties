@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Overpass, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -33,15 +34,16 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const user = await getUser();
+  const defaultOpen =
+    (await cookies()).get("sidebar_state")?.value === "true";
 
   return (
     <html lang="en">
       <body
         className={`${overpass.variable} ${geistMono.variable} antialiased`}
       >
-        <SidebarProvider defaultOpen={false}>
-          {user && <AppSidebar user={user} />}
-          <SidebarInset>
+        <div className="[--header-height:--spacing(14)]">
+          <SidebarProvider defaultOpen={defaultOpen} className="flex flex-col">
             <AppHeader
               user={user}
               notifications={
@@ -50,13 +52,18 @@ export default async function RootLayout({
                 </Suspense>
               }
             />
-            <main className="flex-1 overflow-auto">
-              <div className="mx-auto w-full max-w-6xl p-4 md:p-6 lg:p-8">
-                <Suspense fallback={<AppLoading />}>{children}</Suspense>
-              </div>
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
+            <div className="flex flex-1">
+              {user && <AppSidebar />}
+              <SidebarInset>
+                <main className="flex-1 overflow-auto">
+                  <div className="mx-auto w-full max-w-6xl p-4 md:p-6 lg:p-8">
+                    <Suspense fallback={<AppLoading />}>{children}</Suspense>
+                  </div>
+                </main>
+              </SidebarInset>
+            </div>
+          </SidebarProvider>
+        </div>
         <Toaster />
       </body>
     </html>

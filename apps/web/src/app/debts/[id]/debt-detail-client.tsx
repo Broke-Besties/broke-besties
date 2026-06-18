@@ -2,6 +2,17 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Bell,
+  Calendar,
+  History,
+  Receipt,
+  Users,
+} from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +22,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -60,10 +80,12 @@ type Debt = {
   lender: {
     id: string;
     email: string;
+    name: string | null;
   };
   borrower: {
     id: string;
     email: string;
+    name: string | null;
   };
   group: {
     id: number;
@@ -98,6 +120,15 @@ type DebtDetailClientProps = {
   receiptImageUrls: { id: string; url: string }[];
 };
 
+function initials(value: string): string {
+  const parts = value.split(/[\s._@-]+/).filter(Boolean);
+  const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  return (letters || value.slice(0, 2)).toUpperCase();
+}
+
+const displayName = (p: { name: string | null; email: string }) =>
+  p.name || p.email;
+
 export default function DebtDetailClient({
   debt,
   receipts: initialReceipts,
@@ -112,11 +143,6 @@ export default function DebtDetailClient({
   const [deletionLoading, setDeletionLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  console.log("[Debt Detail Client] Receipt data:", {
-    receiptsCount: debt.receipts?.length || 0,
-    receiptImageUrlsCount: receiptImageUrls.length,
-  });
 
   // Transaction modal state
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -157,6 +183,24 @@ export default function DebtDetailClient({
     ? (isLender && !pendingTransaction.lenderApproved) ||
       (isBorrower && !pendingTransaction.borrowerApproved)
     : false;
+
+  const lenderName = displayName(debt.lender);
+  const borrowerName = displayName(debt.borrower);
+  const isPaid = debt.status === "paid";
+
+  // Headline + amount color, from the current user's perspective
+  const headline = isLender
+    ? `${borrowerName} owes you`
+    : isBorrower
+      ? `You owe ${lenderName}`
+      : `${borrowerName} owes ${lenderName}`;
+  const amountColor = isPaid
+    ? "text-foreground"
+    : isLender
+      ? "text-emerald-600 dark:text-emerald-400"
+      : isBorrower
+        ? "text-rose-600 dark:text-rose-400"
+        : "text-foreground";
 
   const handleCreateTransaction = async () => {
     setSubmitting(true);
@@ -410,19 +454,25 @@ export default function DebtDetailClient({
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 shrink-0"
+          onClick={() => router.push("/debts")}
+          aria-label="Back to debts"
+        >
+          <ArrowLeft />
+        </Button>
         <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             Debt details
           </h1>
           <p className="text-sm text-muted-foreground">
-            View and manage debt information
+            View and manage this debt.
           </p>
         </div>
-        <Button variant="secondary" onClick={() => router.push("/dashboard")}>
-          Back to dashboard
-        </Button>
       </div>
 
       {error && (
@@ -431,340 +481,363 @@ export default function DebtDetailClient({
         </div>
       )}
 
-      {/* Pending Transaction Banner */}
-      {pendingTransaction && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-base">
-                  {pendingTransaction.type === "drop"
-                    ? "Deletion Request Pending"
-                    : "Modification Request Pending"}
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  Requested by {pendingTransaction.requester.email}
-                </CardDescription>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main column */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* Pending request */}
+          {pendingTransaction && (
+            <Alert className="border-amber-500/40 bg-amber-500/5 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+              <AlertCircle />
+              <AlertTitle>
+                {pendingTransaction.type === "drop"
+                  ? "Deletion request pending"
+                  : "Modification request pending"}
+              </AlertTitle>
+              <AlertDescription>
+                <div className="space-y-3">
+                  <p>
+                    Requested by {displayName(pendingTransaction.requester)} ·{" "}
+                    {pendingTransaction.lenderApproved
+                      ? "Lender approved"
+                      : "Lender pending"}
+                    {" / "}
+                    {pendingTransaction.borrowerApproved
+                      ? "Borrower approved"
+                      : "Borrower pending"}
+                  </p>
+
+                  {pendingTransaction.type === "modify" && (
+                    <div className="w-full rounded-md border bg-background/60 p-3 text-foreground">
+                      <div className="mb-1 font-medium">Proposed changes</div>
+                      {pendingTransaction.proposedAmount !== null && (
+                        <div className="tabular-nums">
+                          Amount: ${debt.amount.toFixed(2)} → $
+                          {pendingTransaction.proposedAmount.toFixed(2)}
+                        </div>
+                      )}
+                      {pendingTransaction.proposedDescription !== null && (
+                        <div>
+                          Description: {debt.description || "(none)"} →{" "}
+                          {pendingTransaction.proposedDescription || "(none)"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {pendingTransaction.reason && (
+                    <p>
+                      <span className="font-medium text-foreground">
+                        Reason:
+                      </span>{" "}
+                      {pendingTransaction.reason}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {userNeedsToApprove && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleRespondToTransaction(true)}
+                          disabled={submitting}
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          {submitting ? "Processing…" : "Approve"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRespondToTransaction(false)}
+                          disabled={submitting}
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    {pendingTransaction.requester.id === currentUserId && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleCancelTransaction}
+                        disabled={submitting}
+                      >
+                        Cancel request
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Hero */}
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+              <AvatarGroup>
+                <Avatar
+                  size="lg"
+                  className={cn(isBorrower && "ring-primary")}
+                >
+                  <AvatarFallback>{initials(borrowerName)}</AvatarFallback>
+                </Avatar>
+                <Avatar size="lg" className={cn(isLender && "ring-primary")}>
+                  <AvatarFallback>{initials(lenderName)}</AvatarFallback>
+                </Avatar>
+              </AvatarGroup>
+
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">{headline}</p>
+                <div
+                  className={cn(
+                    "text-5xl font-semibold tracking-tight tabular-nums",
+                    amountColor
+                  )}
+                >
+                  ${debt.amount.toFixed(2)}
+                </div>
+                {debt.description && (
+                  <p className="text-sm text-muted-foreground">
+                    {debt.description}
+                  </p>
+                )}
               </div>
+
               <Badge
                 variant="outline"
-                className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                className={cn(
+                  debt.status === "pending" &&
+                    "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
+                  debt.status === "paid" &&
+                    "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                )}
               >
-                Awaiting approval
+                {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
               </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {pendingTransaction.type === "modify" && (
-              <div className="rounded-md border bg-muted/50 p-3 text-sm">
-                <div className="font-medium mb-2">Proposed changes:</div>
-                {pendingTransaction.proposedAmount !== null && (
-                  <div>
-                    Amount: ${debt.amount.toFixed(2)} → $
-                    {pendingTransaction.proposedAmount.toFixed(2)}
-                  </div>
-                )}
-                {pendingTransaction.proposedDescription !== null && (
-                  <div>
-                    Description: {debt.description || "(none)"} →{" "}
-                    {pendingTransaction.proposedDescription || "(none)"}
-                  </div>
-                )}
-              </div>
-            )}
-            {pendingTransaction.reason && (
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium">Reason:</span>{" "}
-                {pendingTransaction.reason}
-              </div>
-            )}
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium">Status:</span>{" "}
-              {pendingTransaction.lenderApproved
-                ? "Lender approved"
-                : "Lender pending"}
-              {" / "}
-              {pendingTransaction.borrowerApproved
-                ? "Borrower approved"
-                : "Borrower pending"}
-            </div>
-            <div className="flex gap-2">
-              {userNeedsToApprove && (
-                <>
-                  <Button
-                    onClick={() => handleRespondToTransaction(true)}
-                    disabled={submitting}
-                    className="bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    {submitting ? "Processing..." : "Approve"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => handleRespondToTransaction(false)}
-                    disabled={submitting}
-                  >
-                    Reject
-                  </Button>
-                </>
-              )}
-              {pendingTransaction.requester.id === currentUserId && (
-                <Button
-                  variant="secondary"
-                  onClick={handleCancelTransaction}
-                  disabled={submitting}
-                >
-                  Cancel Request
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Debt Info */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="text-2xl">
-                ${debt.amount.toFixed(2)}
-              </CardTitle>
-              <CardDescription className="mt-2">
-                {isLender ? (
-                  <>
-                    Lending to <strong>{debt.borrower.email}</strong>
-                  </>
-                ) : (
-                  <>
-                    Borrowing from <strong>{debt.lender.email}</strong>
-                  </>
-                )}
-              </CardDescription>
-            </div>
-            <Badge
-              variant="outline"
-              className={cn(
-                debt.status === "pending" &&
-                  "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
-                debt.status === "paid" &&
-                  "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-              )}
-            >
-              {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-6">
-            {/* Left side - Debt details */}
-            <div className="flex-1 space-y-4">
-              {debt.description && (
-                <div>
-                  <Label className="text-muted-foreground">Description</Label>
-                  <p className="mt-1">{debt.description}</p>
-                </div>
-              )}
-              {debt.group && (
-                <div>
-                  <Label className="text-muted-foreground">Group</Label>
-                  <p className="mt-1">{debt.group.name}</p>
-                </div>
-              )}
-              <div>
-                <Label className="text-muted-foreground">Created</Label>
-                <p className="mt-1">
-                  {new Date(debt.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-
-              {/* Action Buttons */}
               {!pendingTransaction && debt.status === "pending" && (
-                <div className="pt-4 border-t space-y-3">
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={handleMarkAsPaid}
-                      disabled={markingPaid}
-                    >
-                      {markingPaid ? "Requesting..." : "Mark as Paid"}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setShowTransactionModal(true)}
-                    >
-                      Request Change
-                    </Button>
-                  </div>
+                <div className="flex w-full flex-col items-center gap-2 pt-2 sm:max-w-xs">
+                  <Button
+                    className="w-full"
+                    onClick={handleMarkAsPaid}
+                    disabled={markingPaid}
+                  >
+                    {markingPaid ? "Requesting…" : "Mark as paid"}
+                  </Button>
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => setShowTransactionModal(true)}
+                  >
+                    Request change
+                  </Button>
                   <p className="text-xs text-muted-foreground">
                     Both parties must agree to mark as paid or make changes.
                   </p>
                 </div>
               )}
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Right side - Receipts */}
-            {debt.receipts && debt.receipts.length > 0 && (
-              <div className="shrink-0 space-y-2">
-                <Label className="text-muted-foreground">Receipts</Label>
+          {/* Transaction History */}
+          {transactions.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="size-4 text-muted-foreground" />
+                  Transaction history
+                </CardTitle>
+                <CardDescription>
+                  All change requests for this debt
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ItemGroup className="gap-2">
+                  {transactions.map((transaction) => (
+                    <Item key={transaction.id} variant="muted">
+                      <ItemMedia>
+                        <Avatar>
+                          <AvatarFallback>
+                            {initials(displayName(transaction.requester))}
+                          </AvatarFallback>
+                        </Avatar>
+                      </ItemMedia>
+                      <ItemContent>
+                        <ItemTitle>
+                          {transaction.type === "drop"
+                            ? "Delete request"
+                            : "Modify request"}
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              transaction.status === "pending" &&
+                                "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                              transaction.status === "approved" &&
+                                "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                              transaction.status === "rejected" &&
+                                "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+                              transaction.status === "cancelled" &&
+                                "border-gray-500/30 bg-gray-500/10 text-gray-700 dark:text-gray-300"
+                            )}
+                          >
+                            {transaction.status.charAt(0).toUpperCase() +
+                              transaction.status.slice(1)}
+                          </Badge>
+                        </ItemTitle>
+                        <ItemDescription>
+                          {displayName(transaction.requester)}
+                          {transaction.type === "modify" &&
+                            transaction.proposedAmount !== null &&
+                            ` · Proposed $${transaction.proposedAmount.toFixed(2)}`}
+                          {transaction.reason && ` · ${transaction.reason}`}
+                        </ItemDescription>
+                      </ItemContent>
+                      <div className="shrink-0 self-start text-right text-xs text-muted-foreground">
+                        {new Date(transaction.createdAt).toLocaleDateString()}
+                      </div>
+                    </Item>
+                  ))}
+                </ItemGroup>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Side rail */}
+        <div className="space-y-6">
+          {/* Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Users className="size-4" />
+                  Group
+                </span>
+                <span className="font-medium">
+                  {debt.group?.name ?? "No group"}
+                </span>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="size-4" />
+                  Created
+                </span>
+                <span className="font-medium">
+                  {new Date(debt.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payment Reminder */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Bell className="size-4 text-muted-foreground" />
+                    Payment reminder
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {debt.alert
+                      ? "Reminder set for this debt"
+                      : "No reminder set"}
+                  </CardDescription>
+                </div>
+                {isLender && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowAlertModal(true)}
+                  >
+                    {debt.alert ? "Edit" : "Add"}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            {debt.alert && (
+              <CardContent className="space-y-3 text-sm">
+                {debt.alert.message && (
+                  <div>
+                    <div className="text-muted-foreground">Message</div>
+                    <p className="mt-0.5">{debt.alert.message}</p>
+                  </div>
+                )}
+                {debt.alert.deadline && (
+                  <div>
+                    <div className="text-muted-foreground">Deadline</div>
+                    <p className="mt-0.5">
+                      {new Date(debt.alert.deadline).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <div className="text-muted-foreground">Email reminders</div>
+                  <p className="mt-0.5">
+                    {debt.alert.reminderFrequencyDays
+                      ? `Every ${debt.alert.reminderFrequencyDays} days`
+                      : "Off"}
+                  </p>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Receipts */}
+          {debt.receipts && debt.receipts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Receipt className="size-4 text-muted-foreground" />
+                  Receipts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {debt.receipts.map((receipt) => {
                     const imageUrl = getReceiptImageUrl(receipt.id);
-                    return (
-                      <div key={receipt.id}>
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt="Receipt"
-                            className="w-32 h-32 object-contain rounded-md border"
-                          />
-                        ) : (
-                          <div className="w-32 h-32 rounded-md border border-dashed bg-muted/50 p-2 text-center flex items-center justify-center">
-                            <p className="text-xs text-muted-foreground">
-                              Receipt {receipt.id.substring(0, 6)}...
-                            </p>
-                          </div>
-                        )}
+                    return imageUrl ? (
+                      <a
+                        key={receipt.id}
+                        href={imageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block transition-opacity hover:opacity-80"
+                      >
+                        <img
+                          src={imageUrl}
+                          alt="Receipt"
+                          className="size-24 rounded-md border object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <div
+                        key={receipt.id}
+                        className="flex size-24 items-center justify-center rounded-md border border-dashed bg-muted/50 p-2 text-center"
+                      >
+                        <p className="text-xs text-muted-foreground">
+                          {receipt.id.substring(0, 6)}…
+                        </p>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Alert Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle>Payment Reminder</CardTitle>
-              <CardDescription>
-                {debt.alert
-                  ? "Alert settings for this debt"
-                  : "No reminder set for this debt"}
-              </CardDescription>
-            </div>
-            {isLender && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowAlertModal(true)}
-              >
-                {debt.alert ? "Edit Alert" : "Add Alert"}
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        {debt.alert && (
-          <CardContent className="space-y-2">
-            {debt.alert.message && (
-              <div>
-                <Label className="text-muted-foreground">Message</Label>
-                <p className="mt-1">{debt.alert.message}</p>
-              </div>
-            )}
-            {debt.alert.deadline && (
-              <div>
-                <Label className="text-muted-foreground">Deadline</Label>
-                <p className="mt-1">
-                  {new Date(debt.alert.deadline).toLocaleDateString()}
-                </p>
-              </div>
-            )}
-            <div>
-              <Label className="text-muted-foreground">Email reminders</Label>
-              <p className="mt-1">
-                {debt.alert.reminderFrequencyDays
-                  ? `Every ${debt.alert.reminderFrequencyDays} days`
-                  : "Off"}
-              </p>
-            </div>
-            {!debt.alert.message &&
-              !debt.alert.deadline &&
-              !debt.alert.reminderFrequencyDays && (
-                <p className="text-sm text-muted-foreground">
-                  Alert is set but no message, deadline, or email reminders
-                  configured.
-                </p>
-              )}
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Transaction History */}
-      {transactions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Transaction History</CardTitle>
-            <CardDescription>All change requests for this debt</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {transactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="rounded-lg border bg-muted/50 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {transaction.type === "drop"
-                            ? "Delete Request"
-                            : "Modify Request"}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            transaction.status === "pending" &&
-                              "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-                            transaction.status === "approved" &&
-                              "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                            transaction.status === "rejected" &&
-                              "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-                            transaction.status === "cancelled" &&
-                              "border-gray-500/30 bg-gray-500/10 text-gray-700 dark:text-gray-300"
-                          )}
-                        >
-                          {transaction.status.charAt(0).toUpperCase() +
-                            transaction.status.slice(1)}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Requested by {transaction.requester.email}
-                      </div>
-                      {transaction.type === "modify" &&
-                        transaction.proposedAmount !== null && (
-                          <div className="text-sm">
-                            Proposed amount: $
-                            {transaction.proposedAmount.toFixed(2)}
-                          </div>
-                        )}
-                      {transaction.reason && (
-                        <div className="text-sm text-muted-foreground">
-                          Reason: {transaction.reason}
-                        </div>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right text-sm text-muted-foreground">
-                      {new Date(transaction.createdAt).toLocaleDateString()}
-                      <div className="text-xs">
-                        {new Date(transaction.createdAt).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
 
       {/* Upload Receipt */}
       <Card>
         <CardHeader>
-          <CardTitle>Upload receipt</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="size-4 text-muted-foreground" />
+            Upload receipt
+          </CardTitle>
           <CardDescription>
             Upload a receipt for this debt (will be linked automatically)
           </CardDescription>
@@ -772,7 +845,7 @@ export default function DebtDetailClient({
         <CardContent className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="file">Receipt image</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 ref={fileInputRef}
                 id="file"

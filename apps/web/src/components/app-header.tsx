@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
 import { LogOut, User } from "lucide-react";
@@ -87,12 +88,26 @@ export function AppHeader({
   const crumbs = useCrumbs(pathname);
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-6">
+    <header className="sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
       {user ? (
         <>
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-1 h-4" />
-          <Breadcrumb>
+          {/* Mobile-only menu button (no hover-to-expand on touch) */}
+          <SidebarTrigger className="-ml-1 md:hidden" />
+          <Link href="/" className="flex items-center gap-2">
+            <Image
+              src="/mascot/waving.png"
+              alt=""
+              width={28}
+              height={28}
+              className="rounded"
+            />
+            <span className="font-semibold tracking-tight">Broke Besties</span>
+          </Link>
+          <Separator
+            orientation="vertical"
+            className="mx-1 hidden h-4 md:block"
+          />
+          <Breadcrumb className="hidden md:block">
             <BreadcrumbList>
               {crumbs.map((crumb) => (
                 <Fragment key={crumb.href}>

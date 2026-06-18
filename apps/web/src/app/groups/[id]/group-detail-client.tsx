@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DebtFormItem } from "./debt-form-item";
 import { GroupDebtsList } from "./group-debts-list";
 import { GroupDebtChart } from "./group-debt-chart";
+import { GroupSpendingChart } from "./group-spending-chart";
 
 type Member = {
   id: number;
@@ -523,6 +524,8 @@ export default function GroupDetailPageClient({
             debts={debts}
             currentUserId={currentUser?.id}
           />
+
+          <GroupSpendingChart debts={debts} />
 
           <GroupDebtsList
             debts={debts}

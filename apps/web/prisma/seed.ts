@@ -598,6 +598,28 @@ async function main() {
   });
   console.log("Created inactive recurring payment");
 
+  // Create friend relationships
+  await Promise.all([
+    prisma.friend.create({
+      data: { requesterId: mainUser.id, recipientId: alice.id, status: "accepted" },
+    }),
+    prisma.friend.create({
+      data: { requesterId: mainUser.id, recipientId: bob.id, status: "accepted" },
+    }),
+    prisma.friend.create({
+      data: { requesterId: charlie.id, recipientId: mainUser.id, status: "accepted" },
+    }),
+    // Incoming pending request to main user (shows pending state)
+    prisma.friend.create({
+      data: { requesterId: diana.id, recipientId: mainUser.id, status: "pending" },
+    }),
+    // Friendship between other users
+    prisma.friend.create({
+      data: { requesterId: alice.id, recipientId: bob.id, status: "accepted" },
+    }),
+  ]);
+  console.log("Created 5 friend relationships (4 accepted, 1 pending)");
+
   console.log("\nSeed completed successfully!");
   console.log("\nSummary:");
   console.log(`- Main user: ${mainUser.email}`);
