@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { AppLoading } from "@/components/app-loading";
 import { LogoutButton } from "@/components/logout-button";
 import { NotificationsWrapper } from "@/components/notifications-wrapper";
+import { Toaster } from "@/components/ui/sonner";
 import { getUser } from "@/lib/supabase";
 
 const overpass = Overpass({
@@ -84,6 +85,7 @@ export default async function RootLayout({
             </main>
           </SidebarInset>
         </SidebarProvider>
+        <Toaster />
       </body>
     </html>
   );
