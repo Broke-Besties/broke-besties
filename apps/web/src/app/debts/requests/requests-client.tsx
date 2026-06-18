@@ -88,11 +88,9 @@ export default function RequestsPageClient({
   const getTypeBadgeClass = (type: string) => {
     switch (type) {
       case 'confirm_paid':
-        return 'green-badge'
       case 'modify':
-        return 'yellow-badge'
       case 'drop':
-        return 'red-badge'
+        return 'bg-muted text-muted-foreground'
       default:
         return ''
     }
@@ -162,9 +160,7 @@ export default function RequestsPageClient({
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="yellow-badge">
-                      Pending
-                    </Badge>
+                    <Badge variant="secondary">Pending</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -223,21 +219,21 @@ export default function RequestsPageClient({
                   <div className="flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-2">
                       {transaction.lenderApproved ? (
-                        <CheckCircle2 className="h-4 w-4 text-green" />
+                        <CheckCircle2 className="h-4 w-4 text-foreground" />
                       ) : (
                         <Clock className="h-4 w-4 text-muted-foreground" />
                       )}
-                      <span className={transaction.lenderApproved ? 'text-green' : 'text-muted-foreground'}>
+                      <span className={transaction.lenderApproved ? 'text-foreground' : 'text-muted-foreground'}>
                         Lender {transaction.lenderApproved ? 'approved' : 'pending'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       {transaction.borrowerApproved ? (
-                        <CheckCircle2 className="h-4 w-4 text-green" />
+                        <CheckCircle2 className="h-4 w-4 text-foreground" />
                       ) : (
                         <Clock className="h-4 w-4 text-muted-foreground" />
                       )}
-                      <span className={transaction.borrowerApproved ? 'text-green' : 'text-muted-foreground'}>
+                      <span className={transaction.borrowerApproved ? 'text-foreground' : 'text-muted-foreground'}>
                         Borrower {transaction.borrowerApproved ? 'approved' : 'pending'}
                       </span>
                     </div>
