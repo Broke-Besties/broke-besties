@@ -58,36 +58,47 @@ export function NotificationsDropdown({
 }: NotificationsDropdownProps) {
   const router = useRouter();
 
-  // Live push: subscribe to this user's notification inserts. RLS scopes
-  // Realtime delivery to rows where userId = auth.uid(), so every event here
-  // is already for the current user — fire a toast and refresh the server
-  // component (which re-fetches the list + unread count).
+  // Live push via Realtime Broadcast on a private per-user topic. A DB trigger
+  // calls realtime.send() to "notifications:<userId>" on each insert; an RLS
+  // policy on realtime.messages authorizes a user to receive only their own
+  // topic. (postgres_changes can't be used here: its WALRUS RLS engine fails on
+  // Prisma's PascalCase "Notification" table.) The private channel requires the
+  // socket to be authenticated, so we set the session token before subscribing.
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`notifications:${currentUserId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "Notification" },
-        (payload) => {
-          const n = payload.new as {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled || !data.session?.access_token) return;
+      await supabase.realtime.setAuth(data.session.access_token);
+
+      channel = supabase
+        .channel(`notifications:${currentUserId}`, {
+          config: { private: true },
+        })
+        .on("broadcast", { event: "INSERT" }, (message) => {
+          const n = message.payload as {
             title: string;
             body: string | null;
             link: string | null;
           };
           toast(n.title, {
             description: n.body ?? undefined,
+            duration: 6000,
             action: n.link
               ? { label: "View", onClick: () => router.push(n.link!) }
               : undefined,
           });
           router.refresh();
-        }
-      )
-      .subscribe();
+        })
+        .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, [currentUserId, router]);
 
