@@ -136,6 +136,15 @@ export class DebtTransactionService {
           body: transaction.reason ?? undefined,
           link: `/debts/${debtId}`,
         })
+      } else if (type === 'confirm_paid') {
+        // In-app notification to the other party to confirm the payment.
+        await notificationService.create({
+          userId: recipient.id,
+          type: 'debt_confirm_paid_request',
+          title: `${requesterName} marked a debt as paid`,
+          body: 'Confirm it to settle the debt.',
+          link: `/debts/${debtId}`,
+        })
       }
     } catch (emailError) {
       // Log error but don't fail the transaction creation
@@ -337,6 +346,15 @@ export class DebtTransactionService {
             type: 'debt_request_approved',
             title: `${approver.name || approver.email} approved your ${result.type} request`,
             link: result.type === 'drop' ? '/dashboard' : `/debts/${result.debtId}`,
+          })
+        } else if (result.type === 'confirm_paid') {
+          // In-app notification to the requester: the debt is now settled.
+          await notificationService.create({
+            userId: result.requesterId,
+            type: 'debt_confirmed_paid',
+            title: `${approver.name || approver.email} confirmed the debt is paid`,
+            body: 'The debt has been settled.',
+            link: `/debts/${result.debtId}`,
           })
         }
       } catch (emailError) {
