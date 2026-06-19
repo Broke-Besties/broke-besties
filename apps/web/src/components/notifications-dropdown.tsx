@@ -1,92 +1,107 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, AlertTriangle, FileEdit } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
+import { toast } from "sonner";
+
+import { createClient } from "@/lib/supabase-client";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/app/notifications/actions";
 
-type Alert = {
-  id: number;
-  message: string | null;
-  deadline: Date | string | null;
-  isActive: boolean;
-  createdAt: Date | string;
-  lender: {
-    id: string;
-    email: string;
-    name: string | null;
-  };
-  debt: {
-    id: number;
-    amount: number;
-    description: string | null;
-    status: string;
-  } | null;
-};
-
-type DebtTransaction = {
-  id: number;
+type Notification = {
+  id: string;
   type: string;
-  status: string;
-  proposedAmount: number | null;
-  proposedDescription: string | null;
-  reason: string | null;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
   createdAt: Date | string;
-  requester: {
-    id: string;
-    email: string;
-    name: string | null;
-  };
-  debt: {
-    id: number;
-    amount: number;
-    description: string | null;
-    lender: {
-      id: string;
-    };
-    borrower: {
-      id: string;
-      email: string;
-      name: string | null;
-    };
-  };
 };
 
 type NotificationsDropdownProps = {
-  alerts: Alert[];
-  pendingTransactions: DebtTransaction[];
+  notifications: Notification[];
+  unreadCount: number;
   currentUserId: string;
 };
 
+function timeAgo(date: Date | string): string {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(date).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function NotificationsDropdown({
-  alerts,
-  pendingTransactions,
+  notifications,
+  unreadCount,
+  currentUserId,
 }: NotificationsDropdownProps) {
   const router = useRouter();
 
-  const overduePayments = alerts.filter((a) => a.debt !== null);
-  const totalNotifications = overduePayments.length + pendingTransactions.length;
+  // Live push: subscribe to this user's notification inserts. RLS scopes
+  // Realtime delivery to rows where userId = auth.uid(), so every event here
+  // is already for the current user — fire a toast and refresh the server
+  // component (which re-fetches the list + unread count).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`notifications:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "Notification" },
+        (payload) => {
+          const n = payload.new as {
+            title: string;
+            body: string | null;
+            link: string | null;
+          };
+          toast(n.title, {
+            description: n.body ?? undefined,
+            action: n.link
+              ? { label: "View", onClick: () => router.push(n.link!) }
+              : undefined,
+          });
+          router.refresh();
+        }
+      )
+      .subscribe();
 
-  const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, router]);
+
+  const handleOpen = async (n: Notification) => {
+    if (!n.read) {
+      await markNotificationRead(n.id);
+    }
+    if (n.link) router.push(n.link);
+    router.refresh();
   };
 
-  const getTransactionLabel = (transaction: DebtTransaction) => {
-    if (transaction.type === "drop") return "Drop request";
-    if (transaction.type === "confirm_paid") return "Payment confirmation";
-    if (transaction.type === "modify") return "Modification request";
-    return "Transaction";
+  const handleMarkAll = async () => {
+    await markAllNotificationsRead();
+    router.refresh();
   };
 
   return (
@@ -99,9 +114,9 @@ export function NotificationsDropdown({
           aria-label="Notifications"
         >
           <Bell className="size-5" />
-          {totalNotifications > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-white tabular-nums">
-              {totalNotifications > 9 ? "9+" : totalNotifications}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Button>
@@ -110,96 +125,64 @@ export function NotificationsDropdown({
         align="end"
         className="w-96 max-w-[calc(100vw-2rem)] p-0"
       >
-        <div className="px-3 py-2.5 text-sm font-semibold">Notifications</div>
+        <div className="flex items-center justify-between px-3 py-2.5">
+          <span className="text-sm font-semibold">Notifications</span>
+          {unreadCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs"
+              onClick={handleMarkAll}
+            >
+              <CheckCheck className="size-3.5" />
+              Mark all read
+            </Button>
+          )}
+        </div>
         <DropdownMenuSeparator className="my-0" />
 
-        {totalNotifications === 0 ? (
+        {notifications.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No notifications
+            No notifications yet
           </div>
         ) : (
           <ScrollArea className="max-h-[60vh]">
-            {overduePayments.length > 0 && (
-              <>
-                <DropdownMenuLabel className="text-xs text-muted-foreground">
-                  Overdue payments
-                </DropdownMenuLabel>
-                {overduePayments.map((alert) => (
-                  <DropdownMenuItem
-                    key={alert.id}
-                    className="flex items-start gap-3 px-3 py-2.5"
-                    onSelect={() => {
-                      if (alert.debt) router.push(`/debts/${alert.debt.id}`);
-                    }}
+            {notifications.map((n) => (
+              <DropdownMenuItem
+                key={n.id}
+                className="flex items-start gap-3 px-3 py-2.5"
+                data-unread={!n.read}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleOpen(n);
+                }}
+              >
+                <span
+                  className={
+                    "mt-1.5 size-2 shrink-0 rounded-full " +
+                    (n.read ? "bg-transparent" : "bg-primary")
+                  }
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <p
+                    className={
+                      "text-sm " + (n.read ? "font-normal" : "font-medium")
+                    }
                   >
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-sm font-medium">
-                        {alert.message || "Payment overdue"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {alert.debt?.description || "No description"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {alert.deadline
-                          ? `Due ${formatDate(alert.deadline)}`
-                          : "No deadline"}{" "}
-                        · From {alert.lender.name || alert.lender.email}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">
-                      ${alert.debt?.amount.toFixed(2)}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </>
-            )}
-
-            {overduePayments.length > 0 && pendingTransactions.length > 0 && (
-              <DropdownMenuSeparator />
-            )}
-
-            {pendingTransactions.length > 0 && (
-              <>
-                <DropdownMenuLabel className="text-xs text-muted-foreground">
-                  Pending approvals
-                </DropdownMenuLabel>
-                {pendingTransactions.map((transaction) => (
-                  <DropdownMenuItem
-                    key={transaction.id}
-                    className="flex items-start gap-3 px-3 py-2.5"
-                    onSelect={() => router.push(`/debts/${transaction.debt.id}`)}
-                  >
-                    <FileEdit className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-sm font-medium">
-                        {getTransactionLabel(transaction)}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {transaction.debt.description || "No description"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        From{" "}
-                        {transaction.requester.name ||
-                          transaction.requester.email}{" "}
-                        · {formatDate(transaction.createdAt)}
-                      </p>
-                      {transaction.reason && (
-                        <p className="truncate text-xs italic text-muted-foreground">
-                          &quot;{transaction.reason}&quot;
-                        </p>
-                      )}
-                    </div>
-                    {transaction.type === "modify" &&
-                      transaction.proposedAmount && (
-                        <span className="shrink-0 text-sm font-semibold tabular-nums">
-                          ${transaction.proposedAmount.toFixed(2)}
-                        </span>
-                      )}
-                  </DropdownMenuItem>
-                ))}
-              </>
-            )}
+                    {n.title}
+                  </p>
+                  {n.body && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {n.body}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {timeAgo(n.createdAt)}
+                  </p>
+                </div>
+              </DropdownMenuItem>
+            ))}
           </ScrollArea>
         )}
       </DropdownMenuContent>

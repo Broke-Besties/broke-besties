@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { InvitePolicy } from '@/policies'
 import { emailService } from './email.service'
 import { friendService } from './friend.service'
+import { notificationService } from './notification.service'
 export class InviteService {
   /**
    * Create an invite to a group
@@ -47,6 +48,20 @@ export class InviteService {
       groupName: invite.group.name,
       inviteLink,
     })
+
+    // In-app notification if the invited email belongs to an existing user.
+    const invitedUser = await prisma.user.findUnique({
+      where: { email: invitedEmail },
+      select: { id: true },
+    })
+    if (invitedUser) {
+      await notificationService.create({
+        userId: invitedUser.id,
+        type: "group_invite",
+        title: `${invite.sender.name} invited you to ${invite.group.name}`,
+        link: "/invites",
+      })
+    }
 
     return invite
   }
@@ -178,6 +193,14 @@ export class InviteService {
       groupLink,
     })
 
+    // In-app notification to the inviter.
+    await notificationService.create({
+      userId: updatedInvite.sender.id,
+      type: "group_invite_accepted",
+      title: `${member.user.name} joined ${member.group.name}`,
+      link: `/groups/${member.group.id}`,
+    })
+
     return member.group
   }
 
@@ -241,6 +264,14 @@ export class InviteService {
         recipientName: invite.sender.name,
         rejectorName: rejector.name,
         groupName: invite.group.name,
+      })
+
+      // In-app notification to the inviter.
+      await notificationService.create({
+        userId: invite.sender.id,
+        type: "group_invite_rejected",
+        title: `${rejector.name} declined your invite to ${invite.group.name}`,
+        link: "/groups",
       })
     }
 

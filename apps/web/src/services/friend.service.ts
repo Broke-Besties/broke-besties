@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { FriendPolicy } from "@/policies/friend.policy";
 import { emailService } from "@/services/email.service";
+import { notificationService } from "@/services/notification.service";
 
 export class FriendService {
   /**
@@ -93,6 +94,14 @@ export class FriendService {
           friendsLink,
         });
 
+        // In-app: tell the original requester they're now friends.
+        await notificationService.create({
+          userId: updated.requesterId,
+          type: "friend_request_accepted",
+          title: `${updated.recipient.name} accepted your friend request`,
+          link: "/friends",
+        });
+
         return { friend: updated, autoAccepted: true };
       }
 
@@ -121,6 +130,14 @@ export class FriendService {
       recipientName: friend.recipient.name,
       requesterName: friend.requester.name,
       friendsLink: `${process.env.NEXT_PUBLIC_APP_URL}/friends`,
+    });
+
+    // In-app notification to the recipient.
+    await notificationService.create({
+      userId: friend.recipientId,
+      type: "friend_request",
+      title: `${friend.requester.name} sent you a friend request`,
+      link: "/friends",
     });
 
     return { friend, autoAccepted: false };
@@ -170,6 +187,14 @@ export class FriendService {
       friendsLink,
     });
 
+    // In-app: tell the original requester their request was accepted.
+    await notificationService.create({
+      userId: updated.requesterId,
+      type: "friend_request_accepted",
+      title: `${updated.recipient.name} accepted your friend request`,
+      link: "/friends",
+    });
+
     return updated;
   }
 
@@ -198,6 +223,14 @@ export class FriendService {
       to: friend.requester.email,
       recipientName: friend.requester.name,
       rejectorName: friend.recipient.name,
+    });
+
+    // In-app notification to the requester.
+    await notificationService.create({
+      userId: friend.requesterId,
+      type: "friend_request_rejected",
+      title: `${friend.recipient.name} declined your friend request`,
+      link: "/friends",
     });
 
     await prisma.friend.delete({

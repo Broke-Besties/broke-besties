@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { DebtPolicy } from "@/policies";
 import { emailService } from "./email.service";
+import { notificationService } from "./notification.service";
 
 type CreateDebtParams = {
   amount: number;
@@ -102,6 +103,15 @@ export class DebtService {
       description: debt.description || "No description provided",
       groupName: debt.group?.name,
       debtLink,
+    });
+
+    // In-app notification to the borrower.
+    await notificationService.create({
+      userId: debt.borrowerId,
+      type: "debt_created",
+      title: `${debt.lender.name} added a debt of $${debt.amount.toFixed(2)}`,
+      body: debt.description || undefined,
+      link: `/debts/${debt.id}`,
     });
 
     return debt;
@@ -349,6 +359,15 @@ export class DebtService {
       description: debtToDelete.description || "No description provided",
       groupName: debtToDelete.group?.name,
       deletedBy: debtToDelete.lender.name,
+    });
+
+    // In-app notification to the borrower (the lender performed the deletion).
+    await notificationService.create({
+      userId: debtToDelete.borrowerId,
+      type: "debt_deleted",
+      title: `${debtToDelete.lender.name} deleted a debt of $${debtToDelete.amount.toFixed(2)}`,
+      body: debtToDelete.description || undefined,
+      link: "/debts",
     });
   }
 }
