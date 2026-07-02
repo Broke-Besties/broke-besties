@@ -8,6 +8,7 @@ type CreateDebtParams = {
   lenderId: string;
   borrowerId: string;
   groupId?: number | null;
+  expenseId?: number | null;
   receiptIds?: string[];
 };
 
@@ -27,7 +28,7 @@ export class DebtService {
    * Create a new debt
    */
   async createDebt(params: CreateDebtParams) {
-    const { amount, description, lenderId, borrowerId, groupId, receiptIds } =
+    const { amount, description, lenderId, borrowerId, groupId, expenseId, receiptIds } =
       params;
 
     // Validation
@@ -72,6 +73,7 @@ export class DebtService {
         lenderId,
         borrowerId,
         groupId: groupId || null,
+        expenseId: expenseId || null,
         status: "pending",
         receipts:
           receiptIds && receiptIds.length > 0

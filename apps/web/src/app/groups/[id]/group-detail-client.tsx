@@ -36,6 +36,7 @@ import {
 } from "./actions";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DebtFormItem } from "./debt-form-item";
+import { SplitExpenseModal } from "./split-expense-modal";
 import { GroupDebtsList } from "./group-debts-list";
 import { GroupDebtChart } from "./group-debt-chart";
 import { GroupSpendingChart } from "./group-spending-chart";
@@ -492,6 +493,13 @@ export default function GroupDetailPageClient({
             <Button variant="secondary" onClick={() => setShowDebtModal(true)}>
               Create debts
             </Button>
+            {currentUser && (
+              <SplitExpenseModal
+                groupId={groupId}
+                members={group.members}
+                currentUserId={currentUser.id}
+              />
+            )}
             <Button
               variant="secondary"
               onClick={() => router.push(`/ai?group=${groupId}`)}
