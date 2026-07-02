@@ -3,6 +3,7 @@
 import { getUser } from "@/lib/supabase";
 import { inviteService } from "@/services/invite.service";
 import { debtService } from "@/services/debt.service";
+import { expenseService } from "@/services/expense.service";
 import { debtTransactionService } from "@/services/debt-transaction.service";
 import { userService } from "@/services/user.service";
 import { groupService } from "@/services/group.service";
@@ -86,6 +87,40 @@ export async function createDebt(data: {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to create debt",
+    };
+  }
+}
+
+export async function createGroupExpense(data: {
+  groupId: number;
+  totalAmount: number;
+  description?: string;
+  shares: Array<{ userId: string; amount: number }>;
+}) {
+  const user = await getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  try {
+    const result = await expenseService.createGroupExpense({
+      groupId: data.groupId,
+      lenderId: user.id,
+      description: data.description,
+      totalAmount: data.totalAmount,
+      shares: data.shares,
+    });
+    revalidatePath(`/groups/${data.groupId}`);
+    revalidatePath("/debts");
+    revalidatePath("/dashboard");
+    return { success: true, expense: result.expense };
+  } catch (error) {
+    console.error("Create group expense error:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to create expense",
     };
   }
 }

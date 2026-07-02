@@ -29,6 +29,7 @@ model User {
   debtTransactions          DebtTransaction[]          @relation("TransactionRequester")
   recurringPayments         RecurringPayment[]         @relation("RecurringPaymentLender")
   recurringPaymentBorrowers RecurringPaymentBorrower[]
+  expensesPaid              GroupExpense[]             @relation("ExpensePayer")
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
 }
@@ -43,6 +44,7 @@ model Group {
   debts             Debt[]
   recurringPayments RecurringPayment[]
   alerts            Alert[]
+  expenses          GroupExpense[]
 }
 
 model GroupMember {
@@ -84,6 +86,7 @@ model Debt {
   lenderId    String
   borrowerId  String
   groupId     Int?
+  expenseId   Int?
   alertId     Int?     @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -91,6 +94,7 @@ model Debt {
   lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
   borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
   group        Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  expense      GroupExpense?     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   alert        Alert?            @relation(fields: [alertId], references: [id], onDelete: SetNull)
   transactions DebtTransaction[]
   receipts     Receipt[]
@@ -98,6 +102,7 @@ model Debt {
   @@index([lenderId])
   @@index([borrowerId])
   @@index([groupId])
+  @@index([expenseId])
   @@index([alertId])
 }
 
@@ -231,4 +236,20 @@ model Friend {
   @@index([requesterId])
   @@index([recipientId])
   @@index([status])
+}
+
+model GroupExpense {
+  id          Int      @id @default(autoincrement())
+  description String?
+  totalAmount Float
+  lenderId    String
+  groupId     Int
+  createdAt   DateTime @default(now())
+
+  lender User  @relation("ExpensePayer", fields: [lenderId], references: [id], onDelete: Cascade)
+  group  Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  debts  Debt[]
+
+  @@index([lenderId])
+  @@index([groupId])
 }
