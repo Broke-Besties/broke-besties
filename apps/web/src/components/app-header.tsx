@@ -3,18 +3,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { Fragment } from "react";
 import { LogOut, User } from "lucide-react";
 
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -27,47 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { CommandMenu } from "@/components/command-menu";
 import { logoutAction } from "@/components/actions";
 
 type HeaderUser = { id: string; email?: string } | null | undefined;
-
-const SEGMENT_LABELS: Record<string, string> = {
-  "": "Dashboard",
-  dashboard: "Dashboard",
-  groups: "Groups",
-  tabs: "Tabs",
-  friends: "Friends",
-  debts: "Debts",
-  "recurring-payments": "Recurring",
-  "debt-transactions": "Transactions",
-  invites: "Invites",
-  requests: "Requests",
-  profile: "Profile",
-  ai: "AI",
-  login: "Log in",
-  signup: "Sign up",
-};
-
-function labelForSegment(segment: string): string {
-  if (SEGMENT_LABELS[segment]) return SEGMENT_LABELS[segment];
-  if (/^\d+$/.test(segment)) return "Details";
-  return segment
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function useCrumbs(pathname: string) {
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments.length === 0) {
-    return [{ href: "/", label: "Dashboard", isLast: true }];
-  }
-  return segments.map((segment, i) => ({
-    href: "/" + segments.slice(0, i + 1).join("/"),
-    label: labelForSegment(segment),
-    isLast: i === segments.length - 1,
-  }));
-}
 
 function initials(email?: string): string {
   if (!email) return "BB";
@@ -84,103 +37,62 @@ export function AppHeader({
   user: HeaderUser;
   notifications?: ReactNode;
 }) {
-  const pathname = usePathname();
-  const crumbs = useCrumbs(pathname);
-
   return (
     <header className="sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
-      {user ? (
-        <>
-          {/* Mobile-only menu button (no hover-to-expand on touch) */}
-          <SidebarTrigger className="-ml-1 md:hidden" />
-          <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="/mascot/waving.png"
-              alt=""
-              width={28}
-              height={28}
-              className="rounded"
-            />
-            <span className="font-semibold tracking-tight">Broke Besties</span>
-          </Link>
-          <Separator
-            orientation="vertical"
-            className="mx-1 hidden h-4 md:block"
-          />
-          <Breadcrumb className="hidden md:block">
-            <BreadcrumbList>
-              {crumbs.map((crumb) => (
-                <Fragment key={crumb.href}>
-                  <BreadcrumbItem>
-                    {crumb.isLast ? (
-                      <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink asChild>
-                        <Link href={crumb.href}>{crumb.label}</Link>
-                      </BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                  {!crumb.isLast && <BreadcrumbSeparator />}
-                </Fragment>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </>
-      ) : (
-        <Link href="/" className="text-base font-semibold tracking-tight">
+      <SidebarTrigger className="-ml-1" />
+      <Separator orientation="vertical" className="mr-1 h-4" />
+      <Link href="/dashboard" className="flex items-center gap-2">
+        <Image
+          src="/mascot/waving.png"
+          alt=""
+          width={28}
+          height={28}
+          className="rounded"
+        />
+        <span className="font-semibold tracking-tight max-sm:hidden">
           Broke Besties
-        </Link>
-      )}
+        </span>
+      </Link>
 
       <div className="ml-auto flex items-center gap-2">
-        {user ? (
-          <>
-            {notifications}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-full"
-                  aria-label="Account menu"
-                >
-                  <Avatar className="size-8">
-                    <AvatarFallback>{initials(user.email)}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
-                  {user.email ?? "Account"}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
+        <CommandMenu />
+        {notifications}
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-full"
+                aria-label="Account menu"
+              >
+                <Avatar className="size-8">
+                  <AvatarFallback>{initials(user.email)}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+                {user.email ?? "Account"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <User />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <form action={logoutAction}>
                 <DropdownMenuItem asChild>
-                  <Link href="/profile">
-                    <User />
-                    Profile
-                  </Link>
+                  <button type="submit" className="w-full">
+                    <LogOut />
+                    Log out
+                  </button>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <form action={logoutAction}>
-                  <DropdownMenuItem asChild>
-                    <button type="submit" className="w-full">
-                      <LogOut />
-                      Log out
-                    </button>
-                  </DropdownMenuItem>
-                </form>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        ) : (
-          <>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/login">Log in</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/signup">Sign up</Link>
-            </Button>
-          </>
+              </form>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </header>

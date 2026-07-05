@@ -2,45 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Users,
-  Receipt,
-  UserPlus,
-  CreditCard,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
 
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { navGroups, type NavCounts } from "@/lib/nav";
 
-const navLinks = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/groups", label: "Groups", icon: Users },
-  { href: "/tabs", label: "Tabs", icon: Receipt },
-  { href: "/friends", label: "Friends", icon: UserPlus },
-  { href: "/debts", label: "Debts", icon: CreditCard },
-  { href: "/recurring-payments", label: "Recurring", icon: RefreshCw },
-  { href: "/ai", label: "AI", icon: Sparkles },
-];
-
-export function AppSidebar() {
+export function AppSidebar({ counts }: { counts?: NavCounts }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
-  };
+  const isActive = (href: string) => pathname.startsWith(href);
 
   const handleLinkClick = () => {
     if (isMobile) {
@@ -54,28 +36,38 @@ export function AppSidebar() {
       className="top-(--header-height)! h-[calc(100svh-var(--header-height))]!"
     >
       <SidebarContent>
-        <SidebarGroup className="pt-4">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navLinks.map((link) => (
-                <SidebarMenuItem key={link.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(link.href)}
-                    tooltip={link.label}
-                    className="[&>svg]:size-5"
-                  >
-                    <Link href={link.href} onClick={handleLinkClick}>
-                      <link.icon />
-                      <span>{link.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const badgeCount =
+                    item.badge && counts ? counts[item.badge] : 0;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.href)}
+                        tooltip={item.label}
+                      >
+                        <Link href={item.href} onClick={handleLinkClick}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                      {badgeCount > 0 && (
+                        <SidebarMenuBadge>{badgeCount}</SidebarMenuBadge>
+                      )}
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
+      <SidebarRail />
     </Sidebar>
   );
 }

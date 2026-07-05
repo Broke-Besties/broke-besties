@@ -1,15 +1,7 @@
 import type { Metadata } from "next";
 import { Overpass, Geist_Mono } from "next/font/google";
-import { cookies } from "next/headers";
-import { Suspense } from "react";
 import "./globals.css";
-import { AppSidebar } from "@/components/app-sidebar";
-import { AppHeader } from "@/components/app-header";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppLoading } from "@/components/app-loading";
-import { NotificationsWrapper } from "@/components/notifications-wrapper";
 import { Toaster } from "@/components/ui/sonner";
-import { getUser } from "@/lib/supabase";
 
 const overpass = Overpass({
   variable: "--font-overpass",
@@ -23,47 +15,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Broke Besties",
+  title: {
+    default: "Broke Besties",
+    template: "%s · Broke Besties",
+  },
   description:
     "Split expenses with friends: groups, invites, debts, and balances.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getUser();
-  const defaultOpen =
-    (await cookies()).get("sidebar_state")?.value === "true";
-
   return (
     <html lang="en">
       <body
         className={`${overpass.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="[--header-height:--spacing(14)]">
-          <SidebarProvider defaultOpen={defaultOpen} className="flex flex-col">
-            <AppHeader
-              user={user}
-              notifications={
-                <Suspense fallback={null}>
-                  <NotificationsWrapper />
-                </Suspense>
-              }
-            />
-            <div className="flex flex-1">
-              {user && <AppSidebar />}
-              <SidebarInset>
-                <main className="flex-1 overflow-auto">
-                  <div className="mx-auto w-full max-w-6xl p-4 md:p-6 lg:p-8">
-                    <Suspense fallback={<AppLoading />}>{children}</Suspense>
-                  </div>
-                </main>
-              </SidebarInset>
-            </div>
-          </SidebarProvider>
-        </div>
+        {children}
         <Toaster />
       </body>
     </html>
