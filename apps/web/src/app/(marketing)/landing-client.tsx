@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,9 +13,19 @@ import {
   Users,
 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemSeparator,
+  ItemTitle,
+} from "@/components/ui/item";
 import { DebtWeb } from "./debt-web";
 
 const steps = [
@@ -130,48 +141,41 @@ export function LandingPageClient() {
 
       {/* How it works */}
       <section id="how-it-works" className="scroll-mt-24 space-y-10">
-        <div className="max-w-2xl space-y-3">
-          <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-            How it works
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Settle up in three steps.
-          </h2>
-        </div>
-        <div className="border-t">
+        <SectionHeader
+          eyebrow="How it works"
+          heading="Settle up in three steps."
+        />
+        <ItemGroup className="border-y">
           {steps.map((step, i) => (
-            <div
-              key={step.title}
-              className="grid gap-2 border-b py-8 md:grid-cols-12 md:gap-8"
-            >
-              <div className="flex items-baseline gap-4 md:col-span-5">
-                <span className="text-sm font-medium tabular-nums text-muted-foreground">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3 className="text-xl font-semibold">{step.title}</h3>
-              </div>
-              <p className="text-muted-foreground md:col-span-7">
-                {step.description}
-              </p>
-            </div>
+            <Fragment key={step.title}>
+              {i > 0 && <ItemSeparator />}
+              <Item className="gap-4 px-0 py-8 md:gap-8">
+                <ItemMedia>
+                  <span className="text-sm font-medium tabular-nums text-muted-foreground">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle className="text-xl font-semibold">
+                    {step.title}
+                  </ItemTitle>
+                  <ItemDescription className="line-clamp-none max-w-2xl">
+                    {step.description}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+            </Fragment>
           ))}
-        </div>
+        </ItemGroup>
       </section>
 
       {/* Features */}
       <section id="features" className="scroll-mt-24 space-y-10">
-        <div className="max-w-2xl space-y-3">
-          <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-            Features
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Everything you need to share costs.
-          </h2>
-          <p className="text-lg text-muted-foreground">
-            From a quick dinner split to the apartment&apos;s monthly bills —
-            it&apos;s all in one place.
-          </p>
-        </div>
+        <SectionHeader
+          eyebrow="Features"
+          heading="Everything you need to share costs."
+          description="From a quick dinner split to the apartment's monthly bills — it's all in one place."
+        />
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => (
             <Card key={feature.title}>
@@ -191,18 +195,17 @@ export function LandingPageClient() {
 
       {/* Why it matters — contrast band */}
       <section className="rounded-3xl bg-foreground px-6 py-14 text-background md:px-12 md:py-20">
-        <div className="mx-auto max-w-3xl space-y-6 text-center">
-          <p className="text-sm font-medium tracking-wide text-background/60 uppercase">
-            Why it matters
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl lg:text-5xl">
-            The average person forgets $300+ owed to them every year.
-          </h2>
-          <p className="mx-auto max-w-xl text-lg text-background/70">
-            &quot;I&apos;ll pay you back&quot; quietly turns into never. Broke
-            Besties remembers, so your friendships don&apos;t pay the price.
-          </p>
-          <div className="pt-2">
+        <div className="space-y-6">
+          <SectionHeader
+            align="center"
+            contrast
+            eyebrow="Why it matters"
+            heading="The average person forgets $300+ owed to them every year."
+            description={
+              '"I\'ll pay you back" quietly turns into never. Broke Besties remembers, so your friendships don\'t pay the price.'
+            }
+          />
+          <div className="pt-2 text-center">
             <Button asChild size="lg" variant="secondary" className="text-base">
               <Link href="/signup">
                 Start tracking free
@@ -234,17 +237,12 @@ export function LandingPageClient() {
 
       {/* Pricing */}
       <section id="pricing" className="scroll-mt-24 space-y-10">
-        <div className="mx-auto max-w-2xl space-y-3 text-center">
-          <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-            Pricing
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Free, forever.
-          </h2>
-          <p className="text-lg text-muted-foreground">
-            No credit card. No premium tier. Really.
-          </p>
-        </div>
+        <SectionHeader
+          align="center"
+          eyebrow="Pricing"
+          heading="Free, forever."
+          description="No credit card. No premium tier. Really."
+        />
         <Card className="mx-auto max-w-md">
           <CardHeader>
             <CardTitle className="flex items-baseline gap-1">
@@ -253,14 +251,18 @@ export function LandingPageClient() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <ul className="space-y-3">
+            <ItemGroup className="gap-1.5">
               {planFeatures.map((item) => (
-                <li key={item} className="flex items-center gap-3 text-sm">
-                  <Check className="size-4 shrink-0 text-muted-foreground" />
-                  {item}
-                </li>
+                <Item key={item} size="sm" className="gap-3 p-0">
+                  <ItemMedia>
+                    <Check className="size-4 text-muted-foreground" />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle className="font-normal">{item}</ItemTitle>
+                  </ItemContent>
+                </Item>
               ))}
-            </ul>
+            </ItemGroup>
             <Button asChild size="lg" className="w-full text-base">
               <Link href="/signup">
                 Get started
@@ -298,6 +300,51 @@ export function LandingPageClient() {
           © {new Date().getFullYear()} Broke Besties
         </p>
       </footer>
+    </div>
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  heading,
+  description,
+  align = "left",
+  contrast = false,
+}: {
+  eyebrow: string;
+  heading: string;
+  description?: string;
+  align?: "left" | "center";
+  contrast?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "max-w-2xl space-y-3",
+        align === "center" && "mx-auto text-center",
+      )}
+    >
+      <p
+        className={cn(
+          "text-sm font-medium tracking-wide uppercase",
+          contrast ? "text-background/60" : "text-muted-foreground",
+        )}
+      >
+        {eyebrow}
+      </p>
+      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+        {heading}
+      </h2>
+      {description && (
+        <p
+          className={cn(
+            "text-lg",
+            contrast ? "text-background/70" : "text-muted-foreground",
+          )}
+        >
+          {description}
+        </p>
+      )}
     </div>
   );
 }
