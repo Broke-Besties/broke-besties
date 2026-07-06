@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Mail } from 'lucide-react'
+import Link from 'next/link'
+import { Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -15,105 +16,73 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty'
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from '@/components/ui/item'
+import { ItemGroup } from '@/components/ui/item'
 import { acceptInvite, rejectInvite } from './actions'
-
-type Invite = {
-  id: number
-  group: {
-    id: number
-    name: string
-    members: {
-      user: {
-        email: string
-      }
-    }[]
-  }
-  sender: {
-    email: string
-  }
-  createdAt: Date | string
-}
+import { InviteRow } from './invite-row'
+import type { Invite, PendingInviteAction } from './types'
 
 type InvitesPageClientProps = {
   initialInvites: Invite[]
 }
 
-function initials(value: string): string {
-  const parts = value.split(/[\s._-]+/).filter(Boolean)
-  const letters = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
-  return (letters || value.slice(0, 2)).toUpperCase()
-}
-
-export default function InvitesPageClient({ initialInvites }: InvitesPageClientProps) {
+export default function InvitesPageClient({
+  initialInvites,
+}: InvitesPageClientProps) {
   const [invites, setInvites] = useState<Invite[]>(initialInvites)
-  const [acceptingId, setAcceptingId] = useState<number | null>(null)
-  const [rejectingId, setRejectingId] = useState<number | null>(null)
+  const [pending, setPending] = useState<PendingInviteAction | null>(null)
   const router = useRouter()
 
   const handleAccept = async (inviteId: number) => {
-    setAcceptingId(inviteId)
+    setPending({ id: inviteId, action: 'accept' })
     try {
       const result = await acceptInvite(inviteId)
       if (!result.success) {
         toast.error(result.error || 'Failed to accept invite')
-        setAcceptingId(null)
+        setPending(null)
         return
       }
+      toast.success('Invite accepted')
+      // Keep the pending spinner while navigating into the group.
       router.push(`/groups/${result.group?.id}`)
     } catch {
       toast.error('An error occurred while accepting the invite')
-      setAcceptingId(null)
+      setPending(null)
     }
   }
 
   const handleReject = async (inviteId: number) => {
-    setRejectingId(inviteId)
+    setPending({ id: inviteId, action: 'reject' })
     try {
       const result = await rejectInvite(inviteId)
       if (!result.success) {
         toast.error(result.error || 'Failed to reject invite')
-        setRejectingId(null)
         return
       }
-      setInvites(invites.filter((invite) => invite.id !== inviteId))
+      setInvites((prev) => prev.filter((invite) => invite.id !== inviteId))
+      toast.success('Invite rejected')
     } catch {
       toast.error('An error occurred while rejecting the invite')
     } finally {
-      setRejectingId(null)
+      setPending(null)
     }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-fit px-2"
-          onClick={() => router.push('/groups')}
-        >
-          <ArrowLeft />
-          Back to groups
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Invitations
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            You have {invites.length} pending{' '}
-            {invites.length === 1 ? 'invitation' : 'invitations'}.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Group invites"
+        description={
+          invites.length > 0
+            ? `You have ${invites.length} pending ${
+                invites.length === 1 ? 'invitation' : 'invitations'
+              }.`
+            : 'Accept or decline invitations to join groups.'
+        }
+        breadcrumbs={[
+          { label: 'Groups', href: '/groups' },
+          { label: 'Invites' },
+        ]}
+      />
 
       {invites.length === 0 ? (
         <Empty className="border border-dashed">
@@ -127,51 +96,21 @@ export default function InvitesPageClient({ initialInvites }: InvitesPageClientP
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={() => router.push('/groups')}>View my groups</Button>
+            <Button asChild>
+              <Link href="/groups">View my groups</Link>
+            </Button>
           </EmptyContent>
         </Empty>
       ) : (
         <ItemGroup className="gap-3">
           {invites.map((invite) => (
-            <Item key={invite.id} variant="outline" className="flex-wrap">
-              <ItemMedia>
-                <Avatar className="size-10">
-                  <AvatarFallback>{initials(invite.group.name)}</AvatarFallback>
-                </Avatar>
-              </ItemMedia>
-              <ItemContent>
-                <ItemTitle>{invite.group.name}</ItemTitle>
-                <ItemDescription>
-                  Invited by {invite.sender.email}
-                </ItemDescription>
-                <ItemDescription>
-                  {invite.group.members.length}{' '}
-                  {invite.group.members.length === 1 ? 'member' : 'members'} ·{' '}
-                  {new Date(invite.createdAt).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'numeric',
-                    day: 'numeric',
-                  })}
-                </ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleReject(invite.id)}
-                  disabled={acceptingId === invite.id || rejectingId === invite.id}
-                >
-                  {rejectingId === invite.id ? 'Rejecting…' : 'Reject'}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => handleAccept(invite.id)}
-                  disabled={acceptingId === invite.id || rejectingId === invite.id}
-                >
-                  {acceptingId === invite.id ? 'Accepting…' : 'Accept'}
-                </Button>
-              </ItemActions>
-            </Item>
+            <InviteRow
+              key={invite.id}
+              invite={invite}
+              pending={pending}
+              onAccept={() => handleAccept(invite.id)}
+              onReject={() => handleReject(invite.id)}
+            />
           ))}
         </ItemGroup>
       )}
