@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { Trash2, CircleAlert } from 'lucide-react'
-import { Alert, AlertTitle } from '@/components/ui/alert'
+import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Dialog,
   DialogContent,
@@ -30,8 +32,8 @@ type DeleteDebtModalProps = {
     id: number
     amount: number
     description: string | null
-    borrower: { name: string; email: string }
-    lender: { name: string; email: string }
+    borrower: { name: string | null; email: string }
+    lender: { name: string | null; email: string }
   } | null
   isLender: boolean
 }
@@ -67,6 +69,7 @@ export function DeleteDebtModal({
       })
 
       if (result.success) {
+        toast.success('Deletion request sent')
         onSuccess()
         handleClose()
       } else {
@@ -106,7 +109,8 @@ export function DeleteDebtModal({
         {error && (
           <Alert variant="destructive">
             <CircleAlert />
-            <AlertTitle>{error}</AlertTitle>
+            <AlertTitle>Something went wrong</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
@@ -174,6 +178,7 @@ export function DeleteDebtModal({
             onClick={handleConfirm}
             disabled={submitting}
           >
+            {submitting && <Spinner />}
             {submitting ? 'Requesting…' : 'Request deletion'}
           </Button>
         </DialogFooter>

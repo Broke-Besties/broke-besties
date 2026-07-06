@@ -1,11 +1,43 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, X, CircleAlert } from 'lucide-react'
-import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Bell, Check, ChevronDown, ChevronsUpDown, CircleAlert } from 'lucide-react'
+import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -22,6 +54,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 import { createStandaloneDebt, searchFriendsForDebt, getRecentFriendsForDebt, getUserGroups } from './actions'
 
 type Friend = {
@@ -49,7 +82,8 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   const [selectedGroupId, setSelectedGroupId] = useState<string>('')
   const [groups, setGroups] = useState<Group[]>([])
 
-  // Alert fields
+  // Reminder fields (collapsed by default)
+  const [reminderOpen, setReminderOpen] = useState(false)
   const [alertMessage, setAlertMessage] = useState('')
   const [alertDeadline, setAlertDeadline] = useState('')
   const [alertFrequency, setAlertFrequency] = useState<string>('off')
@@ -59,6 +93,8 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
 
+  // Friend combobox state
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Friend[]>([])
   const [recentFriends, setRecentFriends] = useState<Friend[]>([])
@@ -147,7 +183,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
         setUploadingReceipt(true)
         const formData = new FormData()
         formData.append('file', receiptFile)
-        
+
         // If there's a group, associate receipt with the group
         if (selectedGroupId && selectedGroupId !== 'none') {
           formData.append('groupId', selectedGroupId)
@@ -197,6 +233,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
             // Don't fail the whole operation if alert creation fails
           }
         }
+        toast.success('Debt created')
         onSuccess()
         handleClose()
       } else {
@@ -214,11 +251,13 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
     setDescription('')
     setBorrower(null)
     setSelectedGroupId('')
+    setReminderOpen(false)
     setAlertMessage('')
     setAlertDeadline('')
     setAlertFrequency('off')
     setReceiptFile(null)
     setReceiptPreview(null)
+    setPickerOpen(false)
     setSearchQuery('')
     setSearchResults([])
     setError('')
@@ -227,12 +266,12 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
 
   const selectBorrower = (friend: Friend) => {
     setBorrower(friend)
+    setPickerOpen(false)
     setSearchQuery('')
     setSearchResults([])
   }
 
   const displayResults = searchQuery.trim() ? searchResults : recentFriends
-  const showDropdown = searchQuery.trim() || (!borrower && recentFriends.length > 0)
 
   return (
     <Dialog
@@ -249,107 +288,124 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <CircleAlert />
-              <AlertTitle>{error}</AlertTitle>
-            </Alert>
-          )}
+        {error && (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>Something went wrong</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          {/* Friend Search */}
-          <div className="space-y-2">
-            <Label htmlFor="friendSearch">Who owes you?</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="friendSearch"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search friends by name or email..."
-                className="pl-9"
-                autoComplete="off"
-              />
-            </div>
-
-            {showDropdown && (
-              <div className="max-h-40 overflow-y-auto rounded-lg border bg-background shadow-sm">
-                {searching ? (
-                  <div className="p-3 text-center text-sm text-muted-foreground">Searching...</div>
-                ) : displayResults.length > 0 ? (
-                  <>
-                    {!searchQuery.trim() && (
-                      <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b">
-                        Recent friends
+        <FieldGroup className="gap-4">
+          {/* Friend combobox */}
+          <Field>
+            <FieldLabel htmlFor="borrowerPicker">Who owes you?</FieldLabel>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="borrowerPicker"
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={pickerOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  {borrower ? (
+                    <span className="truncate">
+                      {borrower.name || borrower.email}
+                      <span className="ml-2 text-muted-foreground">
+                        {borrower.email}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      Select a friend…
+                    </span>
+                  )}
+                  <ChevronsUpDown className="text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-(--radix-popover-trigger-width) p-0"
+                align="start"
+              >
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Search friends by name or email…"
+                    value={searchQuery}
+                    onValueChange={setSearchQuery}
+                  />
+                  <CommandList>
+                    {searching ? (
+                      <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                        <Spinner />
+                        Searching…
                       </div>
+                    ) : (
+                      <>
+                        <CommandEmpty>No friends found.</CommandEmpty>
+                        {displayResults.length > 0 && (
+                          <CommandGroup
+                            heading={
+                              searchQuery.trim() ? undefined : 'Recent friends'
+                            }
+                          >
+                            {displayResults.map((friend) => (
+                              <CommandItem
+                                key={friend.id}
+                                value={friend.id}
+                                onSelect={() => selectBorrower(friend)}
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium">
+                                    {friend.name || friend.email}
+                                  </div>
+                                  <div className="truncate text-xs text-muted-foreground">
+                                    {friend.email}
+                                  </div>
+                                </div>
+                                <Check
+                                  className={cn(
+                                    'ml-auto',
+                                    borrower?.id === friend.id
+                                      ? 'opacity-100'
+                                      : 'opacity-0'
+                                  )}
+                                />
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </>
                     )}
-                    {displayResults.map((friend) => (
-                      <button
-                        key={friend.id}
-                        type="button"
-                        onClick={() => selectBorrower(friend)}
-                        className="w-full border-b p-3 text-left hover:bg-muted/50 transition-colors last:border-b-0"
-                      >
-                        <div className="font-medium text-sm">{friend.name}</div>
-                        <div className="text-xs text-muted-foreground">{friend.email}</div>
-                      </button>
-                    ))}
-                  </>
-                ) : searchQuery.trim() ? (
-                  <div className="p-3 text-center text-sm text-muted-foreground">No friends found</div>
-                ) : null}
-              </div>
-            )}
-          </div>
-
-          {/* Selected Borrower */}
-          {borrower && (
-            <div className="space-y-2">
-              <Label>Selected Person</Label>
-              <div className="rounded-lg border bg-muted/50 p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-sm">{borrower.name}</div>
-                    <div className="text-xs text-muted-foreground">{borrower.email}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setBorrower(null)}
-                    className="p-1 rounded hover:bg-background transition-colors"
-                  >
-                    <X className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </Field>
 
           {/* Amount */}
-          <div className="space-y-2">
-            <Label htmlFor="amount">Amount ($)</Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => {
-                const value = e.target.value
-                if (value && !isNaN(parseFloat(value))) {
-                  const rounded = Math.round(parseFloat(value) * 100) / 100
-                  setAmount(rounded.toString())
-                } else {
-                  setAmount(value)
-                }
-              }}
-              placeholder="0.00"
-            />
-          </div>
+          <Field>
+            <FieldLabel htmlFor="amount">Amount</FieldLabel>
+            <InputGroup>
+              <InputGroupAddon>
+                <InputGroupText>$</InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput
+                id="amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </InputGroup>
+          </Field>
 
           {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Description (optional)</Label>
+          <Field>
+            <FieldLabel htmlFor="description">Description (optional)</FieldLabel>
             <Textarea
               id="description"
               value={description}
@@ -358,11 +414,11 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
               placeholder="What is this debt for?"
               className="resize-none"
             />
-          </div>
+          </Field>
 
           {/* Group Selector */}
-          <div className="space-y-2">
-            <Label htmlFor="group">Group (optional)</Label>
+          <Field>
+            <FieldLabel htmlFor="group">Group (optional)</FieldLabel>
             <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
               <SelectTrigger id="group">
                 <SelectValue placeholder="Select a group (optional)" />
@@ -376,14 +432,15 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Associate this debt with a group, or leave empty for a personal debt
-            </p>
-          </div>
+            <FieldDescription>
+              Associate this debt with a group, or leave empty for a personal
+              debt
+            </FieldDescription>
+          </Field>
 
           {/* Receipt Upload */}
-          <div className="space-y-2">
-            <Label htmlFor="receipt">Receipt (optional)</Label>
+          <Field>
+            <FieldLabel htmlFor="receipt">Receipt (optional)</FieldLabel>
             <input
               id="receipt"
               type="file"
@@ -400,56 +457,82 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                 />
               </div>
             )}
-          </div>
+          </Field>
 
-          {/* Alert Section */}
-          <div className="space-y-4 pt-4 border-t">
-            <Label className="text-base font-medium">Payment Reminder (optional)</Label>
-            <div className="space-y-2">
-              <Label htmlFor="alertMessage" className="text-sm">Message</Label>
-              <Textarea
-                id="alertMessage"
-                value={alertMessage}
-                onChange={(e) => setAlertMessage(e.target.value)}
-                rows={2}
-                placeholder="e.g., Please pay by end of month"
-                className="resize-none"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="alertDeadline" className="text-sm">Deadline</Label>
-              <Input
-                id="alertDeadline"
-                type="date"
-                value={alertDeadline}
-                onChange={(e) => setAlertDeadline(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="alertFrequency" className="text-sm">Email reminder frequency</Label>
-              <Select value={alertFrequency} onValueChange={setAlertFrequency}>
-                <SelectTrigger id="alertFrequency">
-                  <SelectValue placeholder="Off" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">Off (no email reminders)</SelectItem>
-                  <SelectItem value="7">Weekly (every 7 days)</SelectItem>
-                  <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
-                  <SelectItem value="30">Monthly (every 30 days)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Borrower receives an email reminder on this cadence.
-              </p>
-            </div>
-          </div>
-        </div>
+          <FieldSeparator />
+
+          {/* Payment reminder (progressive disclosure) */}
+          <Collapsible open={reminderOpen} onOpenChange={setReminderOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full justify-between px-2"
+              >
+                <span className="flex items-center gap-2">
+                  <Bell className="size-4 text-muted-foreground" />
+                  Add payment reminder
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'size-4 text-muted-foreground transition-transform',
+                    reminderOpen && 'rotate-180'
+                  )}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <FieldGroup className="gap-4 pt-4">
+                <Field>
+                  <FieldLabel htmlFor="alertMessage">Message</FieldLabel>
+                  <Textarea
+                    id="alertMessage"
+                    value={alertMessage}
+                    onChange={(e) => setAlertMessage(e.target.value)}
+                    rows={2}
+                    placeholder="e.g., Please pay by end of month"
+                    className="resize-none"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="alertDeadline">Deadline</FieldLabel>
+                  <Input
+                    id="alertDeadline"
+                    type="date"
+                    value={alertDeadline}
+                    onChange={(e) => setAlertDeadline(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="alertFrequency">
+                    Email reminder frequency
+                  </FieldLabel>
+                  <Select value={alertFrequency} onValueChange={setAlertFrequency}>
+                    <SelectTrigger id="alertFrequency">
+                      <SelectValue placeholder="Off" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Off (no email reminders)</SelectItem>
+                      <SelectItem value="7">Weekly (every 7 days)</SelectItem>
+                      <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
+                      <SelectItem value="30">Monthly (every 30 days)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Borrower receives an email reminder on this cadence.
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            </CollapsibleContent>
+          </Collapsible>
+        </FieldGroup>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={submitting || uploadingReceipt}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || uploadingReceipt || !borrower || !amount}>
+            {(submitting || uploadingReceipt) && <Spinner />}
             {uploadingReceipt ? 'Uploading…' : submitting ? 'Creating…' : 'Create debt'}
           </Button>
         </DialogFooter>

@@ -1,30 +1,37 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
-  Plus,
-  TrendingUp,
-  TrendingDown,
-  Scale,
-  Bell,
-  Search,
-  CheckCircle2,
-  Pencil,
-  Trash2,
-  ArrowUp,
   ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Bell,
+  CheckCircle2,
+  Eye,
+  Inbox,
+  MoreHorizontal,
+  Pencil,
+  Plus,
   Receipt,
+  Scale,
+  Search,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Empty,
   EmptyContent,
@@ -50,9 +57,10 @@ import {
   TableCell,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/page-header'
+import { StatCard } from '@/components/stat-card'
+import { StatusBadge } from '@/components/status-badge'
 import type { User } from '@supabase/supabase-js'
-import Link from 'next/link'
 import { CreateDebtModal } from './create-debt-modal'
 import { ConfirmPaidModal } from './confirm-paid-modal'
 import { ModifyDebtModal } from './modify-debt-modal'
@@ -89,33 +97,88 @@ type DebtsPageClientProps = {
 type ViewFilter = 'all' | 'lending' | 'borrowing'
 type StatusFilter = 'all' | 'pending' | 'paid'
 type ModalType = 'create' | 'paid' | 'modify' | 'delete' | null
-type SortOrder = 'desc' | 'asc'
+type SortKey = 'date' | 'amount'
+type SortDir = 'desc' | 'asc'
+
+function SortHeaderButton({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string
+  active: boolean
+  dir: SortDir
+  onClick: () => void
+  className?: string
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      className={className}
+      aria-label={`Sort by ${label.toLowerCase()}`}
+    >
+      {label}
+      {active ? (
+        dir === 'desc' ? (
+          <ArrowDown className="size-3" />
+        ) : (
+          <ArrowUp className="size-3" />
+        )
+      ) : (
+        <ArrowUpDown className="size-3" />
+      )}
+    </Button>
+  )
+}
 
 export default function DebtsPageClient({
   initialDebts,
   currentUser,
   pendingTransactionsCount,
 }: DebtsPageClientProps) {
-  const [debts] = useState<Debt[]>(initialDebts)
+  const debts = initialDebts
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [activeModal, setActiveModal] = useState<ModalType>(null)
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Command palette entry point: /debts?new=1 opens the create dialog.
+  const wantsCreate = searchParams.get('new') === '1'
+  const [handledCreateParam, setHandledCreateParam] = useState(false)
+  if (wantsCreate && !handledCreateParam) {
+    setHandledCreateParam(true)
+    setActiveModal('create')
+  }
+  if (!wantsCreate && handledCreateParam) {
+    setHandledCreateParam(false)
+  }
+  useEffect(() => {
+    if (wantsCreate) {
+      router.replace('/debts', { scroll: false })
+    }
+  }, [wantsCreate, router])
 
   const lendingDebts = debts.filter((debt) => debt.lender.id === currentUser.id)
   const borrowingDebts = debts.filter(
     (debt) => debt.borrower.id === currentUser.id
   )
 
-  const totalLending = lendingDebts
-    .filter((d) => d.status === 'pending')
-    .reduce((sum, debt) => sum + debt.amount, 0)
-  const totalBorrowing = borrowingDebts
-    .filter((d) => d.status === 'pending')
-    .reduce((sum, debt) => sum + debt.amount, 0)
+  const pendingLending = lendingDebts.filter((d) => d.status === 'pending')
+  const pendingBorrowing = borrowingDebts.filter((d) => d.status === 'pending')
+  const totalLending = pendingLending.reduce((sum, debt) => sum + debt.amount, 0)
+  const totalBorrowing = pendingBorrowing.reduce(
+    (sum, debt) => sum + debt.amount,
+    0
+  )
   const netBalance = totalLending - totalBorrowing
 
   let filteredDebts = debts
@@ -144,13 +207,20 @@ export default function DebtsPageClient({
   }
 
   filteredDebts = [...filteredDebts].sort((a, b) => {
-    const dateA = new Date(a.createdAt).getTime()
-    const dateB = new Date(b.createdAt).getTime()
-    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB
+    const valueA =
+      sortKey === 'date' ? new Date(a.createdAt).getTime() : a.amount
+    const valueB =
+      sortKey === 'date' ? new Date(b.createdAt).getTime() : b.amount
+    return sortDir === 'desc' ? valueB - valueA : valueA - valueB
   })
 
-  const toggleSortOrder = () => {
-    setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
   }
 
   const handleAction = (action: ModalType, debt: Debt) => {
@@ -169,114 +239,54 @@ export default function DebtsPageClient({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Debts
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Track money you&apos;ve lent and borrowed.
-          </p>
-        </div>
-        <Button onClick={() => setActiveModal('create')}>
-          <Plus />
-          Add debt
-        </Button>
-      </div>
+      <PageHeader
+        title="Debts"
+        description="Track money you've lent and borrowed."
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link href="/debts/requests">
+                <Inbox />
+                Requests
+                {pendingTransactionsCount > 0 && (
+                  <Badge variant="secondary">{pendingTransactionsCount}</Badge>
+                )}
+              </Link>
+            </Button>
+            <Button onClick={() => setActiveModal('create')}>
+              <Plus />
+              Add debt
+            </Button>
+          </>
+        }
+      />
 
-      {/* Summary cards */}
+      {/* Summary cards (informational only — filtering lives in the toolbar) */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Card
-          role="button"
-          tabIndex={0}
-          onClick={() =>
-            setViewFilter(viewFilter === 'lending' ? 'all' : 'lending')
-          }
-          className={cn(
-            'cursor-pointer transition-colors hover:bg-accent/50',
-            viewFilter === 'lending' && 'border-ring ring-1 ring-ring'
-          )}
-        >
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              You are owed
-            </CardTitle>
-            <TrendingUp className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tabular-nums">
-              ${totalLending.toFixed(2)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {lendingDebts.filter((d) => d.status === 'pending').length} pending
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          role="button"
-          tabIndex={0}
-          onClick={() =>
-            setViewFilter(viewFilter === 'borrowing' ? 'all' : 'borrowing')
-          }
-          className={cn(
-            'cursor-pointer transition-colors hover:bg-accent/50',
-            viewFilter === 'borrowing' && 'border-ring ring-1 ring-ring'
-          )}
-        >
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              You owe
-            </CardTitle>
-            <TrendingDown className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tabular-nums">
-              ${totalBorrowing.toFixed(2)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {borrowingDebts.filter((d) => d.status === 'pending').length}{' '}
-              pending
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Net balance
-            </CardTitle>
-            <Scale className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tabular-nums">
-              {netBalance >= 0 ? '+' : '-'}${Math.abs(netBalance).toFixed(2)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {netBalance >= 0 ? 'in your favor' : 'you owe more'}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Link href="/debts/requests" className="block">
-          <Card className="h-full transition-colors hover:bg-accent/50">
-            <CardHeader>
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Pending actions
-              </CardTitle>
-              <Bell className="size-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold tabular-nums">
-                {pendingTransactionsCount}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                awaiting approval
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        <StatCard
+          label="You are owed"
+          value={`$${totalLending.toFixed(2)}`}
+          icon={TrendingUp}
+          hint={`${pendingLending.length} pending`}
+        />
+        <StatCard
+          label="You owe"
+          value={`$${totalBorrowing.toFixed(2)}`}
+          icon={TrendingDown}
+          hint={`${pendingBorrowing.length} pending`}
+        />
+        <StatCard
+          label="Net balance"
+          value={`${netBalance >= 0 ? '+' : '-'}$${Math.abs(netBalance).toFixed(2)}`}
+          icon={Scale}
+          hint={netBalance >= 0 ? 'in your favor' : 'you owe more'}
+        />
+        <StatCard
+          label="Pending requests"
+          value={pendingTransactionsCount}
+          icon={Bell}
+          hint="awaiting approval"
+        />
       </div>
 
       {/* Table */}
@@ -351,28 +361,52 @@ export default function DebtsPageClient({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Type</TableHead>
+                <TableHead className="hidden sm:table-cell">Type</TableHead>
                 <TableHead>Person</TableHead>
-                <TableHead className="hidden sm:table-cell">
+                <TableHead className="hidden md:table-cell">
                   Description
                 </TableHead>
-                <TableHead className="hidden md:table-cell">Group</TableHead>
-                <TableHead className="hidden sm:table-cell">
-                  <button
-                    onClick={toggleSortOrder}
-                    className="flex items-center gap-1 transition-colors hover:text-foreground"
-                  >
-                    Date
-                    {sortOrder === 'desc' ? (
-                      <ArrowDown className="size-3" />
-                    ) : (
-                      <ArrowUp className="size-3" />
-                    )}
-                  </button>
+                <TableHead className="hidden lg:table-cell">Group</TableHead>
+                <TableHead
+                  className="hidden sm:table-cell"
+                  aria-sort={
+                    sortKey === 'date'
+                      ? sortDir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  <SortHeaderButton
+                    label="Date"
+                    active={sortKey === 'date'}
+                    dir={sortDir}
+                    onClick={() => handleSort('date')}
+                    className="-ml-3"
+                  />
                 </TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <TableHead
+                  className="text-right"
+                  aria-sort={
+                    sortKey === 'amount'
+                      ? sortDir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  <SortHeaderButton
+                    label="Amount"
+                    active={sortKey === 'amount'}
+                    dir={sortDir}
+                    onClick={() => handleSort('amount')}
+                    className="-mr-3"
+                  />
+                </TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -388,18 +422,26 @@ export default function DebtsPageClient({
                     className="cursor-pointer"
                     onClick={() => router.push(`/debts/${debt.id}`)}
                   >
-                    <TableCell>
-                      <Badge variant="outline">
-                        {direction === 'lending' ? 'Lending' : 'Borrowing'}
-                      </Badge>
+                    <TableCell className="hidden sm:table-cell">
+                      <StatusBadge
+                        status={direction}
+                        label={direction === 'lending' ? 'Lending' : 'Borrowing'}
+                        className="capitalize"
+                      />
                     </TableCell>
                     <TableCell className="font-medium">
-                      {otherPerson.name || otherPerson.email}
+                      <Link
+                        href={`/debts/${debt.id}`}
+                        className="hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {otherPerson.name || otherPerson.email}
+                      </Link>
                     </TableCell>
-                    <TableCell className="hidden max-w-[200px] truncate text-muted-foreground sm:table-cell">
+                    <TableCell className="hidden max-w-[200px] truncate text-muted-foreground md:table-cell">
                       {debt.description || '-'}
                     </TableCell>
-                    <TableCell className="hidden text-muted-foreground md:table-cell">
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">
                       {debt.group?.name || 'No group'}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
@@ -410,50 +452,56 @@ export default function DebtsPageClient({
                       {debt.amount.toFixed(2)}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          debt.status === 'pending' ? 'secondary' : 'outline'
-                        }
-                      >
-                        {debt.status.charAt(0).toUpperCase() +
-                          debt.status.slice(1)}
-                      </Badge>
+                      <StatusBadge status={debt.status} />
                     </TableCell>
                     <TableCell
                       className="text-right"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {debt.status === 'pending' && (
-                        <div className="flex items-center justify-end gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="size-8"
-                            onClick={() => handleAction('paid', debt)}
-                            title="Mark as paid"
+                            aria-label="Open row actions"
                           >
-                            <CheckCircle2 />
+                            <MoreHorizontal />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => handleAction('modify', debt)}
-                            title="Modify"
-                          >
-                            <Pencil />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => handleAction('delete', debt)}
-                            title="Delete"
-                          >
-                            <Trash2 />
-                          </Button>
-                        </div>
-                      )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/debts/${debt.id}`}>
+                              <Eye />
+                              View
+                            </Link>
+                          </DropdownMenuItem>
+                          {debt.status === 'pending' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleAction('paid', debt)}
+                              >
+                                <CheckCircle2 />
+                                Mark as paid
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleAction('modify', debt)}
+                              >
+                                <Pencil />
+                                Modify
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => handleAction('delete', debt)}
+                              >
+                                <Trash2 />
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 )
