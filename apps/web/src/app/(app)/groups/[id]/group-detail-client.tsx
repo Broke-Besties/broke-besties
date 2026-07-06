@@ -1,90 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ChevronDown,
+  CircleDollarSign,
+  Plus,
+  ReceiptText,
+  Sparkles,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  createInvite,
-  createDebt,
-  createDebts,
-  updateDebtStatus,
-  getRecentFriends,
-  searchFriendsForInvite,
-  addFriendToGroup,
-  cancelInvite,
-} from "./actions";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DebtFormItem } from "./debt-form-item";
-import { GroupDebtsList } from "./group-debts-list";
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
+import { updateDebtStatus } from "./actions";
+import { CreateDebtsSheet } from "./create-debts-sheet";
 import { GroupDebtChart } from "./group-debt-chart";
+import { GroupDebtsList } from "./group-debts-list";
+import { GroupMembers } from "./group-members";
 import { GroupSpendingChart } from "./group-spending-chart";
-
-type Member = {
-  id: number;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
-
-type Invite = {
-  id: number;
-  invitedEmail: string;
-  invitedBy: string;
-  status: string;
-  sender: {
-    id: string;
-    email: string;
-  };
-};
-
-type Debt = {
-  id: number;
-  amount: number;
-  description: string | null;
-  status: string;
-  createdAt: Date | string;
-  lender: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  borrower: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
-
-type Group = {
-  id: number;
-  name: string;
-  createdAt: Date | string;
-  members: Member[];
-  invites: Invite[];
-};
+import { InviteMemberDialog } from "./invite-member-dialog";
+import type { Debt, Group } from "./types";
 
 type GroupDetailPageClientProps = {
   initialGroup: Group;
@@ -99,44 +57,12 @@ export default function GroupDetailPageClient({
   currentUser,
   groupId,
 }: GroupDetailPageClientProps) {
-  const [group] = useState<Group>(initialGroup);
+  // Use the prop directly so router.refresh()'s new data renders.
+  const group = initialGroup;
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showDebtModal, setShowDebtModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
-
-  // Friend invite state
-  const [inviteTab, setInviteTab] = useState<"friends" | "email">("friends");
-  const [friendSearch, setFriendSearch] = useState("");
-  const [recentFriends, setRecentFriends] = useState<
-    Array<{ id: number; userId: string; name: string; email: string }>
-  >([]);
-  const [searchResults, setSearchResults] = useState<
-    Array<{ id: number; userId: string; name: string; email: string }>
-  >([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [searchingFriends, setSearchingFriends] = useState(false);
-  const [cancellingInviteId, setCancellingInviteId] = useState<number | null>(
-    null
-  );
-  const [creating, setCreating] = useState(false);
-  const [debtForms, setDebtForms] = useState([
-    {
-      amount: "",
-      description: "",
-      borrowerId: "",
-      borrower: null as { id: string; name: string; email: string } | null,
-      alertMessage: "",
-      alertDeadline: "",
-    },
-  ]);
-  const [currentDebtIndex, setCurrentDebtIndex] = useState(0);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showDebtSheet, setShowDebtSheet] = useState(false);
   const router = useRouter();
 
   // Sync debts state with initialDebts when it changes (after refresh)
@@ -144,291 +70,17 @@ export default function GroupDetailPageClient({
     setDebts(initialDebts);
   }, [initialDebts]);
 
-  // Load recent friends when invite modal opens
-  useEffect(() => {
-    if (showInviteModal) {
-      setLoadingFriends(true);
-      getRecentFriends(groupId)
-        .then((result) => {
-          if (result.success) {
-            setRecentFriends(result.friends);
-          }
-        })
-        .finally(() => setLoadingFriends(false));
-    }
-  }, [showInviteModal, groupId]);
-
-  // Search friends with debounce
-  useEffect(() => {
-    if (!friendSearch.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setSearchingFriends(true);
-      searchFriendsForInvite(groupId, friendSearch)
-        .then((result) => {
-          if (result.success) {
-            setSearchResults(result.friends);
-          }
-        })
-        .finally(() => setSearchingFriends(false));
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [friendSearch, groupId]);
-
-  const handleAddFriend = async (friendUserId: string) => {
-    setInviting(true);
-    setError("");
-
-    try {
-      const result = await addFriendToGroup(groupId, friendUserId);
-
-      if (!result.success) {
-        setError(result.error || "Failed to add friend to group");
-        return;
-      }
-
-      setShowInviteModal(false);
-      setFriendSearch("");
-      setInviteTab("friends");
-      router.refresh();
-    } catch {
-      setError("An error occurred while adding friend to group");
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const handleCancelInvite = async (inviteId: number) => {
-    setCancellingInviteId(inviteId);
-    setError("");
-
-    try {
-      const result = await cancelInvite(groupId, inviteId);
-
-      if (!result.success) {
-        setError(result.error || "Failed to cancel invite");
-        return;
-      }
-
-      router.refresh();
-    } catch {
-      setError("An error occurred while cancelling the invite");
-    } finally {
-      setCancellingInviteId(null);
-    }
-  };
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviting(true);
-    setError("");
-
-    try {
-      const result = await createInvite(groupId, inviteEmail);
-
-      if (!result.success) {
-        setError(result.error || "Failed to send invite");
-        return;
-      }
-
-      setShowInviteModal(false);
-      setInviteEmail("");
-      router.refresh();
-    } catch {
-      setError("An error occurred while sending the invite");
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const handleReceiptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-    if (!validTypes.includes(file.type)) {
-      setError("Invalid file type. Only JPEG, PNG, and WebP are allowed");
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File too large. Maximum size is 10MB");
-      return;
-    }
-
-    setReceiptFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setReceiptPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-    setError("");
-  };
-
-  const handleCreateDebts = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreating(true);
-    setError("");
-
-    try {
-      // Validate all debts have required fields
-      for (let i = 0; i < debtForms.length; i++) {
-        const debt = debtForms[i];
-        if (!debt.borrowerId) {
-          setError(`Debt ${i + 1}: Please select a borrower`);
-          setCreating(false);
-          setCurrentDebtIndex(i);
-          return;
-        }
-        if (!debt.amount || parseFloat(debt.amount) <= 0) {
-          setError(`Debt ${i + 1}: Please enter a valid amount`);
-          setCreating(false);
-          setCurrentDebtIndex(i);
-          return;
-        }
-      }
-
-      // Upload receipt if there is one
-      let receiptId: string | undefined;
-      if (receiptFile) {
-        setUploadingReceipt(true);
-        const formData = new FormData();
-        formData.append("file", receiptFile);
-        formData.append("groupId", groupId.toString());
-
-        const uploadResponse = await fetch("/api/receipts/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json();
-          throw new Error(errorData.error || "Failed to upload receipt");
-        }
-
-        const uploadData = await uploadResponse.json();
-        receiptId = uploadData.data.id;
-        setUploadingReceipt(false);
-      }
-
-      // Prepare data for all debts
-      const debtsToCreate = debtForms.map((debt) => ({
-        amount: parseFloat(debt.amount),
-        description: debt.description || undefined,
-        borrowerId: debt.borrowerId,
-        groupId,
-        receiptId,
-      }));
-
-      // Use single or batch create based on number of debts
-      const result =
-        debtsToCreate.length === 1
-          ? await createDebt(debtsToCreate[0])
-          : await createDebts(debtsToCreate);
-
-      if (!result.success) {
-        setError(result.error || "Failed to create debt(s)");
-        setCreating(false);
-        return;
-      }
-
-      // Create alerts for debts that have alert fields
-      if (result.success) {
-        // Handle both single and multiple debts
-        const createdDebts = 'debts' in result && result.debts
-          ? result.debts
-          : 'debt' in result && result.debt
-            ? [result.debt]
-            : [];
-
-        for (let i = 0; i < createdDebts.length; i++) {
-          const debt = createdDebts[i];
-          const debtForm = debtForms[i];
-
-          if (debt && debtForm && (debtForm.alertMessage || debtForm.alertDeadline)) {
-            try {
-              await fetch('/api/alerts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  debtId: debt.id,
-                  message: debtForm.alertMessage || null,
-                  deadline: debtForm.alertDeadline || null,
-                }),
-              });
-            } catch (alertError) {
-              console.error('Failed to create alert:', alertError);
-              // Don't fail the whole operation if alert creation fails
-            }
-          }
-        }
-      }
-
-      // Reset form and refresh
-      setShowDebtModal(false);
-      setDebtForms([
-        {
-          amount: "",
-          description: "",
-          borrowerId: "",
-          borrower: null,
-          alertMessage: "",
-          alertDeadline: "",
-        },
-      ]);
-      setCurrentDebtIndex(0);
-      setReceiptFile(null);
-      setReceiptPreview(null);
-      setCreating(false);
-
-      // Refresh the page to show new debts
-      router.refresh();
-    } catch {
-      setError("An error occurred while creating the debt(s)");
-      setCreating(false);
-    }
-  };
-
-  const addNewDebt = () => {
-    setDebtForms([
-      ...debtForms,
-      {
-        amount: "",
-        description: "",
-        borrowerId: "",
-        borrower: null,
-        alertMessage: "",
-        alertDeadline: "",
-      },
-    ]);
-    setCurrentDebtIndex(debtForms.length);
-  };
-
-  const removeDebt = (index: number) => {
-    if (debtForms.length === 1) return;
-    const newDebts = debtForms.filter((_, i) => i !== index);
-    setDebtForms(newDebts);
-    if (currentDebtIndex >= newDebts.length) {
-      setCurrentDebtIndex(newDebts.length - 1);
-    }
-  };
-
-  const updateDebtForm = (index: number, data: (typeof debtForms)[0]) => {
-    const newDebts = [...debtForms];
-    newDebts[index] = data;
-    setDebtForms(newDebts);
-  };
-
-  const currentDebt = debtForms[currentDebtIndex];
-
-  // Check if all debts are valid
-  const allDebtsValid = debtForms.every(
-    (debt) => debt.borrowerId && debt.amount && parseFloat(debt.amount) > 0
-  );
+  const stats = useMemo(() => {
+    const pending = debts.filter((d) => d.status === "pending");
+    const youOwe = pending
+      .filter((d) => d.borrower.id === currentUser?.id)
+      .reduce((sum, d) => sum + d.amount, 0);
+    const youAreOwed = pending
+      .filter((d) => d.lender.id === currentUser?.id)
+      .reduce((sum, d) => sum + d.amount, 0);
+    const outstanding = pending.reduce((sum, d) => sum + d.amount, 0);
+    return { youOwe, youAreOwed, outstanding };
+  }, [debts, currentUser?.id]);
 
   const handleUpdateStatus = async (debtId: number, newStatus: string) => {
     // Store the old status in case we need to revert
@@ -441,24 +93,7 @@ export default function GroupDetailPageClient({
       )
     );
 
-    try {
-      const result = await updateDebtStatus(debtId, newStatus);
-
-      if (!result.success) {
-        setError(result.error || "Failed to update status");
-        // Revert to old status
-        if (oldStatus) {
-          setDebts((prevDebts) =>
-            prevDebts.map((debt) =>
-              debt.id === debtId ? { ...debt, status: oldStatus } : debt
-            )
-          );
-        }
-        return;
-      }
-    } catch {
-      setError("An error occurred while updating the status");
-      // Revert to old status
+    const revert = () => {
       if (oldStatus) {
         setDebts((prevDebts) =>
           prevDebts.map((debt) =>
@@ -466,51 +101,95 @@ export default function GroupDetailPageClient({
           )
         );
       }
+    };
+
+    try {
+      const result = await updateDebtStatus(debtId, newStatus);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update status");
+        revert();
+        return;
+      }
+
+      toast.success(`Debt marked as ${newStatus}`);
+      router.refresh();
+    } catch {
+      toast.error("An error occurred while updating the status");
+      revert();
     }
   };
 
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4">
-        <Button
-          variant="ghost"
-          className="w-fit px-0"
-          onClick={() => router.push("/groups")}
-        >
-          ← Back to groups
-        </Button>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              {group.name}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Created {new Date(group.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' })}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setShowDebtModal(true)}>
-              Create debts
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => router.push(`/ai?group=${groupId}`)}
-            >
-              <Sparkles className="h-4 w-4" />
-              Create with AI
-            </Button>
-            <Button onClick={() => setShowInviteModal(true)}>
-              Invite member
-            </Button>
-          </div>
-        </div>
-      </div>
+  const createdDate = new Date(group.createdAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Groups", href: "/groups" },
+          { label: group.name },
+        ]}
+        title={group.name}
+        description={`Created ${createdDate} · ${group.members.length} ${
+          group.members.length === 1 ? "member" : "members"
+        }`}
+        actions={
+          <>
+            <Button onClick={() => setShowDebtSheet(true)}>
+              <Plus />
+              Add debt
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  More
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href={`/ai?group=${groupId}`}>
+                    <Sparkles />
+                    Create with AI
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShowInviteDialog(true)}>
+                  <UserPlus />
+                  Invite member
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard
+          label="You owe"
+          value={`$${stats.youOwe.toFixed(2)}`}
+          icon={ArrowUpRight}
+        />
+        <StatCard
+          label="You're owed"
+          value={`$${stats.youAreOwed.toFixed(2)}`}
+          icon={ArrowDownLeft}
+        />
+        <StatCard
+          label="Outstanding"
+          value={`$${stats.outstanding.toFixed(2)}`}
+          icon={CircleDollarSign}
+          hint="All pending debts in this group"
+        />
+        <StatCard
+          label="Members"
+          value={group.members.length}
+          icon={Users}
+        />
+      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -519,423 +198,67 @@ export default function GroupDetailPageClient({
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <GroupDebtChart
-            members={group.members}
-            debts={debts}
-            currentUserId={currentUser?.id}
-          />
-
-          <GroupSpendingChart debts={debts} />
-
-          <GroupDebtsList
-            debts={debts}
-            currentUser={currentUser}
-            onUpdateStatus={handleUpdateStatus}
-          />
+          {debts.length === 0 ? (
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <ReceiptText />
+                </EmptyMedia>
+                <EmptyTitle>No debts yet</EmptyTitle>
+                <EmptyDescription>
+                  Track who owes who by adding the first debt to this group.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={() => setShowDebtSheet(true)}>
+                  <Plus />
+                  Add the first debt
+                </Button>
+              </EmptyContent>
+            </Empty>
+          ) : (
+            <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+              <div className="space-y-6">
+                <GroupDebtChart
+                  members={group.members}
+                  debts={debts}
+                  currentUserId={currentUser?.id}
+                />
+                <GroupSpendingChart debts={debts} />
+              </div>
+              <GroupDebtsList
+                debts={debts}
+                currentUser={currentUser}
+                onUpdateStatus={handleUpdateStatus}
+              />
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="members" className="space-y-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="flex-row items-start justify-between space-y-0">
-                <div className="space-y-1">
-                  <CardTitle>Members</CardTitle>
-                  <CardDescription>
-                    {group.members.length} total
-                  </CardDescription>
-                </div>
-                <Badge variant="secondary">{group.members.length}</Badge>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {group.members.map((member) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between rounded-md border bg-background p-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">
-                        {member.user.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {member.user.email}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-start justify-between space-y-0">
-                <div className="space-y-1">
-                  <CardTitle>Pending invites</CardTitle>
-                  <CardDescription>
-                    {group.invites.length} outstanding
-                  </CardDescription>
-                </div>
-                <Badge variant="secondary">{group.invites.length}</Badge>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {group.invites.length === 0 ? (
-                  <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
-                    No pending invites.
-                  </div>
-                ) : (
-                  group.invites.map((invite) => (
-                    <div
-                      key={invite.id}
-                      className="flex items-center justify-between rounded-md border bg-background p-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">
-                          {invite.invitedEmail}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Invited by {invite.sender.email}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
-                        >
-                          Pending
-                        </Badge>
-                        {currentUser?.id === invite.invitedBy && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            disabled={cancellingInviteId === invite.id}
-                            onClick={() => handleCancelInvite(invite.id)}
-                          >
-                            {cancellingInviteId === invite.id
-                              ? "Cancelling…"
-                              : "Cancel"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
+        <TabsContent value="members">
+          <GroupMembers
+            groupId={groupId}
+            members={group.members}
+            invites={group.invites}
+            currentUserId={currentUser?.id}
+            onInviteMember={() => setShowInviteDialog(true)}
+          />
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Invite member</DialogTitle>
-          </DialogHeader>
-          <div>
-              {/* Tab Switcher */}
-              <div className="mb-4 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={inviteTab === "friends" ? "default" : "outline"}
-                  onClick={() => setInviteTab("friends")}
-                >
-                  Friends
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={inviteTab === "email" ? "default" : "outline"}
-                  onClick={() => setInviteTab("email")}
-                >
-                  Email
-                </Button>
-              </div>
+      <InviteMemberDialog
+        groupId={groupId}
+        open={showInviteDialog}
+        onOpenChange={setShowInviteDialog}
+      />
 
-              {/* Friends Tab */}
-              {inviteTab === "friends" && (
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="friendSearch">Search friends</Label>
-                    <Input
-                      id="friendSearch"
-                      type="text"
-                      value={friendSearch}
-                      onChange={(e) => setFriendSearch(e.target.value)}
-                      placeholder="Search by name or email..."
-                    />
-                  </div>
-
-                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {loadingFriends ? (
-                      <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                        Loading friends...
-                      </div>
-                    ) : friendSearch.trim() ? (
-                      // Show search results
-                      searchingFriends ? (
-                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                          Searching...
-                        </div>
-                      ) : searchResults.length === 0 ? (
-                        <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                          No friends found matching your search.
-                        </div>
-                      ) : (
-                        searchResults.map((friend) => (
-                          <div
-                            key={friend.id}
-                            className="flex items-center justify-between rounded-md border bg-background p-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">
-                                {friend.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {friend.email}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              disabled={inviting}
-                              onClick={() => handleAddFriend(friend.userId)}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        ))
-                      )
-                    ) : // Show recent friends
-                    recentFriends.length === 0 ? (
-                      <div className="rounded-md border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                        No friends available to add. Add friends or use the
-                        Email tab to invite by email.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-sm font-medium text-muted-foreground">
-                          Recent friends
-                        </div>
-                        {recentFriends.map((friend) => (
-                          <div
-                            key={friend.id}
-                            className="flex items-center justify-between rounded-md border bg-background p-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">
-                                {friend.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {friend.email}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              disabled={inviting}
-                              onClick={() => handleAddFriend(friend.userId)}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setShowInviteModal(false);
-                        setFriendSearch("");
-                        setInviteTab("friends");
-                        setError("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </DialogFooter>
-                </div>
-              )}
-
-              {/* Email Tab */}
-              {inviteTab === "email" && (
-                <form onSubmit={handleInvite} className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="inviteEmail">Email address</Label>
-                    <Input
-                      id="inviteEmail"
-                      type="email"
-                      required
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="member@example.com"
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setShowInviteModal(false);
-                        setInviteEmail("");
-                        setInviteTab("friends");
-                        setError("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={inviting}>
-                      {inviting ? "Sending…" : "Send invite"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              )}
-            </div>
-          </DialogContent>
-      </Dialog>
-
-      <Dialog open={showDebtModal} onOpenChange={setShowDebtModal}>
-          <DialogContent className="flex max-h-[90vh] flex-col overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                Create new debt
-                {debtForms.length > 1 &&
-                  ` (${currentDebtIndex + 1} of ${debtForms.length})`}
-              </DialogTitle>
-              <DialogDescription>
-                Create a debt with a group member. They will owe you this amount.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              {error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              <DebtFormItem
-                debtData={currentDebt}
-                groupId={groupId}
-                currentUserId={currentUser?.id}
-                onChange={(data) => updateDebtForm(currentDebtIndex, data)}
-              />
-
-              {/* Receipt Upload (shown on all debts - same receipt applies to all) */}
-              <div className="space-y-2">
-                <Label htmlFor="receipt">Receipt (optional)</Label>
-                {currentDebtIndex === 0 ? (
-                  <input
-                    id="receipt"
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={handleReceiptFileSelect}
-                    className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {receiptFile ? `Using receipt: ${receiptFile.name}` : 'No receipt uploaded'}
-                  </p>
-                )}
-                {receiptPreview && (
-                  <div className="mt-2 rounded-md border bg-muted/50 p-2">
-                    <img
-                      src={receiptPreview}
-                      alt="Receipt preview"
-                      className="h-32 w-auto object-contain"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {debtForms.length > 1 && (
-                <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))
-                    }
-                    disabled={currentDebtIndex === 0}
-                  >
-                    ← Prev
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Debt {currentDebtIndex + 1} of {debtForms.length}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentDebtIndex(
-                        Math.min(debtForms.length - 1, currentDebtIndex + 1)
-                      )
-                    }
-                    disabled={currentDebtIndex === debtForms.length - 1}
-                  >
-                    Next →
-                  </Button>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addNewDebt}
-                  className="flex-1"
-                >
-                  + Add another debt
-                </Button>
-                {debtForms.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => removeDebt(currentDebtIndex)}
-                  >
-                    Remove this debt
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDebtModal(false);
-                  setDebtForms([
-                    {
-                      amount: "",
-                      description: "",
-                      borrowerId: "",
-                      borrower: null,
-                      alertMessage: "",
-                      alertDeadline: "",
-                    },
-                  ]);
-                  setCurrentDebtIndex(0);
-                  setError("");
-                }}
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateDebts}
-                disabled={creating || !allDebtsValid}
-              >
-                {creating
-                  ? "Creating…"
-                  : `Create ${debtForms.length} debt${
-                      debtForms.length > 1 ? "s" : ""
-                    }`}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-      </Dialog>
+      <CreateDebtsSheet
+        groupId={groupId}
+        members={group.members}
+        currentUserId={currentUser?.id}
+        open={showDebtSheet}
+        onOpenChange={setShowDebtSheet}
+      />
     </div>
   );
 }

@@ -1,10 +1,8 @@
 import { getUser } from "@/lib/supabase";
 import { groupService } from "@/services/group.service";
 import { debtService } from "@/services/debt.service";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import GroupDetailPageClient from "./group-detail-client";
-import { Suspense } from "react";
-import { AppLoading } from "@/components/app-loading";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -15,7 +13,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
   const groupId = parseInt(id);
 
   if (isNaN(groupId)) {
-    redirect("/groups");
+    notFound();
   }
 
   const user = await getUser();
@@ -24,24 +22,25 @@ export default async function GroupDetailPage({ params }: PageProps) {
     redirect("/login");
   }
 
+  let group: Awaited<ReturnType<typeof groupService.getGroupById>>;
+  let debts: Awaited<ReturnType<typeof debtService.getGroupDebts>>;
+
   try {
-    const [group, debts] = await Promise.all([
+    [group, debts] = await Promise.all([
       groupService.getGroupById(groupId, user.id),
       debtService.getGroupDebts(groupId, user.id),
     ]);
-
-    return (
-      <Suspense fallback={<AppLoading label="Loading group…" />}>
-        <GroupDetailPageClient
-          initialGroup={group}
-          initialDebts={debts}
-          currentUser={user}
-          groupId={groupId}
-        />
-      </Suspense>
-    );
   } catch (error) {
     console.error("Group detail error:", error);
-    redirect("/groups");
+    notFound();
   }
+
+  return (
+    <GroupDetailPageClient
+      initialGroup={group}
+      initialDebts={debts}
+      currentUser={user}
+      groupId={groupId}
+    />
+  );
 }

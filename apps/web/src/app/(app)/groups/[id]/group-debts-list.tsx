@@ -1,31 +1,30 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { MoreHorizontal, ReceiptText } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
+import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { StatusBadge } from '@/components/status-badge'
 import { cn } from '@/lib/utils'
-
-type Debt = {
-  id: number
-  amount: number
-  description: string | null
-  status: string
-  createdAt: Date | string
-  lender: {
-    id: string
-    name: string
-    email: string
-  }
-  borrower: {
-    id: string
-    name: string
-    email: string
-  }
-}
+import type { Debt } from './types'
 
 type GroupDebtsListProps = {
   debts: Debt[]
@@ -37,7 +36,6 @@ type FilterStatus = 'all' | 'pending' | 'paid'
 
 export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebtsListProps) {
   const [filter, setFilter] = useState<FilterStatus>('all')
-  const router = useRouter()
 
   const filteredDebts = debts.filter(debt => {
     if (filter === 'all') return true
@@ -52,131 +50,107 @@ export function GroupDebtsList({ debts, currentUser, onUpdateStatus }: GroupDebt
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between space-y-0">
-        <div className="space-y-1">
-          <CardTitle>Group debts</CardTitle>
-          <CardDescription>{debts.length} total</CardDescription>
-        </div>
-        <Badge variant="secondary">{debts.length}</Badge>
+      <CardHeader>
+        <CardTitle>Group debts</CardTitle>
+        <CardDescription>
+          {debts.length} {debts.length === 1 ? 'debt' : 'debts'} in this group
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Filter buttons */}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilter('all')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              filter === 'all'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            )}
-          >
-            All ({statusCounts.all})
-          </button>
-          <button
-            onClick={() => setFilter('pending')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              filter === 'pending'
-                ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Pending ({statusCounts.pending})
-          </button>
-          <button
-            onClick={() => setFilter('paid')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              filter === 'paid'
-                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Paid ({statusCounts.paid})
-          </button>
-        </div>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={filter}
+          onValueChange={(value) => value && setFilter(value as FilterStatus)}
+        >
+          <ToggleGroupItem value="all">All ({statusCounts.all})</ToggleGroupItem>
+          <ToggleGroupItem value="pending">Pending ({statusCounts.pending})</ToggleGroupItem>
+          <ToggleGroupItem value="paid">Paid ({statusCounts.paid})</ToggleGroupItem>
+        </ToggleGroup>
 
-        {/* Debts list */}
-        <div className="space-y-3">
-          {filteredDebts.length === 0 ? (
-            <div className="rounded-md border bg-muted/40 p-8 text-center text-sm text-muted-foreground">
-              {filter === 'all' ? 'No debts in this group yet.' : `No ${filter} debts.`}
-            </div>
-          ) : (
-            filteredDebts.map((debt) => {
+        {filteredDebts.length === 0 ? (
+          <Empty className="border border-dashed">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ReceiptText />
+              </EmptyMedia>
+              <EmptyTitle>
+                {filter === 'all' ? 'No debts yet' : `No ${filter} debts`}
+              </EmptyTitle>
+              <EmptyDescription>
+                {filter === 'all'
+                  ? 'Debts in this group will show up here.'
+                  : 'Try a different status filter.'}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <ItemGroup className="gap-2">
+            {filteredDebts.map((debt) => {
               const isLender = currentUser?.id === debt.lender.id
               const isBorrower = currentUser?.id === debt.borrower.id
               const isInvolved = isLender || isBorrower
+              const direction = isLender
+                ? `You lent to ${debt.borrower.name || debt.borrower.email}`
+                : isBorrower
+                  ? `You borrowed from ${debt.lender.name || debt.lender.email}`
+                  : `${debt.lender.name || debt.lender.email} → ${debt.borrower.name || debt.borrower.email}`
               return (
-                <div
-                  key={debt.id}
-                  onClick={() => router.push(`/debts/${debt.id}`)}
-                  className="cursor-pointer rounded-lg border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <div className="font-medium">
-                        {isLender ? (
-                          <span>
-                            <span className="text-emerald-600 dark:text-emerald-400">You lent to</span> {debt.borrower.name || debt.borrower.email}
-                          </span>
-                        ) : isBorrower ? (
-                          <span>
-                            <span className="text-rose-600 dark:text-rose-400">You borrowed from</span> {debt.lender.name || debt.lender.email}
-                          </span>
-                        ) : (
-                          <span>
-                            <span className="text-muted-foreground">{debt.lender.name || debt.lender.email}</span>
-                            {' → '}
-                            <span className="text-muted-foreground">{debt.borrower.name || debt.borrower.email}</span>
-                          </span>
+                <div key={debt.id} className="flex items-center gap-1">
+                  <Item asChild variant="outline" size="sm" className="min-w-0 flex-1">
+                    <Link href={`/debts/${debt.id}`}>
+                      <ItemContent>
+                        <ItemTitle>{direction}</ItemTitle>
+                        {debt.description && (
+                          <ItemDescription>{debt.description}</ItemDescription>
                         )}
+                      </ItemContent>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span
+                          className={cn(
+                            'font-semibold tabular-nums',
+                            !isInvolved && 'text-muted-foreground'
+                          )}
+                        >
+                          ${debt.amount.toFixed(2)}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={debt.status} />
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(debt.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
-                      {debt.description && <div className="text-sm text-muted-foreground">{debt.description}</div>}
-                    </div>
-
-                    <div className="shrink-0 text-right">
-                      <div className={cn("text-lg font-semibold", !isInvolved && "text-muted-foreground")}>${debt.amount.toFixed(2)}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(debt.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-                        debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                    </Link>
+                  </Item>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon-sm" aria-label="Debt actions">
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={`/debts/${debt.id}`}>View debt</Link>
+                      </DropdownMenuItem>
+                      {debt.status === 'pending' ? (
+                        <DropdownMenuItem onSelect={() => onUpdateStatus(debt.id, 'paid')}>
+                          Mark as paid
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onSelect={() => onUpdateStatus(debt.id, 'pending')}>
+                          Mark as pending
+                        </DropdownMenuItem>
                       )}
-                    >
-                      {debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                    </Badge>
-
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Select
-                        value={debt.status}
-                        onValueChange={(value) => onUpdateStatus(debt.id, value)}
-                      >
-                        <SelectTrigger size="sm" className="w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="paid">Paid</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               )
-            })
-          )}
-        </div>
+            })}
+          </ItemGroup>
+        )}
       </CardContent>
     </Card>
   )
 }
-

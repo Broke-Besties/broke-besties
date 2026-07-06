@@ -17,37 +17,12 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { chartColor } from "@/lib/chart-colors";
-import { cn } from "@/lib/utils";
+import type { Debt, Member } from "./types";
 
 type StatusFilter = "all" | "pending" | "paid";
 type ViewFilter = "all" | "owe" | "owed";
-
-type Member = {
-  id: number;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
-
-type Debt = {
-  id: number;
-  amount: number;
-  description: string | null;
-  status: string;
-  lender: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  borrower: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
 
 type GroupDebtChartProps = {
   members: Member[];
@@ -102,21 +77,6 @@ export function GroupDebtChart({
     }),
     [debts]
   );
-
-  // Calculate amounts for quick view buttons
-  const viewAmounts = useMemo(() => {
-    if (!currentUserId) return { owe: 0, owed: 0 };
-
-    const pendingDebts = debts.filter((d) => d.status === "pending");
-    const owe = pendingDebts
-      .filter((d) => d.borrower.id === currentUserId)
-      .reduce((sum, d) => sum + d.amount, 0);
-    const owed = pendingDebts
-      .filter((d) => d.lender.id === currentUserId)
-      .reduce((sum, d) => sum + d.amount, 0);
-
-    return { owe, owed };
-  }, [debts, currentUserId]);
 
   // Calculate net balances based on all filters
   const balances = useMemo(() => {
@@ -221,85 +181,48 @@ export function GroupDebtChart({
         <CardDescription>Who owes who in this group</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Quick view buttons */}
-        {currentUserId && (
-          <div className="space-y-2">
-            <span className="text-sm font-medium">Quick view</span>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setViewFilter("all")}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  viewFilter === "all"
-                    ? "bg-primary/90 text-primary-foreground"
-                    : "bg-muted hover:bg-muted/70"
-                )}
+        {/* View + status filters */}
+        <div className="flex flex-wrap gap-x-6 gap-y-4">
+          {currentUserId && (
+            <div className="space-y-2">
+              <span className="text-sm font-medium">View</span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={viewFilter}
+                onValueChange={(value) =>
+                  value && setViewFilter(value as ViewFilter)
+                }
               >
-                All debts
-              </button>
-              <button
-                onClick={() => setViewFilter("owe")}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  viewFilter === "owe"
-                    ? "bg-rose-200/60 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200"
-                    : "bg-rose-100/50 text-rose-800 hover:bg-rose-200/50 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/30"
-                )}
-              >
-                What I owe (${viewAmounts.owe.toFixed(2)})
-              </button>
-              <button
-                onClick={() => setViewFilter("owed")}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  viewFilter === "owed"
-                    ? "bg-emerald-200/60 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200"
-                    : "bg-emerald-100/50 text-emerald-800 hover:bg-emerald-200/50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
-                )}
-              >
-                What I&apos;m owed (${viewAmounts.owed.toFixed(2)})
-              </button>
+                <ToggleGroupItem value="all">All debts</ToggleGroupItem>
+                <ToggleGroupItem value="owe">You owe</ToggleGroupItem>
+                <ToggleGroupItem value="owed">Owed to you</ToggleGroupItem>
+              </ToggleGroup>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Status filter */}
-        <div className="space-y-2">
-          <span className="text-sm font-medium">Status</span>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                statusFilter === "all"
-                  ? "bg-primary/90 text-primary-foreground"
-                  : "bg-muted hover:bg-muted/70"
-              )}
+          <div className="space-y-2">
+            <span className="text-sm font-medium">Status</span>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={statusFilter}
+              onValueChange={(value) =>
+                value && setStatusFilter(value as StatusFilter)
+              }
             >
-              All ({statusCounts.all})
-            </button>
-            <button
-              onClick={() => setStatusFilter("pending")}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                statusFilter === "pending"
-                  ? "bg-amber-200/60 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
-                  : "bg-amber-100/50 text-amber-800 hover:bg-amber-200/50 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/30"
-              )}
-            >
-              Pending ({statusCounts.pending})
-            </button>
-            <button
-              onClick={() => setStatusFilter("paid")}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                statusFilter === "paid"
-                  ? "bg-emerald-200/60 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200"
-                  : "bg-emerald-100/50 text-emerald-800 hover:bg-emerald-200/50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
-              )}
-            >
-              Paid ({statusCounts.paid})
-            </button>
+              <ToggleGroupItem value="all">
+                All ({statusCounts.all})
+              </ToggleGroupItem>
+              <ToggleGroupItem value="pending">
+                Pending ({statusCounts.pending})
+              </ToggleGroupItem>
+              <ToggleGroupItem value="paid">
+                Paid ({statusCounts.paid})
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </div>
 

@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase-client";
-import { Plus, Users } from "lucide-react";
+import { ChevronRight, Mail, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,12 +37,24 @@ import {
 } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { PageHeader } from "@/components/page-header";
 import { createGroup } from "@/app/(app)/groups/actions";
+
+type Member = {
+  id: number;
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+};
 
 type Group = {
   id: number;
   name: string;
   createdAt: Date | string;
+  members: Member[];
   _count: {
     members: number;
   };
@@ -48,6 +62,8 @@ type Group = {
 
 type GroupsPageClientProps = {
   initialGroups: Group[];
+  pendingInviteCount: number;
+  autoOpenCreate?: boolean;
 };
 
 function initials(value: string): string {
@@ -58,10 +74,12 @@ function initials(value: string): string {
 
 export default function GroupsPageClient({
   initialGroups,
+  pendingInviteCount,
+  autoOpenCreate = false,
 }: GroupsPageClientProps) {
   // Use the prop directly so router.refresh()'s new data renders.
   const groups = initialGroups;
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(autoOpenCreate);
   const [newGroupName, setNewGroupName] = useState("");
   const [creating, setCreating] = useState(false);
   const router = useRouter();
@@ -99,6 +117,7 @@ export default function GroupsPageClient({
         toast.error(result.error || "Failed to create group");
         return;
       }
+      toast.success(`Group "${newGroupName}" created`);
       setShowCreateModal(false);
       setNewGroupName("");
       router.refresh();
@@ -111,25 +130,27 @@ export default function GroupsPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            My groups
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your groups and invitations.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => router.push("/invites")}>
-            Invites
-          </Button>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus />
-            Create group
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Groups"
+        description="Split expenses with the people you share costs with."
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link href="/invites">
+                <Mail />
+                Invites
+                {pendingInviteCount > 0 && (
+                  <Badge variant="secondary">{pendingInviteCount}</Badge>
+                )}
+              </Link>
+            </Button>
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus />
+              Create group
+            </Button>
+          </>
+        }
+      />
 
       {groups.length === 0 ? (
         <Empty className="border border-dashed">
@@ -152,41 +173,55 @@ export default function GroupsPageClient({
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => (
-            <Card
+            <Link
               key={group.id}
-              role="button"
-              tabIndex={0}
-              className="cursor-pointer transition hover:bg-accent/40"
-              onClick={() => router.push(`/groups/${group.id}`)}
-              onKeyDown={(e) =>
-                e.key === "Enter" && router.push(`/groups/${group.id}`)
-              }
+              href={`/groups/${group.id}`}
+              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Avatar className="size-10">
-                    <AvatarFallback>{initials(group.name)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <CardTitle className="truncate text-base">
-                      {group.name}
-                    </CardTitle>
-                    <CardDescription>
-                      {group._count.members}{" "}
-                      {group._count.members === 1 ? "member" : "members"}
-                    </CardDescription>
+              <Card className="h-full transition hover:bg-accent/40">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="size-10">
+                      <AvatarFallback>{initials(group.name)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="truncate text-base">
+                        {group.name}
+                      </CardTitle>
+                      <CardDescription>
+                        {group._count.members}{" "}
+                        {group._count.members === 1 ? "member" : "members"}
+                      </CardDescription>
+                    </div>
+                    <ChevronRight
+                      className="size-4 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                Created{" "}
-                {new Date(group.createdAt).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "numeric",
-                  day: "numeric",
-                })}
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2">
+                    <div className="flex -space-x-2">
+                      {group.members.slice(0, 3).map((member) => (
+                        <Avatar
+                          key={member.id}
+                          className="size-7 border-2 border-background"
+                        >
+                          <AvatarFallback className="text-xs">
+                            {initials(member.user.name || member.user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </div>
+                    {group._count.members > 3 && (
+                      <span className="text-xs text-muted-foreground">
+                        +{group._count.members - 3} more
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
@@ -225,7 +260,8 @@ export default function GroupsPageClient({
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={creating}>
-                {creating ? "Creating…" : "Create group"}
+                {creating && <Spinner />}
+                Create group
               </Button>
             </DialogFooter>
           </form>
