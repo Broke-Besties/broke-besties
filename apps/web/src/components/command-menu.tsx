@@ -19,7 +19,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { navItems } from "@/lib/nav";
+import { navItems, settingsNavItems } from "@/lib/nav";
 
 const quickActions = [
   { href: "/debts?new=1", label: "Add debt", icon: CreditCard },
@@ -76,7 +76,7 @@ export function CommandMenu() {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Pages">
-            {navItems.map((item) => (
+            {[...navItems, ...settingsNavItems].map((item) => (
               <CommandItem key={item.href} onSelect={() => go(item.href)}>
                 <item.icon />
                 {item.label}

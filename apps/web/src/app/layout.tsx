@@ -1,12 +1,21 @@
 import type { Metadata } from "next";
-import { Overpass, Geist_Mono } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
-const overpass = Overpass({
+// Self-hosted so we can fix Overpass's vertical metrics: its oversized descent
+// reservation floats text ~0.1em above optical center in every badge/button.
+// Overrides put the baseline at cap-height center (cap ≈ 0.72em).
+const overpass = localFont({
+  src: "../fonts/overpass-latin.woff2",
   variable: "--font-overpass",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "100 900",
+  declarations: [
+    { prop: "ascent-override", value: "85.5%" },
+    { prop: "descent-override", value: "14.5%" },
+    { prop: "line-gap-override", value: "0%" },
+  ],
 });
 
 const geistMono = Geist_Mono({

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import {
   Sidebar,
@@ -16,7 +17,12 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { navGroups, type NavCounts } from "@/lib/nav";
+import {
+  isSettingsPath,
+  navGroups,
+  settingsNavGroups,
+  type NavCounts,
+} from "@/lib/nav";
 
 export function AppSidebar({ counts }: { counts?: NavCounts }) {
   const pathname = usePathname();
@@ -30,13 +36,32 @@ export function AppSidebar({ counts }: { counts?: NavCounts }) {
     }
   };
 
+  const inSettings = isSettingsPath(pathname);
+  const groups = inSettings ? settingsNavGroups : navGroups;
+
   return (
     <Sidebar
       collapsible="icon"
       className="top-(--header-height)! h-[calc(100svh-var(--header-height))]!"
     >
       <SidebarContent>
-        {navGroups.map((group) => (
+        {inSettings && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Back to app">
+                    <Link href="/dashboard" onClick={handleLinkClick}>
+                      <ArrowLeft />
+                      <span>Back to app</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {groups.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

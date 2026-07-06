@@ -38,7 +38,7 @@ export function AppHeader({
   notifications?: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
+    <header className="fixed inset-x-0 top-0 z-50 flex h-(--header-height) items-center gap-2 border-b bg-background px-4 md:px-6">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 h-4" />
       <Link href="/dashboard" className="flex items-center gap-2">

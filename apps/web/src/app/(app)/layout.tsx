@@ -43,7 +43,7 @@ export default async function AppLayout({
             </Suspense>
           }
         />
-        <div className="flex flex-1">
+        <div className="flex flex-1 pt-(--header-height)">
           <AppSidebar counts={counts} />
           <SidebarInset>
             <main className="flex-1 overflow-auto">
