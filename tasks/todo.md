@@ -10,27 +10,27 @@
 ---
 
 ## Phase 0 — Foundation (sequential, shared contracts)
-- [ ] Install primitives: alert-dialog, popover, command, toggle-group, spinner, collapsible, input-group
-- [ ] Route groups: (marketing) / (auth) / (app); minimal root layout
-- [ ] (app) layout: shell + sidebar badge counts; global error.tsx
-- [ ] Shared components: PageHeader, StatCard, StatusBadge, GoogleIcon, CommandMenu (⌘K)
-- [ ] Sidebar: grouped nav + SidebarRail + badges; Header: all-breakpoint trigger, ⌘K, bell fallback, drop URL breadcrumbs
-- [ ] Per-route loading.tsx skeletons
+- [x] Install primitives: alert-dialog, popover, command, toggle-group, spinner, collapsible, input-group
+- [x] Route groups: (marketing) / (auth) / (app); minimal root layout
+- [x] (app) layout: shell + sidebar badge counts; global error.tsx
+- [x] Shared components: PageHeader, StatCard, StatusBadge, GoogleIcon, CommandMenu (⌘K)
+- [x] Sidebar: grouped nav + SidebarRail + badges; Header: all-breakpoint trigger, ⌘K, bell fallback, drop URL breadcrumbs
+- [x] Per-route loading.tsx skeletons
 
 ## Phase 1 — Areas (parallel where independent)
-- [ ] Auth: (auth) layout + shared AuthForm; Landing: (marketing) header + SectionHeader + Item lists
-- [ ] Debts: list toolbar/table/row-menu; requests inbox rebuild; /debt-transactions redirect; detail page
-- [ ] Groups: list cards→links w/ info scent; detail split (Sheet multi-debt, ToggleGroup filters, Combobox)
-- [ ] Recurring: list nesting fix + Sheet create; detail rebuild + not-found
-- [ ] Tabs + Alerts
-- [ ] Friends + Invites
-- [ ] AI + Profile
-- [ ] Dashboard rebuild (after Debts — reuses create-debt dialog)
+- [x] Auth: (auth) layout + shared AuthForm; Landing: (marketing) header + SectionHeader + Item lists
+- [x] Debts: list toolbar/table/row-menu; requests inbox rebuild; /debt-transactions redirect; detail page
+- [x] Groups: list cards→links w/ info scent; detail split (Sheet multi-debt, ToggleGroup filters, Combobox)
+- [x] Recurring: list nesting fix + Sheet create; detail rebuild + not-found
+- [x] Tabs + Alerts
+- [x] Friends + Invites
+- [x] AI + Profile
+- [x] Dashboard rebuild (after Debts — reuses create-debt dialog)
 
 ## Phase 2 — Verify
-- [ ] tsc --noEmit && next build (changed files clean; see noise note below)
-- [ ] Live click-through / screenshots + self-critique
-- [ ] Fill Review section
+- [x] tsc --noEmit && next build (both clean; all 35 pages generate)
+- [x] Live click-through / screenshots (prod server + local Supabase): dashboard, debts, requests, groups, group detail, login — found and fixed the sidebar-gap overlap bug
+- [x] Fill Review section
 
 ---
 
@@ -43,5 +43,24 @@
 - **Verification noise:** `npx tsc --noEmit` shows pre-existing implicit-`any` in untouched service files and `@prisma/client` errors until `npx prisma generate`. `<img>`/unused-`err` lint warnings pre-existing. Filter these out.
 - **Untracked strays in working tree** (`components/site-header.tsx`, `logout-button.tsx`, `app/api/*` dirs) are stale code from another branch — do not import, do not commit.
 
-## Review
-(to fill after implementation)
+## Review — session ending 2026-07-06
+
+All phases shipped on `feature/ui-redesign` (10 commits). The app now has a real layout
+system: (marketing)/(auth)/(app) route groups, one PageHeader anatomy on every page
+(breadcrumbs with entity names on detail pages), grouped sidebar with pending-count
+badges + rail, ⌘K command palette, per-route skeletons, global error boundary, and
+not-found pages on all detail routes. Interaction idioms are now uniform: links are
+links, destructive actions confirm via AlertDialog, every mutation toasts, empty states
+use Empty with CTAs, filters are Tabs/ToggleGroup/Select, long forms are Sheets. The two
+duplicate approval inboxes merged into /debts/requests (/debt-transactions redirects).
+Verified: tsc + build clean, live screenshot pass on prod server.
+
+**Exception to the no-touch-ui rule (deliberate):** `ui/sidebar.tsx` gap div fixed to use
+its own `gapCollapsible` variable — the custom hover-flyout fork never applied it, so a
+pinned-open sidebar overlapped content by 192px. Bug fix completing the file's own
+documented intent, not a customization.
+
+Known deferrals (noted per area in commit messages): forgot-password flow (backend),
+"Resolved" history tab on the requests inbox (service change), searchUsers combobox for
+recurring borrowers (service is exact-match only), reminder deadline at create time
+(API), dashboard streaming/Suspense-per-section. Color/typography milestone still next.
