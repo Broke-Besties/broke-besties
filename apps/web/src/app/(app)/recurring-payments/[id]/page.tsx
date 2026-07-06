@@ -1,6 +1,6 @@
 import { getUser } from '@/lib/supabase'
 import { recurringPaymentService } from '@/services/recurring-payment.service'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import RecurringDetailClient from './recurring-detail-client'
 
 export default async function RecurringPaymentDetailPage({
@@ -18,10 +18,18 @@ export default async function RecurringPaymentDetailPage({
   const paymentId = parseInt(id, 10)
 
   if (isNaN(paymentId)) {
-    redirect('/recurring-payments')
+    notFound()
   }
 
-  const payment = await recurringPaymentService.getRecurringPaymentById(paymentId, user.id)
+  let payment: Awaited<
+    ReturnType<typeof recurringPaymentService.getRecurringPaymentById>
+  >
+  try {
+    payment = await recurringPaymentService.getRecurringPaymentById(paymentId, user.id)
+  } catch {
+    // Missing id or no permission — render the designed 404 instead of crashing.
+    notFound()
+  }
 
   return <RecurringDetailClient payment={payment} currentUserId={user.id} />
 }

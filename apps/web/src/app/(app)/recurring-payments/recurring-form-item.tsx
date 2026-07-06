@@ -2,14 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import { X, Plus, CircleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 import type { User } from '@supabase/supabase-js'
 
-import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group'
 import {
   Select,
   SelectContent,
@@ -17,9 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { createRecurringPayment } from './actions'
-import { recurringPaymentService } from '@/services/recurring-payment.service'
+import type { recurringPaymentService } from '@/services/recurring-payment.service'
 
 type BorrowerFormData = {
   email: string
@@ -35,6 +59,8 @@ type RecurringFormItemProps = {
   onClose: () => void
   onSuccess: (recurringPayment: RecurringPayment) => void
 }
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function RecurringFormItem({
   currentUser,
@@ -170,9 +196,7 @@ export default function RecurringFormItem({
         return
       }
 
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (borrowersToSubmit.some(b => !emailRegex.test(b.email))) {
+      if (borrowersToSubmit.some(b => !EMAIL_REGEX.test(b.email))) {
         setError('Please enter valid email addresses')
         return
       }
@@ -200,7 +224,7 @@ export default function RecurringFormItem({
           alertFrequency === 'off' ? null : parseInt(alertFrequency, 10)
         if (alertMessage || reminderFrequencyDays) {
           try {
-            await fetch('/api/alerts', {
+            const response = await fetch('/api/alerts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -209,11 +233,14 @@ export default function RecurringFormItem({
                 reminderFrequencyDays,
               }),
             })
-          } catch (alertError) {
-            console.error('Failed to create alert:', alertError)
-            // Don't fail the whole operation if alert creation fails
+            if (!response.ok) {
+              throw new Error('Failed to create alert')
+            }
+          } catch {
+            toast.error('Payment created, but the reminder could not be saved')
           }
         }
+        toast.success('Recurring payment created')
         onSuccess(result.recurringPayment)
         resetForm()
       } else {
@@ -233,235 +260,299 @@ export default function RecurringFormItem({
   }
 
   const totalPercentage = borrowers.reduce((sum, b) => sum + b.splitPercentage, 0)
+  const displayPercentage = Math.round(totalPercentage * 10000) / 10000
   const isPercentageValid = Math.abs(totalPercentage - 100) < 0.01
-  const allBorrowersSelected = isForSelf || borrowers.every(b => b.email)
-  const canSubmit = parseFloat(amount) > 0 && parseInt(frequency) >= 1 && allBorrowersSelected && (isForSelf || isPercentageValid)
+  const allBorrowersValid =
+    isForSelf || borrowers.every(b => EMAIL_REGEX.test(b.email.trim()))
+  const canSubmit =
+    parseFloat(amount) > 0 &&
+    parseInt(frequency) >= 1 &&
+    allBorrowersValid &&
+    (isForSelf || isPercentageValid)
 
   return (
-    <Dialog
+    <Sheet
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) handleClose()
       }}
     >
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create recurring payment</DialogTitle>
-        </DialogHeader>
-        <div>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <CircleAlert />
-              <AlertTitle>{error}</AlertTitle>
-            </Alert>
-          )}
+      <SheetContent side="right" className="w-full gap-0 sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Create recurring payment</SheetTitle>
+          <SheetDescription>
+            Set up a payment that repeats on a fixed cadence and split it with others.
+          </SheetDescription>
+        </SheetHeader>
 
-          <form onSubmit={handleSubmit} className="grid gap-6">
-            <div className="grid gap-3">
-              <Label htmlFor="amount">Total Amount ($)</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                required
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-6 overflow-y-auto px-4 pb-6">
+            {error && (
+              <Alert variant="destructive">
+                <CircleAlert />
+                <AlertTitle>Could not create recurring payment</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-            <div className="grid gap-3">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g., Netflix subscription, Utilities, etc."
-                rows={2}
-              />
-            </div>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="recurring-amount">Total amount</FieldLabel>
+                <InputGroup>
+                  <InputGroupAddon>
+                    <InputGroupText>$</InputGroupText>
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    id="recurring-amount"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    required
+                  />
+                </InputGroup>
+              </Field>
 
-            <div className="grid gap-3">
-              <Label htmlFor="frequency">Frequency (days)</Label>
-              <Input
-                id="frequency"
-                type="number"
-                min="1"
-                value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
-                placeholder="30"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                How often this payment occurs (e.g., 30 for monthly, 7 for weekly)
-              </p>
-            </div>
+              <Field>
+                <FieldLabel htmlFor="recurring-description">
+                  Description (optional)
+                </FieldLabel>
+                <Textarea
+                  id="recurring-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g., Netflix subscription, Utilities, etc."
+                  rows={2}
+                />
+              </Field>
 
-            <div className="grid gap-3">
-              <Label>Payment Type</Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={isForSelf ? "default" : "outline"}
-                  onClick={() => {
-                    setIsForSelf(true)
-                    setBorrowers([{ email: '', splitPercentage: 100, dollarAmount: 0 }])
-                  }}
-                  className="flex-1"
-                >
-                  For Myself
-                </Button>
-                <Button
-                  type="button"
-                  variant={!isForSelf ? "default" : "outline"}
-                  onClick={() => setIsForSelf(false)}
-                  className="flex-1"
-                >
-                  For Others
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {isForSelf
-                  ? "You'll be both the lender and borrower"
-                  : "You'll be the lender, others will be borrowers"}
-              </p>
-            </div>
+              <Field>
+                <FieldLabel htmlFor="recurring-frequency">
+                  Frequency (days)
+                </FieldLabel>
+                <Input
+                  id="recurring-frequency"
+                  type="number"
+                  min="1"
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value)}
+                  placeholder="30"
+                  required
+                />
+                <FieldDescription>
+                  How often this payment occurs (e.g., 30 for monthly, 7 for weekly)
+                </FieldDescription>
+              </Field>
 
-            {/* Alert Section */}
-            <div className="grid gap-3 pt-4 border-t">
-              <Label>Payment Reminder (optional)</Label>
-              <Textarea
-                value={alertMessage}
-                onChange={(e) => setAlertMessage(e.target.value)}
-                placeholder="e.g., Monthly subscription reminder"
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground">
-                Set a reminder message for this recurring payment
-              </p>
-
-              <Label htmlFor="recurringAlertFrequency">Email reminder frequency</Label>
-              <Select value={alertFrequency} onValueChange={setAlertFrequency}>
-                <SelectTrigger id="recurringAlertFrequency">
-                  <SelectValue placeholder="Off" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">Off (no email reminders)</SelectItem>
-                  <SelectItem value="7">Weekly (every 7 days)</SelectItem>
-                  <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
-                  <SelectItem value="30">Monthly (every 30 days)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                The borrower receives an email reminder on this cadence.
-              </p>
-            </div>
-
-            {!isForSelf && (
-              <div className="grid gap-4">
-                <div className="flex items-center justify-between">
-                  <Label>Borrowers</Label>
-                  <div className={`text-sm ${isPercentageValid ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
-                    Total: {Math.round(totalPercentage * 10000) / 10000}% {isPercentageValid ? '✓' : '(must be 100%)'}
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
+              <Field>
+                <FieldLabel id="recurring-payment-type">Payment type</FieldLabel>
+                <ToggleGroup
+                  type="single"
                   variant="outline"
-                  onClick={splitEvenly}
+                  aria-labelledby="recurring-payment-type"
+                  value={isForSelf ? 'self' : 'others'}
+                  onValueChange={(value) => {
+                    if (!value) return
+                    const forSelf = value === 'self'
+                    setIsForSelf(forSelf)
+                    if (forSelf) {
+                      setBorrowers([{ email: '', splitPercentage: 100, dollarAmount: 0 }])
+                    }
+                  }}
                   className="w-full"
-                  disabled={borrowers.length === 0}
                 >
-                  Split Evenly
-                </Button>
+                  <ToggleGroupItem value="self" className="flex-1">
+                    For myself
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="others" className="flex-1">
+                    For others
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <FieldDescription>
+                  {isForSelf
+                    ? "You'll be both the lender and borrower"
+                    : "You'll be the lender, others will be borrowers"}
+                </FieldDescription>
+              </Field>
 
-                <div className="grid gap-4">
-                  {borrowers.map((borrower, index) => (
-                    <Card key={index} className="border-2">
-                      <CardContent className="p-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Borrower {index + 1}</span>
-                          {borrowers.length > 1 && (
+              {!isForSelf && (
+                <>
+                  <FieldSeparator />
+                  <FieldSet className="gap-4">
+                    <FieldLegend variant="label" className="mb-0">
+                      Borrowers
+                    </FieldLegend>
+
+                    <div className="flex flex-col gap-4">
+                      {borrowers.map((borrower, index) => {
+                        const trimmedEmail = borrower.email.trim()
+                        const emailInvalid =
+                          trimmedEmail !== '' && !EMAIL_REGEX.test(trimmedEmail)
+
+                        return (
+                          <div key={index} className="flex items-start gap-2">
+                            <Field className="flex-1 gap-1.5" data-invalid={emailInvalid || undefined}>
+                              <FieldLabel htmlFor={`borrower-email-${index}`}>
+                                Email
+                              </FieldLabel>
+                              <Input
+                                id={`borrower-email-${index}`}
+                                type="email"
+                                value={borrower.email}
+                                onChange={(e) => updateBorrowerEmail(index, e.target.value)}
+                                placeholder="user@example.com"
+                                aria-invalid={emailInvalid || undefined}
+                              />
+                              {emailInvalid && (
+                                <FieldError>Enter a valid email address</FieldError>
+                              )}
+                            </Field>
+                            <Field className="w-20 shrink-0 gap-1.5">
+                              <FieldLabel htmlFor={`borrower-split-${index}`}>
+                                Split %
+                              </FieldLabel>
+                              <Input
+                                id={`borrower-split-${index}`}
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                max="100"
+                                value={borrower.splitPercentage}
+                                onChange={(e) =>
+                                  updateBorrowerPercentage(index, parseFloat(e.target.value) || 0)
+                                }
+                                placeholder="0"
+                              />
+                            </Field>
+                            <Field className="w-28 shrink-0 gap-1.5">
+                              <FieldLabel htmlFor={`borrower-dollar-${index}`}>
+                                Amount
+                              </FieldLabel>
+                              <InputGroup>
+                                <InputGroupAddon>
+                                  <InputGroupText>$</InputGroupText>
+                                </InputGroupAddon>
+                                <InputGroupInput
+                                  id={`borrower-dollar-${index}`}
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={borrower.dollarAmount || ''}
+                                  onChange={(e) =>
+                                    updateBorrowerDollar(index, parseFloat(e.target.value) || 0)
+                                  }
+                                  placeholder="0"
+                                />
+                              </InputGroup>
+                            </Field>
                             <Button
                               type="button"
                               variant="ghost"
-                              size="sm"
+                              size="icon"
+                              className="mt-6 shrink-0"
                               onClick={() => removeBorrower(index)}
+                              disabled={borrowers.length === 1}
+                              aria-label={`Remove borrower ${index + 1}`}
                             >
-                              <X className="h-4 w-4" />
+                              <X />
                             </Button>
-                          )}
-                        </div>
-
-                        <div className="grid gap-2">
-                          <Label>Email</Label>
-                          <Input
-                            type="email"
-                            value={borrower.email}
-                            onChange={(e) => updateBorrowerEmail(index, e.target.value)}
-                            placeholder="user@example.com"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-2">
-                            <Label>Split %</Label>
-                            <Input
-                              type="number"
-                              step="0.0001"
-                              min="0"
-                              max="100"
-                              value={borrower.splitPercentage}
-                              onChange={(e) => updateBorrowerPercentage(index, parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                            />
                           </div>
-                          <div className="grid gap-2">
-                            <Label>Dollar ($)</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={borrower.dollarAmount || ''}
-                              onChange={(e) => updateBorrowerDollar(index, parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        )
+                      })}
+                    </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addBorrower}
-                  className="w-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Borrower
-                </Button>
-              </div>
-            )}
+                    {isPercentageValid ? (
+                      <FieldDescription>Splits total 100%</FieldDescription>
+                    ) : (
+                      <FieldError>
+                        Splits total {displayPercentage}% — they must equal 100%
+                      </FieldError>
+                    )}
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleClose}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!canSubmit || submitting}>
-                {submitting ? 'Creating…' : 'Create recurring payment'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </div>
-      </DialogContent>
-    </Dialog>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addBorrower}
+                      >
+                        <Plus />
+                        Add borrower
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={splitEvenly}
+                        disabled={borrowers.length === 0}
+                      >
+                        Split evenly
+                      </Button>
+                    </div>
+                  </FieldSet>
+                </>
+              )}
+
+              <FieldSeparator />
+
+              <FieldSet>
+                <FieldLegend variant="label">
+                  Payment reminder (optional)
+                </FieldLegend>
+                <FieldDescription>
+                  Set a reminder message for this recurring payment.
+                </FieldDescription>
+                <Field>
+                  <FieldLabel htmlFor="recurring-alert-message">Message</FieldLabel>
+                  <Textarea
+                    id="recurring-alert-message"
+                    value={alertMessage}
+                    onChange={(e) => setAlertMessage(e.target.value)}
+                    placeholder="e.g., Monthly subscription reminder"
+                    rows={2}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="recurringAlertFrequency">
+                    Email reminder frequency
+                  </FieldLabel>
+                  <Select value={alertFrequency} onValueChange={setAlertFrequency}>
+                    <SelectTrigger id="recurringAlertFrequency">
+                      <SelectValue placeholder="Off" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Off (no email reminders)</SelectItem>
+                      <SelectItem value="7">Weekly (every 7 days)</SelectItem>
+                      <SelectItem value="14">Biweekly (every 14 days)</SelectItem>
+                      <SelectItem value="30">Monthly (every 30 days)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    The borrower receives an email reminder on this cadence.
+                  </FieldDescription>
+                </Field>
+              </FieldSet>
+            </FieldGroup>
+          </div>
+
+          <SheetFooter className="flex-row justify-end border-t">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleClose}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!canSubmit || submitting}>
+              {submitting && <Spinner />}
+              Create recurring payment
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   )
 }

@@ -1,9 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { MoreVertical } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { PageHeader } from '@/components/page-header'
+import { StatusBadge } from '@/components/status-badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -12,17 +28,25 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemSeparator,
+  ItemTitle,
+} from '@/components/ui/item'
+import { Spinner } from '@/components/ui/spinner'
 import { toggleRecurringPaymentStatus, deleteRecurringPayment } from '../actions'
+import { formatAmount, frequencyText, initials, namedCadence } from '../format'
+import ReminderCard, { type ReminderAlert } from './reminder-card'
 
 type RecurringPaymentBorrower = {
   id: number
@@ -33,13 +57,6 @@ type RecurringPaymentBorrower = {
     email: string
     name: string
   }
-}
-
-type Alert = {
-  id: number
-  message: string | null
-  deadline: Date | string | null
-  isActive: boolean
 }
 
 type RecurringPayment = {
@@ -55,7 +72,7 @@ type RecurringPayment = {
     name: string
   }
   borrowers: RecurringPaymentBorrower[]
-  alert?: Alert | null
+  alert?: ReminderAlert | null
 }
 
 type RecurringDetailClientProps = {
@@ -68,362 +85,245 @@ export default function RecurringDetailClient({
   currentUserId,
 }: RecurringDetailClientProps) {
   const [payment, setPayment] = useState<RecurringPayment>(initialPayment)
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [togglePending, setTogglePending] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const router = useRouter()
 
-  // Alert modal state
-  const [showAlertModal, setShowAlertModal] = useState(false)
-  const [alertMessage, setAlertMessage] = useState(payment.alert?.message || '')
-  const [alertSubmitting, setAlertSubmitting] = useState(false)
-
   const isLender = payment.lender.id === currentUserId
-  const isBorrower = payment.borrowers.some(b => b.userId === currentUserId)
+
+  const title = payment.description || 'Recurring payment'
+  const identity = `${formatAmount(payment.amount)} ${frequencyText(payment.frequency)}`
+  const cadence = namedCadence(payment.frequency)
 
   const handleToggleStatus = async () => {
-    setSubmitting(true)
-    setError('')
+    setTogglePending(true)
 
     try {
       const result = await toggleRecurringPaymentStatus(payment.id)
 
       if (result.success && result.payment) {
-        setPayment(result.payment)
+        const nextStatus = result.payment.status
+        setPayment((prev) => ({ ...prev, status: nextStatus }))
+        toast.success(
+          nextStatus === 'active'
+            ? 'Recurring payment activated'
+            : 'Recurring payment deactivated'
+        )
       } else {
-        setError(result.error || 'Failed to toggle status')
+        toast.error(
+          ('error' in result && result.error) || 'Failed to update status'
+        )
       }
     } catch {
-      setError('An error occurred while toggling the status')
+      toast.error('An error occurred while updating the status')
     } finally {
-      setSubmitting(false)
+      setTogglePending(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this recurring payment?')) {
-      return
-    }
-
-    setSubmitting(true)
-    setError('')
+    setDeletePending(true)
 
     try {
       const result = await deleteRecurringPayment(payment.id)
 
       if (result.success) {
+        toast.success('Recurring payment deleted')
         router.push('/recurring-payments')
       } else {
-        setError(result.error || 'Failed to delete recurring payment')
+        toast.error(result.error || 'Failed to delete recurring payment')
+        setDeleteOpen(false)
       }
     } catch {
-      setError('An error occurred while deleting the payment')
+      toast.error('An error occurred while deleting the payment')
+      setDeleteOpen(false)
     } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // Alert handlers
-  const handleSaveAlert = async () => {
-    setAlertSubmitting(true)
-    setError('')
-
-    try {
-      if (payment.alert) {
-        // Update existing alert
-        const response = await fetch(`/api/alerts/${payment.alert.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: alertMessage || null,
-          }),
-        })
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to update alert')
-        }
-      } else {
-        // Create new alert
-        const response = await fetch('/api/alerts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recurringPaymentId: payment.id,
-            message: alertMessage || null,
-          }),
-        })
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to create alert')
-        }
-      }
-
-      setShowAlertModal(false)
-      router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save alert')
-    } finally {
-      setAlertSubmitting(false)
-    }
-  }
-
-  const handleDeleteAlert = async () => {
-    if (!payment.alert) return
-
-    setAlertSubmitting(true)
-    setError('')
-
-    try {
-      const response = await fetch(`/api/alerts/${payment.alert.id}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete alert')
-      }
-
-      setShowAlertModal(false)
-      setAlertMessage('')
-      router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete alert')
-    } finally {
-      setAlertSubmitting(false)
+      setDeletePending(false)
     }
   }
 
   return (
-    <div className="container max-w-3xl mx-auto p-4 space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Recurring Payment Details
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Created {new Date(payment.createdAt).toLocaleDateString()}
-          </p>
+    <div className="space-y-6">
+      <div className="space-y-1.5">
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Recurring payments', href: '/recurring-payments' },
+            { label: payment.description || identity },
+          ]}
+          title={title}
+          actions={
+            isLender ? (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={togglePending}
+                  onClick={handleToggleStatus}
+                >
+                  {togglePending && <Spinner />}
+                  {payment.status === 'active' ? 'Deactivate' : 'Activate'}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="More actions">
+                      <MoreVertical />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setDeleteOpen(true)}
+                    >
+                      Delete recurring payment
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : undefined
+          }
+        />
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span className="tabular-nums">{identity}</span>
+          {cadence && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{cadence}</span>
+            </>
+          )}
+          <StatusBadge status={payment.status} />
         </div>
-        <Button variant="secondary" onClick={() => router.push('/recurring-payments')}>
-          Back to List
-        </Button>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {/* Payment Info Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle>Payment Information</CardTitle>
-              <CardDescription className="mt-1">{payment.description || 'No description'}</CardDescription>
-            </div>
-            <Badge
-              variant="outline"
-              className={cn(
-                payment.status === 'active' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                payment.status === 'inactive' && 'border-red-500/50 bg-red-500/50 text-red-700 dark:text-red-300',
-              )}
-            >
-              {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <div className="text-sm text-muted-foreground">Amount</div>
-            <div className="text-2xl font-semibold">${payment.amount.toFixed(2)}</div>
-          </div>
-          <div>
-            <div className="text-sm text-muted-foreground">Frequency</div>
-            <div className="text-lg">
-              Every {payment.frequency} day{payment.frequency > 1 ? 's' : ''}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lender Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Lender</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium">{payment.lender.name}</div>
-              <div className="text-sm text-muted-foreground">{payment.lender.email}</div>
-            </div>
-            {isLender && (
-              <Badge variant="secondary">You</Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Borrowers Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Borrowers & Splits</CardTitle>
-          <CardDescription>
-            {payment.borrowers.length} borrower{payment.borrowers.length > 1 ? 's' : ''}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {payment.borrowers.map((borrower) => {
-            const dollarAmount = (borrower.splitPercentage / 100) * payment.amount
-            const isCurrentUser = borrower.userId === currentUserId
-
-            return (
-              <div
-                key={borrower.id}
-                className="flex items-center justify-between p-3 rounded-lg border"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="font-medium">{borrower.user.name}</div>
-                    {isCurrentUser && <Badge variant="secondary" className="text-xs">You</Badge>}
-                  </div>
-                  <div className="text-sm text-muted-foreground">{borrower.user.email}</div>
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                <div>
+                  <dt className="text-sm text-muted-foreground">Amount</dt>
+                  <dd className="mt-1 text-sm font-medium tabular-nums">
+                    {formatAmount(payment.amount)}
+                  </dd>
                 </div>
-                <div className="text-right">
-                  <div className="font-semibold">{borrower.splitPercentage}%</div>
-                  <div className="text-sm text-muted-foreground">
-                    ${dollarAmount.toFixed(2)}
-                  </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Frequency</dt>
+                  <dd className="mt-1 text-sm font-medium">
+                    Every {payment.frequency} day
+                    {payment.frequency === 1 ? '' : 's'}
+                    {cadence && (
+                      <span className="font-normal text-muted-foreground">
+                        {' '}
+                        ({cadence})
+                      </span>
+                    )}
+                  </dd>
                 </div>
-              </div>
-            )
-          })}
-        </CardContent>
-      </Card>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Lender</dt>
+                  <dd className="mt-1 flex items-center gap-2 text-sm font-medium">
+                    {payment.lender.name || payment.lender.email}
+                    {isLender && <Badge variant="secondary">You</Badge>}
+                  </dd>
+                  <dd className="text-sm text-muted-foreground">
+                    {payment.lender.email}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Created</dt>
+                  <dd className="mt-1 text-sm font-medium">
+                    {new Date(payment.createdAt).toLocaleDateString()}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
 
-      {/* Alert Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle>Payment Reminder</CardTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle>Borrowers &amp; splits</CardTitle>
               <CardDescription>
-                {payment.alert
-                  ? 'Alert settings for this recurring payment'
-                  : 'No reminder set for this recurring payment'}
+                {payment.borrowers.length} borrower
+                {payment.borrowers.length === 1 ? '' : 's'}
               </CardDescription>
-            </div>
-            {isLender && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowAlertModal(true)}
-              >
-                {payment.alert ? 'Edit Alert' : 'Add Alert'}
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        {payment.alert && (
-          <CardContent className="space-y-2">
-            {payment.alert.message && (
-              <div>
-                <Label className="text-muted-foreground">Message</Label>
-                <p className="mt-1">{payment.alert.message}</p>
-              </div>
-            )}
-            {payment.alert.deadline && (
-              <div>
-                <Label className="text-muted-foreground">Deadline</Label>
-                <p className="mt-1">
-                  {new Date(payment.alert.deadline).toLocaleDateString()}
-                </p>
-              </div>
-            )}
-            {!payment.alert.message && !payment.alert.deadline && (
-              <p className="text-sm text-muted-foreground">
-                Alert is set but no message or deadline configured.
-              </p>
-            )}
-          </CardContent>
-        )}
-      </Card>
+            </CardHeader>
+            <CardContent>
+              <ItemGroup>
+                {payment.borrowers.map((borrower, index) => {
+                  const dollarAmount =
+                    (borrower.splitPercentage / 100) * payment.amount
+                  const isCurrentUser = borrower.userId === currentUserId
+                  const displayName = borrower.user.name || borrower.user.email
 
-      {/* Actions */}
-      {isLender && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Actions</CardTitle>
-            <CardDescription>Manage this recurring payment</CardDescription>
-          </CardHeader>
-          <CardContent className="flex gap-2">
-            <Button
-              onClick={handleToggleStatus}
-              disabled={submitting}
-              variant={payment.status === 'active' ? 'secondary' : 'default'}
+                  return (
+                    <Fragment key={borrower.id}>
+                      {index > 0 && <ItemSeparator />}
+                      <Item size="sm" className="px-0">
+                        <ItemMedia>
+                          <Avatar>
+                            <AvatarFallback>{initials(displayName)}</AvatarFallback>
+                          </Avatar>
+                        </ItemMedia>
+                        <ItemContent>
+                          <ItemTitle>
+                            {displayName}
+                            {isCurrentUser && (
+                              <Badge variant="secondary">You</Badge>
+                            )}
+                          </ItemTitle>
+                          <ItemDescription>{borrower.user.email}</ItemDescription>
+                        </ItemContent>
+                        <ItemActions className="flex-col items-end gap-0.5">
+                          <span className="text-sm font-medium tabular-nums">
+                            {borrower.splitPercentage}%
+                          </span>
+                          <span className="text-sm text-muted-foreground tabular-nums">
+                            {formatAmount(dollarAmount)}
+                          </span>
+                        </ItemActions>
+                      </Item>
+                    </Fragment>
+                  )
+                })}
+              </ItemGroup>
+            </CardContent>
+          </Card>
+        </div>
+
+        <ReminderCard
+          paymentId={payment.id}
+          alert={payment.alert ?? null}
+          isLender={isLender}
+        />
+      </div>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this recurring payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes &quot;{title}&quot; ({identity}) for
+              everyone involved. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletePending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: 'destructive' })}
+              onClick={(e) => {
+                e.preventDefault()
+                handleDelete()
+              }}
+              disabled={deletePending}
             >
-              {submitting ? 'Updating...' : payment.status === 'active' ? 'Deactivate' : 'Activate'}
-            </Button>
-            <Button
-              onClick={handleDelete}
-              disabled={submitting}
-              variant="destructive"
-            >
-              {submitting ? 'Deleting...' : 'Delete'}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Alert Modal */}
-      <Dialog open={showAlertModal} onOpenChange={setShowAlertModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {payment.alert ? 'Edit alert' : 'Add alert'}
-            </DialogTitle>
-            <DialogDescription>
-              Set a reminder message for this recurring payment.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="alertMessage">Message (optional)</Label>
-            <Textarea
-              id="alertMessage"
-              value={alertMessage}
-              onChange={(e) => setAlertMessage(e.target.value)}
-              placeholder="e.g., Monthly subscription reminder"
-              rows={3}
-            />
-          </div>
-
-          <DialogFooter>
-            {payment.alert && (
-              <Button
-                variant="destructive"
-                onClick={handleDeleteAlert}
-                disabled={alertSubmitting}
-              >
-                Delete alert
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              onClick={() => setShowAlertModal(false)}
-              disabled={alertSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSaveAlert} disabled={alertSubmitting}>
-              {alertSubmitting ? 'Saving…' : 'Save alert'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {deletePending && <Spinner />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -2,20 +2,17 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CalendarClock, Plus } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, CalendarClock, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/page-header'
+import { StatCard } from '@/components/stat-card'
+import { StatusBadge } from '@/components/status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -36,8 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toggleRecurringPaymentStatus } from './actions'
+import { formatAmount, frequencyText, namedCadence } from './format'
 import RecurringFormItem from './recurring-form-item'
 import type { User } from '@supabase/supabase-js'
 
@@ -75,6 +74,11 @@ type RecurringPaymentsClientProps = {
 type ViewFilter = 'all' | 'lending' | 'borrowing'
 type StatusFilter = 'all' | 'active' | 'inactive'
 
+/** Estimated cost per month, normalized from the payment's day-based cadence. */
+function monthlyEstimate(amount: number, frequencyDays: number): number {
+  return (amount * 30) / frequencyDays
+}
+
 export default function RecurringPaymentsClient({
   initialRecurringPayments,
   currentUser,
@@ -84,49 +88,50 @@ export default function RecurringPaymentsClient({
   )
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
 
   const handleToggleStatus = async (paymentId: number) => {
-    const oldStatus = recurringPayments.find((p) => p.id === paymentId)?.status
+    const payment = recurringPayments.find((p) => p.id === paymentId)
+    if (!payment) return
 
+    const oldStatus = payment.status
+    const nextStatus = oldStatus === 'active' ? 'inactive' : 'active'
+
+    setTogglingId(paymentId)
     setRecurringPayments((prev) =>
-      prev.map((payment) =>
-        payment.id === paymentId
-          ? {
-              ...payment,
-              status: payment.status === 'active' ? 'inactive' : 'active',
-            }
-          : payment
-      )
+      prev.map((p) => (p.id === paymentId ? { ...p, status: nextStatus } : p))
     )
 
     const revert = () => {
-      if (oldStatus) {
-        setRecurringPayments((prev) =>
-          prev.map((payment) =>
-            payment.id === paymentId
-              ? { ...payment, status: oldStatus }
-              : payment
-          )
-        )
-      }
+      setRecurringPayments((prev) =>
+        prev.map((p) => (p.id === paymentId ? { ...p, status: oldStatus } : p))
+      )
     }
 
     try {
       const result = await toggleRecurringPaymentStatus(paymentId)
-      if (!result.success) {
-        toast.error(result.error || 'Failed to toggle status')
+      if (result.success) {
+        toast.success(
+          nextStatus === 'active'
+            ? 'Recurring payment activated'
+            : 'Recurring payment deactivated'
+        )
+      } else {
+        toast.error(result.error || 'Failed to update status')
         revert()
       }
     } catch {
-      toast.error('An error occurred while toggling the status')
+      toast.error('An error occurred while updating the status')
       revert()
+    } finally {
+      setTogglingId(null)
     }
   }
 
   const handleCreateSuccess = (newPayment: RecurringPayment) => {
     setRecurringPayments([newPayment, ...recurringPayments])
-    setShowCreateModal(false)
+    setCreateOpen(false)
   }
 
   const lendingPayments = recurringPayments.filter(
@@ -137,9 +142,18 @@ export default function RecurringPaymentsClient({
   )
 
   const activeCount = recurringPayments.filter((p) => p.status === 'active').length
-  const inactiveCount = recurringPayments.filter(
-    (p) => p.status === 'inactive'
-  ).length
+  const inactiveCount = recurringPayments.length - activeCount
+
+  const monthlyLending = lendingPayments
+    .filter((p) => p.status === 'active')
+    .reduce((sum, p) => sum + monthlyEstimate(p.amount, p.frequency), 0)
+  const monthlyBorrowing = borrowingPayments
+    .filter((p) => p.status === 'active')
+    .reduce((sum, p) => {
+      const share =
+        p.borrowers.find((b) => b.userId === currentUser.id)?.splitPercentage ?? 0
+      return sum + monthlyEstimate((p.amount * share) / 100, p.frequency)
+    }, 0)
 
   let filteredPayments = recurringPayments
   if (viewFilter === 'lending') {
@@ -156,161 +170,187 @@ export default function RecurringPaymentsClient({
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
+  const hasFilters = viewFilter !== 'all' || statusFilter !== 'all'
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Recurring payments
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your recurring payments and subscriptions.
-          </p>
+      <PageHeader
+        title="Recurring payments"
+        description="Manage your recurring payments and subscriptions."
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Create recurring payment
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="You lend / month"
+          value={formatAmount(monthlyLending)}
+          icon={ArrowUpRight}
+          hint="Estimated from active payments you lend"
+        />
+        <StatCard
+          label="You borrow / month"
+          value={formatAmount(monthlyBorrowing)}
+          icon={ArrowDownLeft}
+          hint="Estimated from your share of active payments"
+        />
+        <StatCard
+          label="Active payments"
+          value={activeCount}
+          icon={CalendarClock}
+          hint={`${inactiveCount} inactive`}
+        />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Tabs
+            value={viewFilter}
+            onValueChange={(v) => setViewFilter(v as ViewFilter)}
+          >
+            <TabsList>
+              <TabsTrigger value="all">
+                All ({recurringPayments.length})
+              </TabsTrigger>
+              <TabsTrigger value="lending">
+                Lending ({lendingPayments.length})
+              </TabsTrigger>
+              <TabsTrigger value="borrowing">
+                Borrowing ({borrowingPayments.length})
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus />
-          Create
-        </Button>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardDescription>Active payments</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">{activeCount}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Recurring payments currently active
-            </p>
-          </CardContent>
-        </Card>
+        {filteredPayments.length === 0 ? (
+          <Empty className="border border-dashed">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CalendarClock />
+              </EmptyMedia>
+              <EmptyTitle>
+                {hasFilters
+                  ? 'No matching recurring payments'
+                  : 'No recurring payments yet'}
+              </EmptyTitle>
+              <EmptyDescription>
+                {hasFilters
+                  ? 'Try adjusting your filters.'
+                  : 'Create your first recurring payment to track subscriptions and repeating IOUs.'}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              {hasFilters ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setViewFilter('all')
+                    setStatusFilter('all')
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus />
+                  Create recurring payment
+                </Button>
+              )}
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <ItemGroup className="gap-3">
+            {filteredPayments.map((payment) => {
+              const isLender = payment.lender.id === currentUser.id
+              const direction = isLender ? 'Lending' : 'Borrowing'
+              const cadence = namedCadence(payment.frequency)
+              const isToggling = togglingId === payment.id
 
-        <Card>
-          <CardHeader>
-            <CardDescription>Inactive payments</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {inactiveCount}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Recurring payments paused or stopped
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs
-          value={viewFilter}
-          onValueChange={(v) => setViewFilter(v as ViewFilter)}
-        >
-          <TabsList>
-            <TabsTrigger value="all">
-              All ({recurringPayments.length})
-            </TabsTrigger>
-            <TabsTrigger value="lending">
-              Lending ({lendingPayments.length})
-            </TabsTrigger>
-            <TabsTrigger value="borrowing">
-              Borrowing ({borrowingPayments.length})
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {filteredPayments.length === 0 ? (
-        <Empty className="border border-dashed">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <CalendarClock />
-            </EmptyMedia>
-            <EmptyTitle>No recurring payments found</EmptyTitle>
-            <EmptyDescription>
-              {statusFilter !== 'all' || viewFilter !== 'all'
-                ? 'Try adjusting your filters.'
-                : 'Create your first recurring payment.'}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <ItemGroup className="gap-3">
-          {filteredPayments.map((payment) => {
-            const isLender = payment.lender.id === currentUser.id
-            const direction = isLender ? 'Lending' : 'Borrowing'
-
-            return (
-              <Item key={payment.id} asChild variant="outline">
-                <Link href={`/recurring-payments/${payment.id}`}>
+              return (
+                <Item key={payment.id} variant="outline" className="relative">
                   <ItemContent className="gap-1.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={payment.status} />
                       <Badge variant="outline">{direction}</Badge>
-                      <Badge
-                        variant={
-                          payment.status === 'active' ? 'secondary' : 'outline'
-                        }
-                      >
-                        {payment.status.charAt(0).toUpperCase() +
-                          payment.status.slice(1)}
-                      </Badge>
                     </div>
                     <ItemTitle className="tabular-nums">
-                      ${payment.amount.toFixed(2)} every {payment.frequency} day
-                      {payment.frequency > 1 ? 's' : ''}
+                      <Link
+                        href={`/recurring-payments/${payment.id}`}
+                        className="after:absolute after:inset-0 hover:underline"
+                      >
+                        {formatAmount(payment.amount)}{' '}
+                        {frequencyText(payment.frequency)}
+                      </Link>
+                      {cadence && (
+                        <span className="font-normal text-muted-foreground">
+                          · {cadence}
+                        </span>
+                      )}
                     </ItemTitle>
                     {payment.description && (
                       <ItemDescription>{payment.description}</ItemDescription>
                     )}
-                    <ItemDescription>
-                      Lender: {payment.lender.name || payment.lender.email} ·
-                      Borrowers:{' '}
-                      {payment.borrowers
-                        .map((b) => b.user.name || b.user.email)
-                        .join(', ')}{' '}
-                      · Created {new Date(payment.createdAt).toLocaleDateString()}
-                    </ItemDescription>
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                      <span>
+                        Lent by{' '}
+                        {isLender
+                          ? 'you'
+                          : payment.lender.name || payment.lender.email}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {payment.borrowers.length} borrower
+                        {payment.borrowers.length === 1 ? '' : 's'}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        Created{' '}
+                        {new Date(payment.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
                   </ItemContent>
                   {isLender && (
-                    <ItemActions>
+                    <ItemActions className="relative z-10">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleToggleStatus(payment.id)
-                        }}
+                        disabled={isToggling}
+                        onClick={() => handleToggleStatus(payment.id)}
                       >
+                        {isToggling && <Spinner />}
                         {payment.status === 'active' ? 'Deactivate' : 'Activate'}
                       </Button>
                     </ItemActions>
                   )}
-                </Link>
-              </Item>
-            )
-          })}
-        </ItemGroup>
-      )}
+                </Item>
+              )
+            })}
+          </ItemGroup>
+        )}
+      </div>
 
       <RecurringFormItem
         currentUser={currentUser}
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
         onSuccess={handleCreateSuccess}
       />
     </div>
