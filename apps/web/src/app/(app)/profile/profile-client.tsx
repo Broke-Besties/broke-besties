@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Copy, LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -27,6 +28,9 @@ import {
   ItemGroup,
   ItemTitle,
 } from '@/components/ui/item'
+import { Spinner } from '@/components/ui/spinner'
+import { PageHeader } from '@/components/page-header'
+import { logoutAction } from '@/components/actions'
 import { updateProfile } from './actions'
 
 type User = {
@@ -60,6 +64,8 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
+  const isDirty = name.trim() !== user.name
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -79,16 +85,18 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
     }
   }
 
+  const handleCopyUserId = async () => {
+    try {
+      await navigator.clipboard.writeText(user.id)
+      toast.success('Copied')
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Profile
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your account settings.
-        </p>
-      </div>
+      <PageHeader title="Profile" description="Manage your account settings." />
 
       <Card className="max-w-2xl">
         <CardHeader>
@@ -98,19 +106,11 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
         <CardContent>
           <form onSubmit={handleSubmit}>
             <FieldGroup>
-              <div className="flex items-center gap-4">
-                <Avatar className="size-14">
-                  <AvatarFallback className="text-lg">
-                    {initials(user.name || user.email)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{user.name}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {user.email}
-                  </p>
-                </div>
-              </div>
+              <Avatar className="size-14">
+                <AvatarFallback className="text-lg">
+                  {initials(user.name || user.email)}
+                </AvatarFallback>
+              </Avatar>
 
               <Field>
                 <FieldLabel htmlFor="name">Name</FieldLabel>
@@ -137,14 +137,18 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
               </Field>
 
               <Field orientation="horizontal">
-                <Button type="submit" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  disabled={isLoading || !isDirty || name.trim() === ''}
+                >
+                  {isLoading && <Spinner />}
                   {isLoading ? 'Saving…' : 'Save changes'}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push('/dashboard')}
-                  disabled={isLoading}
+                  onClick={() => setName(user.name)}
+                  disabled={isLoading || !isDirty}
                 >
                   Cancel
                 </Button>
@@ -161,16 +165,6 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
         </CardHeader>
         <CardContent>
           <ItemGroup>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle className="font-normal text-muted-foreground">
-                  User ID
-                </ItemTitle>
-              </ItemContent>
-              <ItemActions className="font-medium tabular-nums">
-                {user.id}
-              </ItemActions>
-            </Item>
             <Item size="sm">
               <ItemContent>
                 <ItemTitle className="font-normal text-muted-foreground">
@@ -191,7 +185,49 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
                 {formatDate(user.updatedAt)}
               </ItemActions>
             </Item>
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle className="font-normal text-muted-foreground">
+                  User ID
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions className="min-w-0">
+                <span className="truncate font-medium tabular-nums">
+                  {user.id}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={handleCopyUserId}
+                  aria-label="Copy user ID"
+                >
+                  <Copy />
+                </Button>
+              </ItemActions>
+            </Item>
           </ItemGroup>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Log out</CardTitle>
+          <CardDescription>
+            Sign out of your account on this device.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={logoutAction}>
+            <Button
+              type="submit"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+            >
+              <LogOut />
+              Log out
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

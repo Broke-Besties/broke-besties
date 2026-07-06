@@ -1,26 +1,37 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { CircleAlert, ImageIcon, Plus, Sparkles, Users, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
-import { DebtFormItem } from '@/app/(app)/groups/[id]/debt-form-item'
+import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
+import { PageHeader } from '@/components/page-header'
 import { createDebt } from '@/app/(app)/groups/[id]/actions'
-
-type Message = {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  id?: string
-  imageUrl?: string
-  debts?: Array<{
-    borrowerName: string
-    borrowerId: string
-    amount: number
-    description?: string
-  }>
-}
+import { ChatMessageBubble, ThinkingBubble, type ChatMessage } from './chat-message'
+import { DebtReviewPanel, type DebtFormData } from './debt-review-panel'
 
 type Group = {
   id: number
@@ -28,12 +39,18 @@ type Group = {
 }
 
 type AIPageClientProps = {
-  user: any
+  user: { id: string }
 }
+
+const SUGGESTED_PROMPTS = [
+  'Split a $60 dinner evenly between everyone',
+  'Add a $15 debt for movie tickets',
+  'What can you help me with?',
+]
 
 export default function AIPageClient({ user }: AIPageClientProps) {
   const searchParams = useSearchParams()
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -43,14 +60,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [currentReceiptId, setCurrentReceiptId] = useState<string | null>(null)
-  const [debtForms, setDebtForms] = useState<Array<{
-    amount: string
-    description: string
-    borrowerId: string
-    borrower: { id: string; name: string; email: string } | null
-    alertMessage: string
-    alertDeadline: string
-  }>>([])
+  const [debtForms, setDebtForms] = useState<DebtFormData[]>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
   const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -89,10 +99,13 @@ export default function AIPageClient({ user }: AIPageClientProps) {
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+    const viewport = scrollAreaRef.current?.querySelector(
+      '[data-slot="scroll-area-viewport"]'
+    )
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight
     }
-  }, [messages])
+  }, [messages, isLoading])
 
   // Populate debt forms when a message with debts is received
   useEffect(() => {
@@ -265,7 +278,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }
 
-  const updateDebtForm = (index: number, data: typeof debtForms[0]) => {
+  const updateDebtForm = (index: number, data: DebtFormData) => {
     const newDebts = [...debtForms]
     newDebts[index] = data
     setDebtForms(newDebts)
@@ -310,7 +323,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         })
 
         if (!result.success) {
-          setError(result.error || 'Failed to create debt')
+          toast.error(result.error || 'Failed to create debt')
           setIsCreatingDebts(false)
           return
         }
@@ -330,11 +343,16 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         }
       }
 
-      // Add success message
+      const groupName = groups.find(group => group.id.toString() === groupId)?.name
+      const debtCount = `${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}`
+      toast.success(`Created ${debtCount}`)
+
+      // Add confirmation message with a link onward to the group
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Successfully created ${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}!`,
+        content: `Successfully created ${debtCount}${groupName ? ` in ${groupName}` : ''}!`,
         id: Date.now().toString(),
+        groupHref: `/groups/${groupId}`,
       }])
 
       // Clear debt forms, receipt ID, and reset index
@@ -345,7 +363,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       // Refresh the page data
       router.refresh()
     } catch (err) {
-      setError('An error occurred while creating debts')
+      toast.error('An error occurred while creating debts')
       console.error('Error:', err)
     } finally {
       setIsCreatingDebts(false)
@@ -383,7 +401,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       setIsUploading(false)
     }
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       role: 'user',
       content: input.trim() || 'Analyze this receipt',
       id: Date.now().toString(),
@@ -440,7 +458,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         // Not JSON, treat as regular message
       }
 
-      const assistantMessage: Message = {
+      const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: parsedDebts ? 'I have the debt information ready. Please review and create:' : content,
         id: Date.now().toString(),
@@ -457,251 +475,200 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }
 
+  const hasGroups = groups.length > 0
+  const showZeroGroups = !isLoadingGroups && !hasGroups
+
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <Card className="h-[calc(100vh-8rem)]">
-        <CardHeader>
-          <CardTitle>AI Agent Chat</CardTitle>
-          <CardDescription>
-            Chat with the LangGraph agent to manage debts and receipts
-          </CardDescription>
-          <div className="flex gap-2 mt-2">
-            <select
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              disabled={isLoadingGroups}
-              className="h-9 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 max-w-xs"
-            >
-              <option value="" disabled>
-                {isLoadingGroups ? 'Loading groups...' : 'Select a group'}
-              </option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col h-[calc(100%-8rem)]">
-          <div className="flex-1 overflow-y-auto pr-4 mb-4" ref={scrollAreaRef}>
-            <div className="space-y-4">
-              {messages.length === 0 && (
-                <div className="text-center text-muted-foreground py-8">
-                  Start a conversation with the AI agent
-                </div>
-              )}
-              {messages.map((message, index) => (
-                <div
-                  key={message.id || index}
-                  className={cn(
-                    'flex',
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'rounded-lg py-2 max-w-[80%] sm:max-w-[85%]',
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground px-3 sm:px-4'
-                        : 'bg-muted px-2 sm:px-4'
-                    )}
-                  >
-                    <div className="text-sm font-semibold mb-1">
-                      {message.role === 'user' ? 'You' : 'Agent'}
-                    </div>
-                    {message.imageUrl && (
-                      <div className="mb-2">
-                        <img
-                          src={message.imageUrl}
-                          alt="Uploaded image"
-                          className="max-w-full max-h-64 rounded-md object-contain"
-                        />
-                      </div>
-                    )}
-                    <div className="text-sm whitespace-pre-wrap">
-                      {message.content}
-                    </div>
-                    {message.debts && debtForms.length > 0 && index === messages.length - 1 && (
-                      <div className="mt-3 space-y-3 -mx-1 sm:mx-0">
-                        <div className="px-1 sm:px-0">
-                          <div className="p-3 sm:p-4 bg-background/50 rounded border">
-                            <div className="text-xs font-semibold mb-3">
-                              {debtForms.length > 1 && ` (${currentDebtIndex + 1} of ${debtForms.length})`}
-                              {currentReceiptId && (
-                                <span className="ml-2 text-muted-foreground font-normal">
-                                  Receipt ID: {currentReceiptId.substring(0, 8)}...
-                                </span>
-                              )}
-                            </div>
-                            <DebtFormItem
-                              debtData={debtForms[currentDebtIndex]}
-                              groupId={parseInt(groupId)}
-                              currentUserId={user?.id}
-                              onChange={(data) => updateDebtForm(currentDebtIndex, data)}
-                            />
-                            
-                            {/* Navigation for multiple debts */}
-                            {debtForms.length > 1 && (
-                              <div className="flex items-center justify-between rounded-md border bg-muted/30 p-2 mt-3">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setCurrentDebtIndex(Math.max(0, currentDebtIndex - 1))}
-                                  disabled={currentDebtIndex === 0}
-                                >
-                                  ← Prev
-                                </Button>
-                                <span className="text-sm text-muted-foreground">
-                                  Debt {currentDebtIndex + 1} of {debtForms.length}
-                                </span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setCurrentDebtIndex(Math.min(debtForms.length - 1, currentDebtIndex + 1))}
-                                  disabled={currentDebtIndex === debtForms.length - 1}
-                                >
-                                  Next →
-                                </Button>
-                              </div>
-                            )}
-
-                            {/* Add/Remove debt buttons */}
-                            <div className="flex gap-2 mt-3">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={addNewDebt}
-                                className="flex-1"
-                              >
-                                + Add another debt
-                              </Button>
-                              {debtForms.length > 1 && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => removeDebt(currentDebtIndex)}
-                                >
-                                  Remove
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex gap-2 px-1 sm:px-0">
-                          <Button 
-                            size="sm" 
-                            onClick={handleCreateDebts} 
-                            disabled={isCreatingDebts || debtForms.some(d => !d.borrowerId || !d.amount || parseFloat(d.amount) <= 0)}
-                          >
-                            {isCreatingDebts ? 'Creating...' : `Create ${debtForms.length} Debt${debtForms.length > 1 ? 's' : ''}`}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={handleCancelDebts}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="rounded-lg px-4 py-2 bg-muted">
-                    <div className="text-sm font-semibold mb-1">Agent</div>
-                    <div className="text-sm">Thinking...</div>
-                  </div>
-                </div>
-              )}
+    <div className="flex h-[calc(100svh-var(--header-height)-4rem)] flex-col gap-6">
+      <PageHeader
+        title="AI Assistant"
+        description="Describe an expense or paste a receipt and turn it into debts for your group."
+        actions={
+          !showZeroGroups && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="ai-group-picker" className="text-muted-foreground">
+                Group
+              </Label>
+              <Select
+                value={groupId}
+                onValueChange={setGroupId}
+                disabled={isLoadingGroups}
+              >
+                <SelectTrigger id="ai-group-picker" className="w-44">
+                  <SelectValue
+                    placeholder={isLoadingGroups ? 'Loading groups…' : 'Select a group'}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map((group) => (
+                    <SelectItem key={group.id} value={group.id.toString()}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
+          )
+        }
+      />
 
-          {error && (
-            <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">
-              {error}
-            </div>
-          )}
+      {showZeroGroups ? (
+        <Empty className="min-h-0 flex-1 border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Users />
+            </EmptyMedia>
+            <EmptyTitle>You need a group first</EmptyTitle>
+            <EmptyDescription>
+              The AI assistant creates debts inside one of your groups. Create a
+              group and invite your friends to get started.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild>
+              <Link href="/groups">
+                <Plus />
+                Create a group
+              </Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <Card className="flex min-h-0 flex-1 flex-col">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6">
+            {messages.length === 0 && !isLoading ? (
+              <Empty className="min-h-0 flex-1 border border-dashed">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Sparkles />
+                  </EmptyMedia>
+                  <EmptyTitle>Start a conversation</EmptyTitle>
+                  <EmptyDescription>
+                    Ask about splitting an expense, or paste a receipt image to
+                    extract debts automatically.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {SUGGESTED_PROMPTS.map((prompt) => (
+                      <Button
+                        key={prompt}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setInput(prompt)
+                          inputRef.current?.focus()
+                        }}
+                      >
+                        {prompt}
+                      </Button>
+                    ))}
+                  </div>
+                </EmptyContent>
+              </Empty>
+            ) : (
+              <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1">
+                <div className="space-y-4 pr-3">
+                  {messages.map((message, index) => (
+                    <ChatMessageBubble
+                      key={message.id || index}
+                      message={message}
+                      reviewPanel={
+                        message.debts &&
+                        debtForms.length > 0 &&
+                        index === messages.length - 1 ? (
+                          <DebtReviewPanel
+                            debtForms={debtForms}
+                            currentIndex={currentDebtIndex}
+                            groupId={parseInt(groupId)}
+                            currentUserId={user.id}
+                            receiptId={currentReceiptId}
+                            isCreating={isCreatingDebts}
+                            onIndexChange={setCurrentDebtIndex}
+                            onFormChange={updateDebtForm}
+                            onAddDebt={addNewDebt}
+                            onRemoveDebt={removeDebt}
+                            onCreate={handleCreateDebts}
+                            onCancel={handleCancelDebts}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  ))}
+                  {isLoading && <ThinkingBubble />}
+                </div>
+              </ScrollArea>
+            )}
 
-          {/* Pending image preview */}
-          {pendingImage && (
-            <div className="mb-4 p-3 bg-muted rounded-md">
-              <div className="flex items-start gap-3">
+            {error && (
+              <Alert variant="destructive">
+                <CircleAlert />
+                <AlertTitle>Something went wrong</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {pendingImage && (
+              <div className="flex items-center gap-3 rounded-md border p-2">
                 <img
                   src={pendingImage.url}
-                  alt="Pending upload"
-                  className="max-w-32 max-h-32 rounded-md object-contain"
+                  alt="Image ready to send"
+                  className="size-12 rounded-md object-cover"
                 />
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Image ready to upload
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={clearPendingImage}
-                  >
-                    Remove
-                  </Button>
-                </div>
+                <Badge variant="secondary">Image attached</Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="ml-auto"
+                  onClick={clearPendingImage}
+                  aria-label="Remove image"
+                >
+                  <X />
+                </Button>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isUploading || !groupId}
-              title="Upload image"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                <circle cx="9" cy="9" r="2" />
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-              </svg>
-            </Button>
-            <Input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={pendingImage ? "Add a message (optional)..." : "Type your message or paste an image..."}
-              disabled={isLoading || isUploading || !groupId}
-              className="flex-1"
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+              onChange={handleFileSelect}
+              className="hidden"
             />
-            <Button type="submit" disabled={isLoading || isUploading || !groupId || (!input.trim() && !pendingImage)}>
-              {isUploading ? 'Uploading...' : 'Send'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isUploading || !groupId}
+                aria-label="Upload image"
+              >
+                <ImageIcon />
+              </Button>
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={pendingImage ? "Add a message (optional)..." : "Type your message or paste an image..."}
+                disabled={isLoading || isUploading || !groupId}
+                className="flex-1"
+              />
+              <Button
+                type="submit"
+                disabled={isLoading || isUploading || !groupId || (!input.trim() && !pendingImage)}
+              >
+                {isUploading && <Spinner />}
+                {isUploading ? 'Uploading…' : 'Send'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
