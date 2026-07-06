@@ -19,7 +19,7 @@ export default async function DashboardPage() {
   const [debts, groups, tabs, dbUser, recurringPayments, alerts, pendingTransactions] = await Promise.all([
     debtService.getUserDebts(user.id, { status: 'pending' }),
     groupService.getUserGroups(user.id),
-    tabService.getUserTabs(user.id, { status: 'borrowing' }),
+    tabService.getUserTabs(user.id),
     prisma.user.findUnique({ where: { id: user.id }, select: { name: true } }),
     recurringPaymentService.getUserRecurringPayments(user.id, { status: 'active' }),
     alertService.getActiveAlertsForBorrower(user.id),

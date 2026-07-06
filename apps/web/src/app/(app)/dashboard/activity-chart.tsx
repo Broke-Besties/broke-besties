@@ -24,6 +24,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { Activity } from "lucide-react";
+import { chartColor } from "@/lib/chart-colors";
 import { bucketByMonth } from "@/lib/chart-series";
 
 type Debt = {
@@ -34,8 +35,8 @@ type Debt = {
 };
 
 const config = {
-  owed: { label: "Owed to you", color: "#10b981" },
-  owe: { label: "You owe", color: "#f43f5e" },
+  owed: { label: "Owed to you", color: chartColor(0) },
+  owe: { label: "You owe", color: chartColor(1) },
 } satisfies ChartConfig;
 
 export function ActivityChart({
