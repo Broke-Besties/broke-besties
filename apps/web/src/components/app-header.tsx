@@ -15,7 +15,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandMenu } from "@/components/command-menu";
 import { logoutAction } from "@/components/actions";
@@ -39,8 +38,7 @@ export function AppHeader({
 }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex h-(--header-height) items-center gap-2 border-b bg-background px-4 md:px-6">
-      <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-1 h-4" />
+      <SidebarTrigger className="-ml-1 md:hidden" />
       <Link href="/dashboard" className="flex items-center gap-2">
         <Image
           src="/mascot/waving.png"

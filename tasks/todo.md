@@ -55,10 +55,15 @@ use Empty with CTAs, filters are Tabs/ToggleGroup/Select, long forms are Sheets.
 duplicate approval inboxes merged into /debts/requests (/debt-transactions redirects).
 Verified: tsc + build clean, live screenshot pass on prod server.
 
-**Exception to the no-touch-ui rule (deliberate):** `ui/sidebar.tsx` gap div fixed to use
-its own `gapCollapsible` variable — the custom hover-flyout fork never applied it, so a
-pinned-open sidebar overlapped content by 192px. Bug fix completing the file's own
-documented intent, not a customization.
+**Sidebar is now 100% stock shadcn** (the old hover-flyout fork and its gap patch are
+gone — `ui/sidebar.tsx` was reinstalled via `npx shadcn add sidebar`). Hover-expand
+behavior lives in OUR code: `app-sidebar.tsx` drives `useSidebar().setOpen` from
+mouseenter/leave (200ms close delay), and one `globals.css` rule pins the sidebar gap
+at icon width so the expanded panel overlays content instead of pushing it. Desktop has
+no trigger button (hover + ⌘B only); the trigger is `md:hidden` — mobile still needs it
+for the Sheet. `/profile` swaps sidebar content to settings nav (`settingsNavGroups`).
+Header is `fixed` (not sticky); Overpass is self-hosted with metric overrides in the
+root layout — see commit 4261757, don't revert to next/font/google.
 
 Known deferrals (noted per area in commit messages): forgot-password flow (backend),
 "Resolved" history tab on the requests inbox (service change), searchUsers combobox for

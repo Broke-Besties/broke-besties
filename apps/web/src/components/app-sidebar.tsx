@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -14,7 +15,6 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -26,7 +26,24 @@ import {
 
 export function AppSidebar({ counts }: { counts?: NavCounts }) {
   const pathname = usePathname();
-  const { isMobile, setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile, setOpen } = useSidebar();
+
+  // Desktop: expand on hover, collapse when the cursor leaves. The short
+  // close delay stops flicker when the cursor skims the sidebar edge.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleMouseEnter = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpen(true);
+  };
+  const handleMouseLeave = () => {
+    closeTimer.current = setTimeout(() => setOpen(false), 200);
+  };
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    []
+  );
 
   const isActive = (href: string) => pathname.startsWith(href);
 
@@ -42,7 +59,9 @@ export function AppSidebar({ counts }: { counts?: NavCounts }) {
   return (
     <Sidebar
       collapsible="icon"
-      className="top-(--header-height)! h-[calc(100svh-var(--header-height))]!"
+      className="top-(--header-height)! h-[calc(100svh-var(--header-height))]! group-data-[state=expanded]:shadow-lg"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <SidebarContent>
         {inSettings && (
@@ -92,7 +111,6 @@ export function AppSidebar({ counts }: { counts?: NavCounts }) {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarRail />
     </Sidebar>
   );
 }

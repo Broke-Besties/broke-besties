@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Bell } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -15,15 +14,14 @@ export default async function AppLayout({
   children: React.ReactNode;
 }>) {
   const user = await getUser();
-  const sidebarCookie = (await cookies()).get("sidebar_state")?.value;
-  const defaultOpen = sidebarCookie !== "false";
   const counts = user
     ? await getNavCounts(user.id, user.email ?? "")
     : undefined;
 
   return (
     <div className="[--header-height:--spacing(14)]">
-      <SidebarProvider defaultOpen={defaultOpen} className="flex flex-col">
+      {/* Sidebar starts collapsed; it expands on hover (see AppSidebar). */}
+      <SidebarProvider defaultOpen={false} className="flex flex-col">
         <AppHeader
           user={user}
           notifications={
