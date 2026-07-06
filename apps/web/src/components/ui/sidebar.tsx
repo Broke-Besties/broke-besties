@@ -231,11 +231,9 @@ function Sidebar({
         data-gap-collapsible={gapCollapsible}
         className={cn(
           "relative bg-transparent transition-[width] duration-300 ease-in-out",
-          collapsible === "offcanvas" && state === "collapsed" && "w-0",
-          collapsible === "offcanvas" &&
-            state === "expanded" &&
-            "w-(--sidebar-width)",
-          collapsible === "icon" &&
+          gapCollapsible === "" && "w-(--sidebar-width)",
+          gapCollapsible === "offcanvas" && "w-0",
+          gapCollapsible === "icon" &&
             (variant === "floating" || variant === "inset"
               ? "w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
               : "w-(--sidebar-width-icon)"),
