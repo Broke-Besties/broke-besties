@@ -20,7 +20,11 @@ export default async function AppLayout({
   return (
     <div className="[--header-height:--spacing(14)]">
       {/* Sidebar starts collapsed; it expands on hover (see AppSidebar). */}
-      <SidebarProvider defaultOpen={false} className="flex flex-col">
+      <SidebarProvider
+        defaultOpen={false}
+        className="flex flex-col"
+        style={{ "--sidebar-width-icon": "4.5rem" } as React.CSSProperties}
+      >
         <AppHeader
           user={user}
           notifications={

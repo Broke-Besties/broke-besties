@@ -10,7 +10,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuBadge,
   SidebarMenuButton,
@@ -59,15 +58,15 @@ export function AppSidebar({ counts }: { counts?: NavCounts }) {
   return (
     <Sidebar
       collapsible="icon"
-      className="top-(--header-height)! h-[calc(100svh-var(--header-height))]! border-r-0! group-data-[state=expanded]:shadow-lg"
+      className="top-(--header-height)! h-[calc(100svh-var(--header-height))]! border-r-0! group-data-[state=expanded]:shadow-lg [&_[data-sidebar=menu-button]>svg]:size-6! [&_[data-sidebar=menu-button]]:h-11! group-data-[collapsible=icon]:[&_[data-sidebar=menu-button]]:size-11!"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <SidebarContent>
+      <SidebarContent className="justify-center">
         {inSettings && (
           <SidebarGroup>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-1.5">
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip="Back to app">
                     <Link href="/dashboard" onClick={handleLinkClick}>
@@ -82,9 +81,8 @@ export function AppSidebar({ counts }: { counts?: NavCounts }) {
         )}
         {groups.map((group) => (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-1.5">
                 {group.items.map((item) => {
                   const badgeCount =
                     item.badge && counts ? counts[item.badge] : 0;
