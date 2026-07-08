@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandMenu } from "@/components/command-menu";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { logoutAction } from "@/components/actions";
 
 type HeaderUser = { id: string; email?: string } | null | undefined;
@@ -55,6 +56,7 @@ export function AppHeader({
       <div className="ml-auto flex items-center gap-2">
         <CommandMenu />
         {notifications}
+        <ThemeToggle />
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

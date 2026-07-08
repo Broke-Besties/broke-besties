@@ -59,7 +59,7 @@ export function AppSidebar({ counts }: { counts?: NavCounts }) {
   return (
     <Sidebar
       collapsible="icon"
-      className="top-(--header-height)! h-[calc(100svh-var(--header-height))]! group-data-[state=expanded]:shadow-lg"
+      className="top-(--header-height)! h-[calc(100svh-var(--header-height))]! border-r-0! group-data-[state=expanded]:shadow-lg"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

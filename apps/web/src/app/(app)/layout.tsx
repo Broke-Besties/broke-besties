@@ -17,7 +17,6 @@ export default async function AppLayout({
   const counts = user
     ? await getNavCounts(user.id, user.email ?? "")
     : undefined;
-
   return (
     <div className="[--header-height:--spacing(14)]">
       {/* Sidebar starts collapsed; it expands on hover (see AppSidebar). */}
