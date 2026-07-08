@@ -113,9 +113,9 @@ export function DebtBreakdown({
         ) : (
           <ChartContainer
             config={chartConfig}
-            className="mx-auto aspect-square max-h-[260px]"
+            className="mx-auto aspect-square max-h-[250px] [&_.recharts-pie-label-text]:fill-foreground"
           >
-            <PieChart>
+            <PieChart margin={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <ChartTooltip
                 cursor={false}
                 content={
@@ -138,8 +138,11 @@ export function DebtBreakdown({
                 data={chartData}
                 dataKey="amount"
                 nameKey="key"
-                innerRadius={60}
+                innerRadius={64}
+                outerRadius={84}
                 strokeWidth={5}
+                labelLine={false}
+                label={({ payload }) => `$${Number(payload.amount).toFixed(0)}`}
               >
                 <Label
                   content={({ viewBox }) => {
@@ -153,14 +156,14 @@ export function DebtBreakdown({
                         >
                           <tspan
                             x={viewBox.cx}
-                            y={viewBox.cy}
+                            y={(viewBox.cy || 0) - 8}
                             className="fill-foreground text-2xl font-bold tabular-nums"
                           >
                             ${chartTotal.toFixed(0)}
                           </tspan>
                           <tspan
                             x={viewBox.cx}
-                            y={(viewBox.cy || 0) + 22}
+                            y={(viewBox.cy || 0) + 14}
                             className="fill-muted-foreground text-xs"
                           >
                             {view === "owed" ? "owed to you" : "you owe"}
@@ -172,6 +175,8 @@ export function DebtBreakdown({
                 />
               </Pie>
               <ChartLegend
+                verticalAlign="bottom"
+                height={52}
                 content={<ChartLegendContent nameKey="key" />}
                 className="flex-wrap gap-2 *:basis-auto"
               />
