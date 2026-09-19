@@ -7,13 +7,15 @@ export const maxDuration = 60;
 
 // GET /api/cron/alert-reminders
 // Triggered by GitHub Actions on a daily schedule.
-// Auth: Authorization: Bearer <CRON_SECRET>
+// Auth: Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
 export async function GET(request: NextRequest) {
-  const expected = process.env.CRON_SECRET;
+  const expected = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!expected) {
-    console.error("[cron/alert-reminders] CRON_SECRET is not configured");
+    console.error(
+      "[cron/alert-reminders] SUPABASE_SERVICE_ROLE_KEY is not configured"
+    );
     return NextResponse.json(
-      { error: "Cron secret not configured" },
+      { error: "Service role key not configured" },
       { status: 500 }
     );
   }
