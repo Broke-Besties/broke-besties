@@ -10,9 +10,31 @@ jobs:
   send:
     name: Trigger reminder cron
     runs-on: ubuntu-latest
+    env:
+      # Falls back to the production URL unless an APP_URL repo variable is set.
+      APP_URL: ${{ vars.APP_URL || 'https://broke-besties.vercel.app' }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Hit /api/cron/alert-reminders
         run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret is not set in the repository. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
           curl -fsSL --max-time 60 \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "${{ secrets.APP_URL }}/api/cron/alert-reminders"
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/alert-reminders"
+
+      # Supabase free-tier projects are paused after 7 days of inactivity.
+      # The cron above reads the DB through the app, but it only counts as
+      # activity if the app endpoint succeeds. Run a direct lightweight read
+      # against the database as a guaranteed keep-alive.
+      - name: Keep Supabase active (direct DB read)
+        if: always()
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL secret is not set in the repository. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          psql "$DATABASE_URL" -c "SELECT 1;"
