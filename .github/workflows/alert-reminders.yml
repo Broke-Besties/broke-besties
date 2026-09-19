@@ -12,18 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Falls back to the production URL unless an APP_URL repo variable is set.
-      APP_URL: ${{ vars.APP_URL || 'https://broke-besties.vercel.app' }}
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      APP_URL: ${{ secrets.APP_URL || vars.APP_URL || 'https://brokebesties.ca' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Hit /api/cron/alert-reminders
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "::error::CRON_SECRET secret is not set in the repository. Add it under Settings > Secrets and variables > Actions."
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY secret is not set in the repository. Add it under Settings > Secrets and variables > Actions."
             exit 1
           fi
           curl -fsSL --max-time 60 \
-            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
             "$APP_URL/api/cron/alert-reminders"
 
       # Supabase free-tier projects are paused after 7 days of inactivity.
