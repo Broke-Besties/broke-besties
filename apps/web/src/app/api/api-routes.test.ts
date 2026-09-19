@@ -235,7 +235,7 @@ describe("API routes", () => {
     };
 
     it("rejects requests without or with the wrong bearer token", async () => {
-      vi.stubEnv("CRON_SECRET", "secret");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "secret");
       let res = await cronRemindersRoute(new NextRequest("http://localhost/api/cron/alert-reminders"));
       expect(res.status).toBe(401);
 
@@ -248,8 +248,8 @@ describe("API routes", () => {
       expect(alertService.getAlertsDueForReminder).not.toHaveBeenCalled();
     });
 
-    it("returns 500 when CRON_SECRET is not configured", async () => {
-      vi.stubEnv("CRON_SECRET", "");
+    it("returns 500 when SUPABASE_SERVICE_ROLE_KEY is not configured", async () => {
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
 
       const res = await cronRemindersRoute(
         new NextRequest("http://localhost/api/cron/alert-reminders"),
@@ -259,7 +259,7 @@ describe("API routes", () => {
     });
 
     it("sends reminders for due alerts and marks them sent", async () => {
-      vi.stubEnv("CRON_SECRET", "secret");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "secret");
       vi.mocked(alertService.getAlertsDueForReminder).mockResolvedValueOnce([
         dueAlert,
       ] as never);
@@ -283,7 +283,7 @@ describe("API routes", () => {
     });
 
     it("counts failures and does not mark them sent", async () => {
-      vi.stubEnv("CRON_SECRET", "secret");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "secret");
       vi.mocked(alertService.getAlertsDueForReminder).mockResolvedValueOnce([
         dueAlert,
       ] as never);
