@@ -7,6 +7,7 @@ import {
   User,
   UserPlus,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,6 +35,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Money",
     items: [
+      { href: "/wallet", label: "Wallet", icon: Wallet },
       { href: "/debts", label: "Debts", icon: CreditCard, badge: "debtRequests" },
       { href: "/recurring-payments", label: "Recurring", icon: RefreshCw },
       { href: "/tabs", label: "Tabs", icon: Receipt },
