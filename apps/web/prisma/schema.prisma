@@ -32,6 +32,7 @@ model User {
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
   wallet                    Wallet?
+  premium                   Boolean                    @default(false)
 }
 
 model Wallet {
