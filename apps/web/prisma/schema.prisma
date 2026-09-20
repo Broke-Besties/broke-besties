@@ -31,6 +31,23 @@ model User {
   recurringPaymentBorrowers RecurringPaymentBorrower[]
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
+  notifications             Notification[]
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String // recipient
+  type      String // e.g. "debt_created", "friend_request"
+  title     String
+  body      String?
+  link      String? // in-app deep link
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 model Group {

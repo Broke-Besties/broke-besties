@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { emailService } from './email.service'
+import { notificationService } from './notification.service'
 
 type CreateTransactionParams = {
   debtId: number
@@ -126,6 +127,24 @@ export class DebtTransactionService {
           groupName: transaction.debt.group?.name,
           debtLink,
         })
+
+        // In-app notification to the other party who must respond.
+        await notificationService.create({
+          userId: recipient.id,
+          type: `debt_${type}_request`,
+          title: `${requesterName} requested to ${type} a debt`,
+          body: transaction.reason ?? undefined,
+          link: `/debts/${debtId}`,
+        })
+      } else if (type === 'confirm_paid') {
+        // In-app notification to the other party to confirm the payment.
+        await notificationService.create({
+          userId: recipient.id,
+          type: 'debt_confirm_paid_request',
+          title: `${requesterName} marked a debt as paid`,
+          body: 'Confirm it to settle the debt.',
+          link: `/debts/${debtId}`,
+        })
       }
     } catch (emailError) {
       // Log error but don't fail the transaction creation
@@ -196,6 +215,14 @@ export class DebtTransactionService {
             proposedDescription: updated.proposedDescription ?? undefined,
             groupName: updated.debt.group?.name,
             debtLink,
+          })
+
+          // In-app notification to the requester.
+          await notificationService.create({
+            userId: updated.requesterId,
+            type: 'debt_request_rejected',
+            title: `${rejector.name || rejector.email} rejected your ${updated.type} request`,
+            link: `/debts/${updated.debtId}`,
           })
         }
       } catch (emailError) {
@@ -312,6 +339,23 @@ export class DebtTransactionService {
             groupName: result.debt.group?.name,
             debtLink,
           })
+
+          // In-app notification to the requester.
+          await notificationService.create({
+            userId: result.requesterId,
+            type: 'debt_request_approved',
+            title: `${approver.name || approver.email} approved your ${result.type} request`,
+            link: result.type === 'drop' ? '/dashboard' : `/debts/${result.debtId}`,
+          })
+        } else if (result.type === 'confirm_paid') {
+          // In-app notification to the requester: the debt is now settled.
+          await notificationService.create({
+            userId: result.requesterId,
+            type: 'debt_confirmed_paid',
+            title: `${approver.name || approver.email} confirmed the debt is paid`,
+            body: 'The debt has been settled.',
+            link: `/debts/${result.debtId}`,
+          })
         }
       } catch (emailError) {
         console.error('Failed to send debt request approved email:', emailError)
@@ -392,6 +436,14 @@ export class DebtTransactionService {
           proposedDescription: cancelled.proposedDescription ?? undefined,
           groupName: cancelled.debt.group?.name,
           debtLink,
+        })
+
+        // In-app notification to the other party.
+        await notificationService.create({
+          userId: otherParty.id,
+          type: 'debt_request_cancelled',
+          title: `${cancelled.requester.name || cancelled.requester.email} cancelled their ${cancelled.type} request`,
+          link: `/debts/${cancelled.debtId}`,
         })
       }
     } catch (emailError) {
