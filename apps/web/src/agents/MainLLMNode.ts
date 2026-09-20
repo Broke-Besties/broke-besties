@@ -18,9 +18,8 @@ export async function mainLLMNode(
   console.log("[Agent LLM] Has group members:", !!state.groupMembers);
   console.log("[Agent LLM] Current message count:", state.messages.length);
 
-  let contextMessage = `You are a debt management assistant that processes receipts and debt entries.
+  let contextMessage = `You are a debt management assistant for a bill-splitting app.
 If the user's message is a greeting or unrelated to debts, respond normally.
-Otherwise, analyze the provided data and output the debts JSON.
 
 Context:
 - User ID: ${state.userId}
@@ -44,26 +43,23 @@ ${state.groupMembers}`;
 RECEIPT TEXT (extracted via OCR):
 ${state.receiptText}
 
-TASK: Parse this receipt and match items to people mentioned in the user's message.
-- User may mention names and items (e.g., "albert owes me for the pizza")
-- Match names to the group members list above
-- Extract amounts from the receipt text
-- Create debt entries for each person/item pair`;
+NOTE: When a receipt image is uploaded, the app automatically parses it into
+individual items with prices and shows an assignment panel where the user
+assigns items to group members manually. You do NOT need to create or propose
+debts yourself. Simply acknowledge the receipt and remind the user to assign
+the parsed items to their group members in the panel.`;
   } else {
     contextMessage += `
 
-TASK: Create manual debt entry based on user's message.
-- User should provide who owes money, amount, and description
-- Match names to the group members list above
-- If information is missing, ask the user for clarification`;
+TASK: Help the user with debt and bill-splitting questions.
+- You can describe how debts work, but you do NOT create debts or output debt JSON.
+- If the user wants to log an expense, tell them to upload a receipt image to
+  split it by items, or use the group page to create a debt manually.`;
   }
 
   contextMessage += `
 
-OUTPUT FORMAT (respond ONLY with this JSON structure):
-{"debtsReady":true,"debts":[{"borrowerName":"Name","borrowerId":"id","amount":10.5,"description":"item"}]}
-
-If you need more information from the user, respond with plain text (not JSON) asking for clarification.`;
+Do NOT output any JSON with debts. Respond with plain, helpful text.`;
 
   const processedMessages: BaseMessage[] = [...state.messages];
 
