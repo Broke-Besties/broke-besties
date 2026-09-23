@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { agent } from "@/agents/graph";
+import { prisma } from "@/lib/prisma";
 import { BaseMessage } from "@langchain/core/messages";
 
 // POST /api/agent - Invoke the LangGraph agent
@@ -9,6 +10,19 @@ export async function POST(request: NextRequest) {
     const user = await getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Gate AI assistant behind premium
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { premium: true },
+    });
+
+    if (!dbUser?.premium) {
+      return NextResponse.json(
+        { error: "AI assistant is a premium feature. Upgrade to premium to use it." },
+        { status: 403 }
+      );
     }
 
     const { messages, groupId, imageUrl, receiptIds, description } = await request.json();

@@ -32,6 +32,41 @@ model User {
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
   uploadedReceipts          Receipt[]                  @relation("ReceiptUploader")
+  wallet                    Wallet?
+  premium                   Boolean                    @default(false)
+}
+
+model Wallet {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  // Balance stored in cents to avoid floating point issues
+  balanceCents    Int      @default(0)
+  stripeAccountId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([userId])
+}
+
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  walletId    String
+  type        String // "deposit" or "withdraw"
+  status      String   @default("pending") // "pending", "completed", "failed"
+  amountCents Int
+  currency    String   @default("usd")
+  // Stripe reference: checkout session id for deposits, transfer id for withdrawals
+  stripeRef   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([type, status])
 }
 
 model Group {
