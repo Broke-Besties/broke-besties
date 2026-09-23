@@ -40,4 +40,7 @@ jobs:
             echo "::error::DATABASE_URL secret is not set in the repository. Add it under Settings > Secrets and variables > Actions."
             exit 1
           fi
-          psql "$DATABASE_URL" -c "SELECT 1;"
+          # psql is libpq: it rejects Prisma-only params such as
+          # ?pgbouncer=true&connection_limit=1. Drop the query string.
+          DB_URL="${DATABASE_URL%%\?*}?sslmode=require"
+          psql "$DB_URL" -c "SELECT 1;"
