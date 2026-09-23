@@ -9,7 +9,7 @@ const ocrModel = new ChatGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_API_KEY,
 });
 
-async function fetchImageAsBase64(imageUrl: string): Promise<string> {
+export async function fetchImageAsBase64(imageUrl: string): Promise<string> {
 
   // Check if it's a Supabase storage URL
   if (imageUrl.includes("supabase")) {

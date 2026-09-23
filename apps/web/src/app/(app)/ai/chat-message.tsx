@@ -14,17 +14,11 @@ export type ChatMessage = {
   imageUrl?: string
   /** Set on the confirmation message after debts are created. */
   groupHref?: string
-  debts?: Array<{
-    borrowerName: string
-    borrowerId: string
-    amount: number
-    description?: string
-  }>
 }
 
 type ChatMessageBubbleProps = {
   message: ChatMessage
-  /** Debt-review panel rendered full width inside the bubble. */
+  /** Assignment/review panel rendered full width inside the bubble. */
   reviewPanel?: ReactNode
 }
 
@@ -67,14 +61,14 @@ export function ChatMessageBubble({ message, reviewPanel }: ChatMessageBubblePro
   )
 }
 
-export function ThinkingBubble() {
+export function ThinkingBubble({ label }: { label?: string }) {
   return (
     <div className="flex justify-start">
       <div className="rounded-lg bg-muted px-3 py-2 sm:px-4">
         <div className="mb-1 text-sm font-semibold">Assistant</div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner />
-          Thinking…
+          {label || 'Thinking…'}
         </div>
       </div>
     </div>
