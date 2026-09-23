@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { ReceiptPolicy } from "@/policies";
+import { extractReceiptItems } from "@/agents/ReceiptItemParser";
 
 export class ReceiptService {
   /**
@@ -63,6 +64,13 @@ export class ReceiptService {
       console.log("[Receipt Upload] Successfully uploaded to Supabase");
       console.log("[Receipt Upload] Presigned URL:", signedUrlData.signedUrl);
 
+      // Track the uploader so pending receipts (no debts yet) are only
+      // accessible to whoever uploaded them
+      await prisma.receipt.update({
+        where: { id: receipt.id },
+        data: { uploaderId: userId },
+      });
+
       return {
         id: receipt.id,
         signedUrl: signedUrlData.signedUrl,
@@ -121,6 +129,11 @@ export class ReceiptService {
         id: receiptId,
       },
       include: {
+        items: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
         debts: {
           select: {
             id: true,
@@ -135,13 +148,112 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    // For pending receipts (no debts), allow the uploader to view
-    // For linked receipts, check if user is lender/borrower on any debt
-    if (receipt.debts.length > 0 && !ReceiptPolicy.canView(userId, receipt)) {
+    if (!this.canAccessReceipt(userId, receipt)) {
       throw new Error("Access denied");
     }
 
     return receipt;
+  }
+
+  /**
+   * Run item extraction on a receipt image and persist the parsed
+   * items (name + price) along with the raw OCR text.
+   * Items are re-extracted and replace any previously parsed items.
+   */
+  async parseReceiptItems(receiptId: string, userId: string) {
+    const receipt = await prisma.receipt.findFirst({
+      where: { id: receiptId },
+      include: {
+        debts: {
+          select: {
+            id: true,
+            lenderId: true,
+            borrowerId: true,
+          },
+        },
+      },
+    });
+
+    if (!receipt) {
+      throw new Error("Receipt not found");
+    }
+
+    if (!this.canAccessReceipt(userId, receipt)) {
+      throw new Error("Access denied");
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: signedUrlData, error: signedUrlError } =
+      await supabase.storage
+        .from("receipts")
+        .createSignedUrl(`receipts/${receiptId}`, 3600);
+
+    if (signedUrlError || !signedUrlData) {
+      throw new Error(
+        `Failed to get signed URL: ${signedUrlError?.message}`
+      );
+    }
+
+    const parsed = await extractReceiptItems(signedUrlData.signedUrl);
+
+    // Replace any previously parsed items and persist the OCR text
+    await prisma.$transaction([
+      prisma.receiptItem.deleteMany({ where: { receiptId } }),
+      prisma.receipt.update({
+        where: { id: receiptId },
+        data: {
+          rawText: parsed.rawText,
+          items: {
+            create: parsed.items.map((item) => ({
+              name: item.name,
+              price: item.price,
+            })),
+          },
+        },
+      }),
+    ]);
+
+    return {
+      id: receiptId,
+      rawText: parsed.rawText,
+      items: parsed.items,
+    };
+  }
+
+  /**
+   * Get the parsed items for a receipt
+   */
+  async getReceiptItems(receiptId: string, userId: string) {
+    await this.getReceiptById(receiptId, userId);
+
+    return prisma.receiptItem.findMany({
+      where: { receiptId },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  /**
+   * Users can access a receipt if they uploaded it (pending receipts)
+   * or are the lender/borrower on any of its linked debts.
+   */
+  private async canAccessReceipt(
+    userId: string,
+    receipt: { uploaderId: string | null; debts: { id: number; lenderId: string; borrowerId: string }[] }
+  ) {
+    if (receipt.uploaderId === userId) {
+      return true;
+    }
+
+    // Legacy receipts uploaded before uploader tracking
+    if (!receipt.uploaderId && receipt.debts.length === 0) {
+      return true;
+    }
+
+    return receipt.debts.length > 0 && ReceiptPolicy.canView(userId, receipt);
   }
 
   /**

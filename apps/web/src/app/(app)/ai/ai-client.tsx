@@ -31,15 +31,16 @@ import { Spinner } from '@/components/ui/spinner'
 import { PageHeader } from '@/components/page-header'
 import { createDebt } from '@/app/(app)/groups/[id]/actions'
 import { ChatMessageBubble, ThinkingBubble, type ChatMessage } from './chat-message'
-import { DebtReviewPanel, type DebtFormData } from './debt-review-panel'
+import {
+  ReceiptAssignmentPanel,
+  type AssignableItem,
+  type GroupMemberOption,
+  type ReceiptItemAssignment,
+} from './receipt-assignment-panel'
 
 type Group = {
   id: number
   name: string
-}
-
-type AIPageClientProps = {
-  user: { id: string }
 }
 
 const SUGGESTED_PROMPTS = [
@@ -48,7 +49,7 @@ const SUGGESTED_PROMPTS = [
   'What can you help me with?',
 ]
 
-export default function AIPageClient({ user }: AIPageClientProps) {
+export default function AIPageClient() {
   const searchParams = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -60,9 +61,11 @@ export default function AIPageClient({ user }: AIPageClientProps) {
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [currentReceiptId, setCurrentReceiptId] = useState<string | null>(null)
-  const [debtForms, setDebtForms] = useState<DebtFormData[]>([])
+  const [parsedItems, setParsedItems] = useState<AssignableItem[] | null>(null)
+  const [parsedKey, setParsedKey] = useState(0)
+  const [members, setMembers] = useState<GroupMemberOption[]>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
-  const [currentDebtIndex, setCurrentDebtIndex] = useState(0)
+  const [isParsing, setIsParsing] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -107,26 +110,39 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }, [messages, isLoading])
 
-  // Populate debt forms when a message with debts is received
+  // Fetch group members whenever the selected group changes
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1]
-    if (lastMessage?.debts && lastMessage.debts.length > 0) {
-      const forms = lastMessage.debts.map(debt => ({
-        amount: debt.amount.toString(),
-        description: debt.description || '',
-        borrowerId: debt.borrowerId,
-        borrower: {
-          id: debt.borrowerId,
-          name: debt.borrowerName,
-          email: debt.borrowerName, // Using name as email fallback
-        },
-        alertMessage: '',
-        alertDeadline: '',
-      }))
-      setDebtForms(forms)
-      setCurrentDebtIndex(0) // Reset to first debt
+    if (!groupId) {
+      setMembers([])
+      return
     }
-  }, [messages])
+    let cancelled = false
+    async function fetchMembers() {
+      try {
+        const response = await fetch(`/api/groups/${groupId}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch group')
+        }
+        const data = await response.json()
+        if (!cancelled) {
+          setMembers(
+            (data.group?.members || []).map(
+              (member: { user: { id: string; name: string } }) => ({
+                id: member.user.id,
+                name: member.user.name,
+              })
+            )
+          )
+        }
+      } catch (err) {
+        console.error('Error fetching group members:', err)
+      }
+    }
+    fetchMembers()
+    return () => {
+      cancelled = true
+    }
+  }, [groupId])
 
   // Handle paste events for images
   useEffect(() => {
@@ -257,68 +273,39 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     }
   }
 
-  const addNewDebt = () => {
-    setDebtForms([...debtForms, {
-      amount: '',
-      description: '',
-      borrowerId: '',
-      borrower: null,
-      alertMessage: '',
-      alertDeadline: '',
-    }])
-    setCurrentDebtIndex(debtForms.length)
-  }
+  const parseReceiptItems = async (
+    receiptId: string
+  ): Promise<AssignableItem[]> => {
+    const response = await fetch(`/api/receipts/${receiptId}/parse`, {
+      method: 'POST',
+    })
 
-  const removeDebt = (index: number) => {
-    if (debtForms.length === 1) return
-    const newDebts = debtForms.filter((_, i) => i !== index)
-    setDebtForms(newDebts)
-    if (currentDebtIndex >= newDebts.length) {
-      setCurrentDebtIndex(newDebts.length - 1)
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to parse receipt')
     }
+
+    const data = await response.json()
+    return data.data.items
   }
 
-  const updateDebtForm = (index: number, data: DebtFormData) => {
-    const newDebts = [...debtForms]
-    newDebts[index] = data
-    setDebtForms(newDebts)
-  }
+  const handleCreateDebts = async (assignments: ReceiptItemAssignment[]) => {
+    if (!groupId) {
+      setError('Please select a group first')
+      return
+    }
 
-  const handleCancelDebts = async () => {
-    await deleteCurrentReceipt()
-    setDebtForms([])
-    setCurrentDebtIndex(0)
-  }
-
-  const handleCreateDebts = async () => {
     setIsCreatingDebts(true)
     setError('')
 
     try {
-      // Validate all debts have required fields
-      for (let i = 0; i < debtForms.length; i++) {
-        const debt = debtForms[i]
-        if (!debt.borrowerId) {
-          setError(`Debt ${i + 1}: Please select a borrower`)
-          setIsCreatingDebts(false)
-          setCurrentDebtIndex(i)
-          return
-        }
-        if (!debt.amount || parseFloat(debt.amount) <= 0) {
-          setError(`Debt ${i + 1}: Please enter a valid amount`)
-          setIsCreatingDebts(false)
-          setCurrentDebtIndex(i)
-          return
-        }
-      }
-
-      // Create each debt and collect their IDs
+      // Create one debt per borrower and collect their IDs
       const createdDebtIds: number[] = []
-      for (const debt of debtForms) {
+      for (const assignment of assignments) {
         const result = await createDebt({
-          amount: parseFloat(debt.amount),
-          description: debt.description || undefined,
-          borrowerId: debt.borrowerId,
+          amount: assignment.amount,
+          description: assignment.description || undefined,
+          borrowerId: assignment.borrowerId,
           groupId: parseInt(groupId),
         })
 
@@ -344,7 +331,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       }
 
       const groupName = groups.find(group => group.id.toString() === groupId)?.name
-      const debtCount = `${debtForms.length} debt${debtForms.length > 1 ? 's' : ''}`
+      const debtCount = `${assignments.length} debt${assignments.length > 1 ? 's' : ''}`
       toast.success(`Created ${debtCount}`)
 
       // Add confirmation message with a link onward to the group
@@ -355,10 +342,9 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         groupHref: `/groups/${groupId}`,
       }])
 
-      // Clear debt forms, receipt ID, and reset index
-      setDebtForms([])
+      // Clear parsed items and receipt ID
+      setParsedItems(null)
       setCurrentReceiptId(null)
-      setCurrentDebtIndex(0)
 
       // Refresh the page data
       router.refresh()
@@ -368,6 +354,11 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     } finally {
       setIsCreatingDebts(false)
     }
+  }
+
+  const handleCancelAssignment = async () => {
+    await deleteCurrentReceipt()
+    setParsedItems(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -391,7 +382,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         uploadedImageUrl = result.signedUrl
         receiptId = result.receiptId
         setCurrentReceiptId(receiptId)
-        // Note: We only need the URL now, ReceiptTool will fetch the image itself
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
         setError(errorMessage)
@@ -411,8 +401,40 @@ export default function AIPageClient({ user }: AIPageClientProps) {
     setMessages(prev => [...prev, userMessage])
     setInput('')
     clearPendingImage()
-    setIsLoading(true)
     setError('')
+
+    if (receiptId) {
+      // Receipt flow: parse items + prices, then let the user assign them manually
+      setIsParsing(true)
+      try {
+        const items = await parseReceiptItems(receiptId)
+        setParsedItems(items)
+        setParsedKey(prev => prev + 1)
+
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `I found ${items.length} item${items.length > 1 ? 's' : ''} on the receipt. Assign them to group members below and I'll create the debts:`,
+          id: Date.now().toString(),
+        }
+        setMessages(prev => [...prev, assistantMessage])
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to parse receipt'
+        setError(errorMessage)
+        // Clean up the receipt we can't parse
+        try {
+          await fetch(`/api/receipts/${receiptId}`, { method: 'DELETE' })
+        } catch (deleteErr) {
+          console.error('Error deleting receipt:', deleteErr)
+        }
+        setCurrentReceiptId(null)
+      } finally {
+        setIsParsing(false)
+      }
+      return
+    }
+
+    // Text-only flow: regular chat with the agent
+    setIsLoading(true)
 
     try {
       // Convert our message format to LangChain format
@@ -429,8 +451,6 @@ export default function AIPageClient({ user }: AIPageClientProps) {
         body: JSON.stringify({
           messages: langchainMessages,
           groupId: parseInt(groupId),
-          imageUrl: uploadedImageUrl,
-          receiptIds: receiptId ? [receiptId] : undefined,
         }),
       })
 
@@ -444,25 +464,10 @@ export default function AIPageClient({ user }: AIPageClientProps) {
       const lastMessage = data.messages[data.messages.length - 1]
       const content = lastMessage.content || lastMessage.kwargs?.content || 'No response'
 
-      // Try to parse JSON from the content
-      let parsedDebts = null
-      try {
-        const jsonMatch = content.match(/\{[\s\S]*"debtsReady"[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          if (parsed.debtsReady && Array.isArray(parsed.debts)) {
-            parsedDebts = parsed.debts
-          }
-        }
-      } catch {
-        // Not JSON, treat as regular message
-      }
-
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: parsedDebts ? 'I have the debt information ready. Please review and create:' : content,
+        content,
         id: Date.now().toString(),
-        debts: parsedDebts || undefined,
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -575,28 +580,23 @@ export default function AIPageClient({ user }: AIPageClientProps) {
                       key={message.id || index}
                       message={message}
                       reviewPanel={
-                        message.debts &&
-                        debtForms.length > 0 &&
+                        parsedItems &&
+                        members.length > 0 &&
+                        currentReceiptId &&
                         index === messages.length - 1 ? (
-                          <DebtReviewPanel
-                            debtForms={debtForms}
-                            currentIndex={currentDebtIndex}
-                            groupId={parseInt(groupId)}
-                            currentUserId={user.id}
-                            receiptId={currentReceiptId}
+                          <ReceiptAssignmentPanel
+                            key={parsedKey}
+                            items={parsedItems}
+                            members={members}
                             isCreating={isCreatingDebts}
-                            onIndexChange={setCurrentDebtIndex}
-                            onFormChange={updateDebtForm}
-                            onAddDebt={addNewDebt}
-                            onRemoveDebt={removeDebt}
                             onCreate={handleCreateDebts}
-                            onCancel={handleCancelDebts}
+                            onCancel={handleCancelAssignment}
                           />
                         ) : undefined
                       }
                     />
                   ))}
-                  {isLoading && <ThinkingBubble />}
+                  {(isLoading || isParsing) && <ThinkingBubble label={isParsing ? 'Parsing receipt…' : undefined} />}
                 </div>
               </ScrollArea>
             )}
@@ -660,7 +660,7 @@ export default function AIPageClient({ user }: AIPageClientProps) {
               />
               <Button
                 type="submit"
-                disabled={isLoading || isUploading || !groupId || (!input.trim() && !pendingImage)}
+                disabled={isLoading || isUploading || isParsing || !groupId || (!input.trim() && !pendingImage)}
               >
                 {isUploading && <Spinner />}
                 {isUploading ? 'Uploading…' : 'Send'}

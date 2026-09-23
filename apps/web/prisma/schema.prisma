@@ -31,6 +31,7 @@ model User {
   recurringPaymentBorrowers RecurringPaymentBorrower[]
   friends                   Friend[]                   @relation("FriendRequester")
   friendsReceived           Friend[]                   @relation("FriendRecipient")
+  uploadedReceipts          Receipt[]                  @relation("ReceiptUploader")
   wallet                    Wallet?
   premium                   Boolean                    @default(false)
 }
@@ -165,12 +166,28 @@ model Alert {
 }
 
 model Receipt {
+  id         String   @id @default(cuid())
+  rawText    String?
+  uploaderId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  uploader User?          @relation("ReceiptUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  items    ReceiptItem[]
+  debts    Debt[]
+}
+
+model ReceiptItem {
   id        String   @id @default(cuid())
-  rawText   String?
+  receiptId String
+  name      String
+  price     Float
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  debts Debt[]
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId])
 }
 
 model Tab {

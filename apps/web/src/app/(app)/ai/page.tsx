@@ -19,7 +19,7 @@ export default async function AIPage() {
         </div>
       }
     >
-      <AIPageClient user={user} />
+      <AIPageClient />
     </Suspense>
   )
 }
