@@ -76,11 +76,13 @@ type Debt = {
     id: string
     name: string
     email: string
+    signedUp?: boolean
   }
   borrower: {
     id: string
     name: string
     email: string
+    signedUp?: boolean
   }
   group: {
     id: number
@@ -437,6 +439,11 @@ export default function DebtsPageClient({
                       >
                         {otherPerson.name || otherPerson.email}
                       </Link>
+                      {otherPerson.signedUp === false && (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                          Not signed up
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden max-w-[200px] truncate text-muted-foreground md:table-cell">
                       {debt.description || '-'}

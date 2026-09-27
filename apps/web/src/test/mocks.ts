@@ -86,6 +86,7 @@ export const EMAIL_METHODS = [
   "sendFriendRequest",
   "sendFriendRequestAccepted",
   "sendFriendRequestRejected",
+  "sendFriendSignupRequest",
   "sendGroupInviteAccepted",
   "sendGroupInviteRejected",
   "sendTabCreated",

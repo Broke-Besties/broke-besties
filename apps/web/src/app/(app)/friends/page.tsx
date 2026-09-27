@@ -18,6 +18,7 @@ export default async function FriendsPage() {
 
   return (
     <FriendsPageClient
+      currentUserId={user.id}
       initialFriends={friends}
       initialPendingRequests={pendingRequests}
       initialSentRequests={sentRequests}

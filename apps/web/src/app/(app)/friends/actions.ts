@@ -2,7 +2,6 @@
 
 import { getUser } from "@/lib/supabase";
 import { friendService } from "@/services/friend.service";
-import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -18,20 +17,13 @@ export async function sendFriendRequestByEmail(email: string) {
   }
 
   try {
-    const recipient = await prisma.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
-    });
-
-    if (!recipient) {
-      return { success: false, error: "User not found" };
-    }
-
-    const result = await friendService.sendFriendRequest(user.id, recipient.id);
+    const result = await friendService.sendFriendRequestByEmail(user.id, email);
     revalidatePath("/friends");
     return {
       success: true,
       friend: result.friend,
       autoAccepted: result.autoAccepted,
+      notSignedUp: result.notSignedUp,
     };
   } catch (error) {
     console.error("Send friend request error:", error);
