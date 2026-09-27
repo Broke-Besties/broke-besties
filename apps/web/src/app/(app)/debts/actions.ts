@@ -82,6 +82,7 @@ export async function searchFriendsForDebt(query: string) {
         id: f.friend.id,
         name: f.friend.name,
         email: f.friend.email,
+        signedUp: f.friend.signedUp,
       })),
     }
   } catch (error) {
@@ -105,6 +106,7 @@ export async function getRecentFriendsForDebt() {
         id: f.friend.id,
         name: f.friend.name,
         email: f.friend.email,
+        signedUp: f.friend.signedUp,
       })),
     }
   } catch (error) {

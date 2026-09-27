@@ -13,6 +13,7 @@ import { DebtRequestCancelledEmail } from "@/components/emails/debt-request-canc
 import { FriendRequestEmail } from "@/components/emails/friend-request";
 import { FriendRequestAcceptedEmail } from "@/components/emails/friend-request-accepted";
 import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-rejected";
+import { FriendSignupRequestEmail } from "@/components/emails/friend-signup-request";
 import { TabCreatedEmail } from "@/components/emails/tab-created";
 import { TabMarkedPaidEmail } from "@/components/emails/tab-marked-paid";
 import { AlertReminderEmail } from "@/components/emails/email";
@@ -322,6 +323,37 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send friend request email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendFriendSignupRequest(params: {
+    to: string;
+    requesterName: string;
+    signupLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `${params.requesterName} added you on BrokeBesties`,
+        react: FriendSignupRequestEmail({
+          requesterName: params.requesterName,
+          signupLink: params.signupLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send friend signup request email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send friend signup request email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

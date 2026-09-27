@@ -95,6 +95,23 @@ describe("debtService", () => {
       );
     });
 
+    it("skips the borrower email when the borrower has not signed up", async () => {
+      db.user.findUnique.mockResolvedValueOnce(
+        makeUser({ id: BORROWER_ID, signedUp: false }),
+      );
+      db.debt.create.mockResolvedValueOnce({
+        ...makeDebt(),
+        lender: { id: LENDER_ID, name: "L", email: "l@x.com", signedUp: true },
+        borrower: { id: BORROWER_ID, name: "B", email: "b@x.com", signedUp: false },
+        group: null,
+        receipts: [],
+      });
+
+      await debtService.createDebt(base);
+
+      expect(email.sendDebtCreated).not.toHaveBeenCalled();
+    });
+
     it("connects receipts when provided", async () => {
       db.user.findUnique.mockResolvedValueOnce(makeUser({ id: BORROWER_ID }));
       db.receipt.findMany.mockResolvedValueOnce([{ id: "r1" }]);

@@ -80,10 +80,10 @@ export class DebtService {
       },
       include: {
         lender: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, signedUp: true },
         },
         borrower: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, signedUp: true },
         },
         group: {
           select: { id: true, name: true },
@@ -92,17 +92,19 @@ export class DebtService {
       },
     });
 
-    // Send email notification to borrower
-    const debtLink = `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debt.id}`;
-    await emailService.sendDebtCreated({
-      to: debt.borrower.email,
-      borrowerName: debt.borrower.name,
-      lenderName: debt.lender.name,
-      amount: debt.amount,
-      description: debt.description || "No description provided",
-      groupName: debt.group?.name,
-      debtLink,
-    });
+    // Send email notification to borrower (skip placeholders who can't log in).
+    if (debt.borrower.signedUp !== false) {
+      const debtLink = `${process.env.NEXT_PUBLIC_APP_URL}/debts/${debt.id}`;
+      await emailService.sendDebtCreated({
+        to: debt.borrower.email,
+        borrowerName: debt.borrower.name,
+        lenderName: debt.lender.name,
+        amount: debt.amount,
+        description: debt.description || "No description provided",
+        groupName: debt.group?.name,
+        debtLink,
+      });
+    }
 
     return debt;
   }
@@ -133,10 +135,10 @@ export class DebtService {
       where,
       include: {
         lender: {
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true, name: true, signedUp: true },
         },
         borrower: {
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true, name: true, signedUp: true },
         },
         group: {
           select: { id: true, name: true },
@@ -170,10 +172,10 @@ export class DebtService {
       where: { groupId },
       include: {
         lender: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, signedUp: true },
         },
         borrower: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, signedUp: true },
         },
         group: {
           select: { id: true, name: true },
@@ -196,10 +198,10 @@ export class DebtService {
       where: { id: debtId },
       include: {
         lender: {
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true, name: true, signedUp: true },
         },
         borrower: {
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true, name: true, signedUp: true },
         },
         group: {
           select: { id: true, name: true },
