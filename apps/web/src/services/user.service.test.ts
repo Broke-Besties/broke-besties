@@ -58,4 +58,49 @@ describe("userService", () => {
       data: { name: "New Name" },
     });
   });
+
+  describe("findByEmail", () => {
+    it("requires an email and normalizes the lookup", async () => {
+      await expect(userService.findByEmail("")).rejects.toThrow(
+        "Email parameter is required",
+      );
+
+      db.user.findUnique.mockResolvedValueOnce(makeUser());
+      const user = await userService.findByEmail(" Larry@Example.com ");
+      expect(user?.email).toBe("larry@example.com");
+      expect(db.user.findUnique).toHaveBeenCalledWith({
+        where: { email: "larry@example.com" },
+      });
+    });
+  });
+
+  describe("findOrCreatePlaceholderByEmail", () => {
+    it("returns an existing user when one is found", async () => {
+      const existing = makeUser({ email: "l@x.com" });
+      db.user.findUnique.mockResolvedValueOnce(existing);
+
+      const user = await userService.findOrCreatePlaceholderByEmail("l@x.com");
+
+      expect(user).toEqual(existing);
+      expect(db.user.create).not.toHaveBeenCalled();
+    });
+
+    it("creates a signedUp=false placeholder when absent", async () => {
+      db.user.findUnique.mockResolvedValueOnce(null);
+      const created = makeUser({
+        id: "placeholder-id",
+        email: "new@x.com",
+        name: "new",
+        signedUp: false,
+      });
+      db.user.create.mockResolvedValueOnce(created);
+
+      const user = await userService.findOrCreatePlaceholderByEmail(" New@X.com ");
+
+      expect(user).toEqual(created);
+      expect(db.user.create).toHaveBeenCalledWith({
+        data: { email: "new@x.com", name: "new", signedUp: false },
+      });
+    });
+  });
 });
