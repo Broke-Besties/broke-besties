@@ -34,15 +34,6 @@ export type Group = {
   };
 };
 
-export type Tab = {
-  id: number;
-  amount: number;
-  description: string;
-  personName: string;
-  status: string;
-  createdAt: Date | string;
-};
-
 export type RecurringPayment = {
   id: number;
   amount: number;

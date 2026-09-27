@@ -31,7 +31,6 @@ export type MockPrisma = {
   groupMember: MockModel;
   groupInvite: MockModel;
   friend: MockModel;
-  tab: MockModel;
   alert: MockModel;
   recurringPayment: MockModel;
   recurringPaymentBorrower: MockModel;
@@ -66,7 +65,6 @@ export function createMockPrisma(): MockPrisma {
       groupMember: model(),
       groupInvite: model(),
       friend: model(),
-      tab: model(),
       alert: model(),
       recurringPayment: model(),
       recurringPaymentBorrower: model(),
@@ -89,8 +87,6 @@ export const EMAIL_METHODS = [
   "sendFriendSignupRequest",
   "sendGroupInviteAccepted",
   "sendGroupInviteRejected",
-  "sendTabCreated",
-  "sendTabMarkedPaid",
   "sendDebtRequestApproved",
   "sendDebtRequestRejected",
   "sendAlertReminder",
