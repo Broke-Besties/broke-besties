@@ -34,6 +34,7 @@ model User {
   uploadedReceipts          Receipt[]                  @relation("ReceiptUploader")
   wallet                    Wallet?
   premium                   Boolean                    @default(false)
+  signedUp                  Boolean                    @default(true)
 }
 
 model Wallet {

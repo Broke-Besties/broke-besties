@@ -117,6 +117,7 @@ export function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
     id: LENDER_ID,
     name: "Lender Larry",
     email: "larry@example.com",
+    signedUp: true,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
