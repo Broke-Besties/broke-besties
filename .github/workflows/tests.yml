@@ -30,3 +30,33 @@ jobs:
       - name: Run test suite
         working-directory: ./apps/web
         run: pnpm test
+
+  test-mcp-server:
+    name: MCP server test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        working-directory: ./apps/mcp-server
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: ./apps/mcp-server
+        run: pnpm typecheck
+
+      - name: Run test suite
+        working-directory: ./apps/mcp-server
+        run: pnpm test
