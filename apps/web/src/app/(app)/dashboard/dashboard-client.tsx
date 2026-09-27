@@ -3,17 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { CreateDebtModal } from "@/app/(app)/debts/create-debt-modal";
 import { ActivityChart } from "./activity-chart";
 import { DebtBreakdown } from "./debt-breakdown";
-import { GroupsCard, TabsCard, UpcomingPaymentsCard } from "./list-cards";
+import { GroupsCard, UpcomingPaymentsCard } from "./list-cards";
 import { NeedsAttention } from "./needs-attention";
 import { StatCards } from "./stat-cards";
-import { updateTabStatus } from "./actions";
 import { getDaysUntil, getNextRenewalDate } from "./format";
 import type {
   DashboardUser,
@@ -22,13 +20,11 @@ import type {
   OverdueAlert,
   PendingTransaction,
   RecurringPayment,
-  Tab,
 } from "./types";
 
 type DashboardPageClientProps = {
   initialDebts: Debt[];
   initialGroups: Group[];
-  initialTabs: Tab[];
   currentUser: DashboardUser;
   userName: string;
   initialRecurringPayments: RecurringPayment[];
@@ -39,7 +35,6 @@ type DashboardPageClientProps = {
 export default function DashboardPageClient({
   initialDebts,
   initialGroups,
-  initialTabs,
   currentUser,
   userName,
   initialRecurringPayments,
@@ -47,7 +42,6 @@ export default function DashboardPageClient({
   initialPendingTransactions,
 }: DashboardPageClientProps) {
   const router = useRouter();
-  const [tabs, setTabs] = useState<Tab[]>(initialTabs);
   const [showCreateDebt, setShowCreateDebt] = useState(false);
 
   const lendingDebts = initialDebts.filter(
@@ -55,9 +49,6 @@ export default function DashboardPageClient({
   );
   const borrowingDebts = initialDebts.filter(
     (debt) => debt.borrower.id === currentUser.id
-  );
-  const activeTabs = tabs.filter(
-    (tab) => tab.status === "lending" || tab.status === "borrowing"
   );
 
   const upcomingPayments = useMemo(
@@ -71,37 +62,6 @@ export default function DashboardPageClient({
         .sort((a, b) => a.daysUntil - b.daysUntil),
     [initialRecurringPayments]
   );
-
-  const handleMarkTabPaid = async (tabId: number) => {
-    const oldStatus = tabs.find((tab) => tab.id === tabId)?.status;
-
-    setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, status: "paid" } : tab))
-    );
-
-    const revert = () => {
-      if (oldStatus) {
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.id === tabId ? { ...tab, status: oldStatus } : tab
-          )
-        );
-      }
-    };
-
-    try {
-      const result = await updateTabStatus(tabId, "paid");
-      if (result.success) {
-        toast.success("Tab marked as paid");
-      } else {
-        toast.error(result.error || "Failed to update tab status");
-        revert();
-      }
-    } catch {
-      toast.error("An error occurred while updating the tab status");
-      revert();
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -142,11 +102,6 @@ export default function DashboardPageClient({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <GroupsCard groups={initialGroups} />
-        <TabsCard
-          tabs={activeTabs}
-          totalActive={activeTabs.length}
-          onMarkPaid={handleMarkTabPaid}
-        />
       </div>
 
       <CreateDebtModal

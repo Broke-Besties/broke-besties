@@ -455,38 +455,6 @@ async function main() {
   ]);
   console.log(`Created ${otherDebts.length} debts between other users`);
 
-  // Create tabs for mainUser
-  const tabs = await Promise.all([
-    prisma.tab.create({
-      data: {
-        amount: 45.0,
-        description: "Borrowed for lunch",
-        personName: "John (non-user friend)",
-        status: "borrowing",
-        userId: mainUser.id,
-      },
-    }),
-    prisma.tab.create({
-      data: {
-        amount: 100.0,
-        description: "Concert tickets",
-        personName: "Sarah (coworker)",
-        status: "lending",
-        userId: mainUser.id,
-      },
-    }),
-    prisma.tab.create({
-      data: {
-        amount: 20.0,
-        description: "Gas money",
-        personName: "Mike (neighbor)",
-        status: "paid",
-        userId: mainUser.id,
-      },
-    }),
-  ]);
-  console.log(`Created ${tabs.length} tabs for main user`);
-
   // Create debt transactions
   const debtTransactions = await Promise.all([
     // A drop request from alice on debt where mainUser is lender
@@ -629,7 +597,6 @@ async function main() {
     `- Debts: ${debtsAsLender.length + debtsAsBorrower.length + otherDebts.length} (2 paid, rest pending/settled)`
   );
   console.log(`- Alerts: 8 (7 active, 1 expired)`);
-  console.log(`- Tabs: ${tabs.length}`);
   console.log(`- Debt transactions: ${debtTransactions.length}`);
   console.log(`- Recurring payments: 4`);
 }

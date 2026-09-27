@@ -1,7 +1,6 @@
 import {
   CreditCard,
   LayoutDashboard,
-  Receipt,
   RefreshCw,
   Sparkles,
   User,
@@ -38,7 +37,6 @@ export const navGroups: NavGroup[] = [
       { href: "/wallet", label: "Wallet", icon: Wallet },
       { href: "/debts", label: "Debts", icon: CreditCard, badge: "debtRequests" },
       { href: "/recurring-payments", label: "Recurring", icon: RefreshCw },
-      { href: "/tabs", label: "Tabs", icon: Receipt },
     ],
   },
   {
