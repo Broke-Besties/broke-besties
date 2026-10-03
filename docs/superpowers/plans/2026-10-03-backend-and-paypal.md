@@ -64,6 +64,7 @@ react-email.
 | B13 "delete their pending Friend rows" | delete **all** their Friend rows | An accepted friendship with a deleted account lets others re-add "Deleted user" to groups (`createInviteAsFriend`) and create debts against it. |
 | B13 (not listed) | also delete their `PaypalAccount`, received GroupInvites, deactivate recurring payments they lend | Same reasoning: no live ties to a deleted account. |
 | P.10 / P.6 | `canPay` = borrower ∧ `canPayDebt` ∧ lender connected | mobile-app.md §D: "if `paypal.canPay` (I'm the borrower and the lender connected PayPal)". |
+| P.6 #7 `PayPal-Request-Id: capture-{id}` | `capture-{id}-{updatedAt ms}`, renewed after a decline / not-approved | PayPal may replay a cached 422 for a repeated key, so a fixed key would make the spec's "reopen the approve link and retry" path fail forever. |
 | P.7 step 2 | also match refunds by capture id (`supplementary_data.related_ids.capture_id`, `links[rel=up]`, `resource.id`) | Refund/reversal resources are refund objects; they don't always carry `custom_id`/`order_id`. |
 | P.9 PayPal.me fallback | not built | Only needed if gate G1 fails; flagged for the owner. |
 
@@ -208,8 +209,11 @@ Service behavior (on top of the stub JSDoc):
   row FAILED (reason) → 502 (`PAYEE_*` issues → the 409 payee message). Save `orderId`.
 - **capture:** config check; 404/403; COMPLETED → 200 idempotent; REFUNDED → 409; FAILED → 409;
   no `orderId` → 409 not approved. `POST /v2/checkout/orders/{orderId}/capture` with
-  `PayPal-Request-Id: capture-<id>`, `Prefer: return=representation`, body `{}`. Issues:
-  `ORDER_NOT_APPROVED` → 409 (no state change); `INSTRUMENT_DECLINED` → 402 (no state change);
+  `PayPal-Request-Id: capture-<id>-<payment.updatedAt ms>`, `Prefer: return=representation`,
+  body `{}`. The key changes only after a definitive retryable outcome (PayPal may replay a cached
+  422 for a repeated key): `ORDER_NOT_APPROVED` → 409 and `INSTRUMENT_DECLINED` → 402 keep the
+  status but record the issue in `failureReason` (bumping `updatedAt`, so the next attempt gets a
+  fresh key); unknown outcomes leave the row untouched (a retry replays the same key).
   `ORDER_ALREADY_CAPTURED` → `GET /v2/checkout/orders/{orderId}` and continue with its capture;
   other **4xx** → `markFailed` + 502; **5xx/network/timeout → 502 without changing state**
   (outcome unknown; a retry reconciles). Capture `COMPLETED` → `completeFromCapture` (payee taken
