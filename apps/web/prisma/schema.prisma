@@ -34,6 +34,9 @@ model User {
   uploadedReceipts          Receipt[]                  @relation("ReceiptUploader")
   wallet                    Wallet?
   premium                   Boolean                    @default(false)
+  paypalAccount             PaypalAccount?
+  paypalPaymentsMade        PaypalPayment[]            @relation("PaypalPaymentPayer")
+  paypalPaymentsReceived    PaypalPayment[]            @relation("PaypalPaymentPayee")
 }
 
 model Wallet {
@@ -124,12 +127,13 @@ model Debt {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  lender       User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
-  borrower     User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
-  group        Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  alert        Alert?            @relation(fields: [alertId], references: [id], onDelete: SetNull)
-  transactions DebtTransaction[]
-  receipts     Receipt[]
+  lender         User              @relation("Lender", fields: [lenderId], references: [id], onDelete: Cascade)
+  borrower       User              @relation("Borrower", fields: [borrowerId], references: [id], onDelete: Cascade)
+  group          Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  alert          Alert?            @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  transactions   DebtTransaction[]
+  receipts       Receipt[]
+  paypalPayments PaypalPayment[]
 
   @@index([lenderId])
   @@index([borrowerId])
@@ -172,7 +176,7 @@ model Receipt {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  uploader User?          @relation("ReceiptUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  uploader User?         @relation("ReceiptUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
   items    ReceiptItem[]
   debts    Debt[]
 }
@@ -282,5 +286,49 @@ model Friend {
   @@unique([requesterId, recipientId])
   @@index([requesterId])
   @@index([recipientId])
+  @@index([status])
+}
+
+// A user's linked PayPal account ("Log in with PayPal"). Only the payer ID and
+// the verified email are stored; PayPal tokens are discarded after connect.
+model PaypalAccount {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  payerId       String   @unique // PayPal payer_id (merchant_id when used as payee)
+  email         String // primary email from PayPal
+  emailVerified Boolean  @default(false)
+  connectedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// One PayPal Checkout attempt to settle a debt (borrower pays lender directly).
+model PaypalPayment {
+  id            String    @id @default(cuid()) // also sent as PayPal-Request-Id and custom_id
+  debtId        Int?
+  payerUserId   String // borrower
+  payeeUserId   String // lender
+  payeePayerId  String // lender's PayPal payer_id at order time
+  amountCents   Int
+  currency      String    @default("USD")
+  // Nullable because the row is created before the PayPal order exists (its id
+  // is the order's PayPal-Request-Id); set right after PayPal returns the order.
+  orderId       String?   @unique // PayPal order id
+  captureId     String?   @unique
+  status        String    @default("CREATED") // CREATED | APPROVED | COMPLETED | CANCELLED | FAILED | REFUNDED
+  failureReason String?
+  platform      String    @default("web") // web | ios: where /paypal/return redirects
+  returnScheme  String? // allow-listed app scheme (brokebesties[-preview|-dev]) for iOS returns
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime?
+
+  debt  Debt? @relation(fields: [debtId], references: [id], onDelete: SetNull)
+  payer User  @relation("PaypalPaymentPayer", fields: [payerUserId], references: [id], onDelete: Cascade)
+  payee User  @relation("PaypalPaymentPayee", fields: [payeeUserId], references: [id], onDelete: Cascade)
+
+  @@index([debtId])
+  @@index([payerUserId])
   @@index([status])
 }

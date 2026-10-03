@@ -257,6 +257,18 @@ export class ReceiptService {
   }
 
   /**
+   * Signed (1-hour) URLs for receipt images stored at `receipts/{id}`.
+   * Receipts whose URL can't be created are skipped (and logged).
+   * CONTRACT STUB (Phase 0): replaced by the real implementation (spec B7).
+   */
+  async getSignedImageUrls(
+    receiptIds: string[]
+  ): Promise<{ id: string; url: string }[]> {
+    void receiptIds;
+    throw new Error("Not implemented");
+  }
+
+  /**
    * Get all receipts for a specific debt
    */
   async getReceiptsForDebt(debtId: number, userId: string) {

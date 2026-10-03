@@ -7,7 +7,11 @@ export type MockModel = {
   create: Mock;
   createMany: Mock;
   update: Mock;
+  updateMany: Mock;
+  upsert: Mock;
   delete: Mock;
+  deleteMany: Mock;
+  count: Mock;
 };
 
 function model(): MockModel {
@@ -18,7 +22,11 @@ function model(): MockModel {
     create: vi.fn(),
     createMany: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
+    upsert: vi.fn(),
     delete: vi.fn(),
+    deleteMany: vi.fn(),
+    count: vi.fn(),
   };
 }
 
@@ -27,6 +35,7 @@ export type MockPrisma = {
   user: MockModel;
   debt: MockModel;
   receipt: MockModel;
+  receiptItem: MockModel;
   group: MockModel;
   groupMember: MockModel;
   groupInvite: MockModel;
@@ -36,6 +45,8 @@ export type MockPrisma = {
   recurringPayment: MockModel;
   recurringPaymentBorrower: MockModel;
   debtTransaction: MockModel;
+  paypalAccount: MockModel;
+  paypalPayment: MockModel;
 };
 
 /**
@@ -62,6 +73,7 @@ export function createMockPrisma(): MockPrisma {
       user: model(),
       debt: model(),
       receipt: model(),
+      receiptItem: model(),
       group: model(),
       groupMember: model(),
       groupInvite: model(),
@@ -71,6 +83,8 @@ export function createMockPrisma(): MockPrisma {
       recurringPayment: model(),
       recurringPaymentBorrower: model(),
       debtTransaction: model(),
+      paypalAccount: model(),
+      paypalPayment: model(),
     }) as MockPrisma;
 
   return build();
@@ -94,6 +108,8 @@ export const EMAIL_METHODS = [
   "sendDebtRequestRejected",
   "sendAlertReminder",
   "sendDebtRequestCancelled",
+  "sendPaypalPaymentReceived",
+  "sendPaypalPaymentRefunded",
 ] as const;
 
 export type MockEmailService = Record<(typeof EMAIL_METHODS)[number], Mock>;
