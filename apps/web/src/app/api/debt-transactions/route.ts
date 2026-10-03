@@ -61,7 +61,12 @@ export async function POST(request: NextRequest) {
     console.error('Error creating transaction:', error)
     const message =
       error instanceof Error ? error.message : 'Internal server error'
-    const status = message.includes('not authorized') ? 403 : 400
+    const status =
+      message === 'Debt not found'
+        ? 404
+        : message.includes('not authorized')
+          ? 403
+          : 400
     return NextResponse.json({ error: message }, { status })
   }
 }
