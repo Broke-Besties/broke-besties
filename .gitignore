@@ -1,4 +1,5 @@
-.claude
+.claude/*
+!.claude/skills/
 .worktrees
 .agent
 .mcp.json
