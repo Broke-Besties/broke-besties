@@ -1,8 +1,35 @@
-// CONTRACT STUB (Phase 0). The PayPal-core work replaces every method body;
-// signatures, exported types and documented behavior are the contract the
-// routes and web UI code against. See specs/backend.md Part B and
-// docs/superpowers/plans/2026-10-03-backend-and-paypal.md.
+// PayPal connect + pay (specs/backend.md Part B). Exported types, method
+// signatures and the JSDoc on each method are the contract the routes and web
+// UI code against (docs/superpowers/plans/2026-10-03-backend-and-paypal.md).
 import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import {
+  decodeStateUnverified,
+  exchangeAuthorizationCode,
+  fetchUserInfo,
+  getAppUrl,
+  getPaypalCredentials,
+  isAppScheme,
+  paypalWebBase,
+  schemeForVariant,
+  signState,
+  verifyState,
+} from "@/lib/paypal";
+import { PaypalConfigError } from "@/lib/paypal-errors";
+import { PaypalPolicy } from "@/policies";
+
+const CONNECT_SCOPES = "openid email https://uri.paypal.com/services/paypalattributes";
+
+/** NEXT_PUBLIC_APP_URL, or "" so redirects stay relative (the routes resolve them). */
+function appUrlOrRelative(): string {
+  try {
+    return getAppUrl();
+  } catch {
+    return "";
+  }
+}
+
+const isTrue = (value: unknown) => value === true || value === "true";
 
 export type PaypalPlatform = "web" | "ios";
 
@@ -105,8 +132,21 @@ export class PaypalService {
     platform: PaypalPlatform;
     appVariant?: string | null;
   }): string {
-    void params;
-    throw new Error("Not implemented");
+    const { userId, platform, appVariant } = params;
+    const { clientId } = getPaypalCredentials();
+    const redirectUri = `${getAppUrl()}/api/paypal/callback`;
+    const state = signState(
+      platform === "ios"
+        ? { userId, platform, scheme: schemeForVariant(appVariant) }
+        : { userId, platform: "web" },
+    );
+    return (
+      `${paypalWebBase()}/signin/authorize?flowEntry=static` +
+      `&client_id=${encodeURIComponent(clientId)}&response_type=code` +
+      `&scope=${encodeURIComponent(CONNECT_SCOPES)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&state=${encodeURIComponent(state)}`
+    );
   }
 
   /**
@@ -122,20 +162,73 @@ export class PaypalService {
     state: string | null;
     error?: string | null;
   }): Promise<string> {
-    void params;
-    throw new Error("Not implemented");
+    const { code, state, error } = params;
+    // Only decides where the browser goes, so an unverified state is fine here:
+    // a scheme is used only if it's on the allow-list (no open redirect).
+    const target = decodeStateUnverified(state);
+    const redirect = (reason?: string) =>
+      target?.platform === "ios" && isAppScheme(target.scheme)
+        ? `${target.scheme}://paypal/connected?${reason ? `status=error&reason=${reason}` : "status=ok"}`
+        : `${appUrlOrRelative()}/profile?${reason ? `paypal=error&reason=${reason}` : "paypal=connected"}`;
+
+    try {
+      const userId = verifyState(state)?.userId;
+      if (typeof userId !== "string" || !userId) return redirect("state");
+      if (error && error !== "access_denied") return redirect("paypal");
+      if (error || !code) return redirect("cancelled");
+
+      let info;
+      try {
+        // The user's access token is only used for this one call and never stored.
+        info = await fetchUserInfo((await exchangeAuthorizationCode(code)).accessToken);
+      } catch (e) {
+        if (e instanceof PaypalConfigError) throw e;
+        console.error("[PaypalService] Log in with PayPal failed:", e);
+        return redirect("paypal");
+      }
+
+      const payerId = typeof info.payer_id === "string" ? info.payer_id : "";
+      if (!payerId) return redirect("no_payer_id");
+      const emails = (Array.isArray(info.emails) ? info.emails : []).filter(
+        (entry) => typeof entry?.value === "string" && entry.value,
+      );
+      const primary = emails.find((entry) => isTrue(entry.primary)) ?? emails[0];
+      const email = primary ? primary.value : info.email;
+      const emailVerified = isTrue(primary ? primary.confirmed : info.email_verified);
+      if (typeof email !== "string" || !email) return redirect("no_email");
+
+      const linked = await prisma.paypalAccount.findUnique({
+        where: { payerId },
+        select: { userId: true },
+      });
+      if (linked && linked.userId !== userId) return redirect("in_use");
+
+      await prisma.paypalAccount.upsert({
+        where: { userId },
+        create: { userId, payerId, email, emailVerified },
+        update: { payerId, email, emailVerified, connectedAt: new Date() },
+      });
+      return redirect();
+    } catch (e) {
+      if (e instanceof PaypalConfigError) return redirect("config");
+      // Unique payerId: another user linked this PayPal account at the same moment.
+      if ((e as { code?: unknown })?.code === "P2002") return redirect("in_use");
+      console.error("[PaypalService] PayPal connect failed:", e);
+      return redirect("error");
+    }
   }
 
   /** The user's linked PayPal account, or null. */
   async getAccount(userId: string): Promise<PaypalAccountInfo | null> {
-    void userId;
-    throw new Error("Not implemented");
+    return prisma.paypalAccount.findUnique({
+      where: { userId },
+      select: { email: true, emailVerified: true, connectedAt: true },
+    });
   }
 
   /** Unlinks the user's PayPal account (idempotent). Existing payments keep their payeePayerId. */
   async disconnect(userId: string): Promise<void> {
-    void userId;
-    throw new Error("Not implemented");
+    await prisma.paypalAccount.deleteMany({ where: { userId } });
   }
 
   /**
@@ -147,10 +240,23 @@ export class PaypalService {
     viewerId: string,
     hasPendingTransaction: boolean,
   ): Promise<DebtPaypalInfo> {
-    void debt;
-    void viewerId;
-    void hasPendingTransaction;
-    throw new Error("Not implemented");
+    const [lenderAccount, payments] = await Promise.all([
+      prisma.paypalAccount.findUnique({ where: { userId: debt.lenderId }, select: { id: true } }),
+      prisma.paypalPayment.findMany({
+        where: { debtId: debt.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true, amountCents: true, createdAt: true, completedAt: true },
+      }),
+    ]);
+    return {
+      lenderConnected: !!lenderAccount,
+      // An APPROVED payment is a pending capture (money in flight): same rule as createDebtOrder.
+      canPay:
+        !!lenderAccount &&
+        PaypalPolicy.canPayDebt(viewerId, debt, hasPendingTransaction) &&
+        !payments.some((payment) => payment.status === "APPROVED"),
+      payments: payments as PaypalPaymentInfo[],
+    };
   }
 
   /**
