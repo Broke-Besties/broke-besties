@@ -1,5 +1,6 @@
 import { History } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -23,6 +24,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { StatusBadge } from "@/components/status-badge";
+import { isPaypalTransaction } from "./paypal";
 import {
   displayName,
   initials,
@@ -71,6 +73,9 @@ export function ActivityCard({
                 <ItemContent>
                   <ItemTitle>
                     {transactionTypeLabel(transaction.type)}
+                    {isPaypalTransaction(transaction) && (
+                      <Badge variant="secondary">PayPal</Badge>
+                    )}
                     <StatusBadge status={transaction.status} />
                   </ItemTitle>
                   <ItemDescription>
