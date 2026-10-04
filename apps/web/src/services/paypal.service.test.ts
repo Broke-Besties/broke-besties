@@ -2096,6 +2096,77 @@ describe("handleWebhook", () => {
     expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
   });
 
+  describe("a refund or reversal for a payment without its capture id yet", () => {
+    // The capture's outcome was unknown, so our row never learned the capture id.
+    const CAPTURE_LOOKUP = "/v2/payments/captures/CAPTURE-1";
+    const refundedBeforeCaptured = (type: string) => ({
+      event_type: type,
+      resource_type: "refund",
+      resource: {
+        id: "REFUND-1",
+        status: "COMPLETED",
+        links: [{ rel: "up", href: `https://api-m.sandbox.paypal.com${CAPTURE_LOOKUP}` }],
+      },
+    });
+
+    beforeEach(() => paymentFoundBy("id", "pay_1", paymentWithParties({ status: "CREATED", captureId: null })));
+
+    it.each(["PAYMENT.CAPTURE.REFUNDED", "PAYMENT.CAPTURE.REVERSED"])(
+      "asks PayPal whose capture it is (%s), so the later COMPLETED event can't settle it",
+      async (type) => {
+        onPaypal("GET", CAPTURE_LOOKUP, json(200, { id: "CAPTURE-1", status: "REFUNDED", custom_id: "pay_1" }));
+        const tx = createMockPrisma();
+        tx.paypalPayment.updateMany.mockResolvedValue({ count: 1 });
+        db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
+
+        expect(await paypalService.handleWebhook(refundedBeforeCaptured(type))).toEqual({ handled: true });
+
+        expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { captureId: "CAPTURE-1" } });
+        expect(paypalCalls("GET", CAPTURE_LOOKUP)).toHaveLength(1);
+        expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { id: "pay_1" } });
+        expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith({
+          where: { id: "pay_1", status: { not: "REFUNDED" } },
+          data: { status: "REFUNDED" },
+        });
+      },
+    );
+
+    it("fails the delivery when PayPal can't be asked, so PayPal sends it again", async () => {
+      onPaypal("GET", CAPTURE_LOOKUP, paypalError(503));
+
+      await expect(
+        paypalService.handleWebhook(refundedBeforeCaptured("PAYMENT.CAPTURE.REFUNDED")),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(db.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("ignores the event when PayPal's capture isn't one of our payments", async () => {
+      onPaypal(
+        "GET",
+        CAPTURE_LOOKUP,
+        json(200, { id: "CAPTURE-1", custom_id: "not-ours" }),
+        json(200, { id: "CAPTURE-1" }),
+      );
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        expect(await paypalService.handleWebhook(refundedBeforeCaptured("PAYMENT.CAPTURE.REFUNDED"))).toEqual({
+          handled: false,
+        });
+      }
+      expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { id: "not-ours" } });
+      expect(db.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("doesn't ask PayPal when the event carries no capture id", async () => {
+      const event = refundedBeforeCaptured("PAYMENT.CAPTURE.REFUNDED");
+
+      expect(await paypalService.handleWebhook({ ...event, resource: { ...event.resource, links: [] } })).toEqual({
+        handled: false,
+      });
+      expect(paypalRequests).toHaveLength(0);
+    });
+  });
+
   describe("refund amounts", () => {
     const usd = (value: string) => ({ currency_code: "USD", value });
     /** A PAYMENT.CAPTURE.REFUNDED event for CAPTURE-1 (a $42.50 payment), found by its 'up' link. */

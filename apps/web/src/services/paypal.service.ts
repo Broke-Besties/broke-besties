@@ -1017,7 +1017,9 @@ export class PaypalService {
 
   /**
    * Dispatches a verified webhook event (spec P.7). Returns handled=false for
-   * events about orders that aren't ours or event types we ignore.
+   * events about orders that aren't ours or event types we ignore. A refund or
+   * reversal that matches no payment is looked up at PayPal (the capture's
+   * custom_id); that lookup throws when it fails, so PayPal redelivers.
    */
   async handleWebhook(event: PaypalWebhookEvent): Promise<{ handled: boolean }> {
     const type = event.event_type ?? "";
@@ -1044,6 +1046,22 @@ export class PaypalService {
           field === "id" ? { id: value } : field === "orderId" ? { orderId: value } : { captureId: value },
       });
       if (payment) break;
+    }
+    if (!payment && (type === "PAYMENT.CAPTURE.REFUNDED" || type === "PAYMENT.CAPTURE.REVERSED")) {
+      // A refund can beat our row to its capture id (the capture's outcome was unknown); missed,
+      // the later COMPLETED event would mark the debt paid. PayPal's capture names our payment in
+      // custom_id. A failed read throws, so the delivery fails and PayPal sends it again.
+      const captureId = lookups.find(
+        ([field, value]) => field === "captureId" && typeof value === "string" && value,
+      )?.[1];
+      if (typeof captureId === "string") {
+        const capture = await paypalFetch<PaypalCapture | null>(
+          `/v2/payments/captures/${encodeURIComponent(captureId)}`,
+        );
+        if (capture?.custom_id) {
+          payment = await prisma.paypalPayment.findUnique({ where: { id: capture.custom_id } });
+        }
+      }
     }
     if (!payment) return { handled: false };
 
