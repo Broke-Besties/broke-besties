@@ -240,7 +240,7 @@ Service behavior (on top of the stub JSDoc):
   if the debt is `paid` and its latest approved transaction's reason contains
   `(capture <captureId>)` → debt back to `pending` + `DebtTransaction { confirm_paid, cancelled,
   requester: payee, reason: "PayPal payment refunded", resolvedAt }`. Email both people after
-  commit. `// ponytail:` partial refunds are treated as full refunds.
+  commit. Partial refunds: see the deviation table (payment and debt unchanged, refund email only).
 - **webhook:** `verifyWebhookSignature` posts `{ auth_algo, cert_url, transmission_id,
   transmission_sig, transmission_time, webhook_id, webhook_event }` with the **raw body embedded
   verbatim** as `webhook_event` (re-serializing can break verification). `handleWebhook`: find the
