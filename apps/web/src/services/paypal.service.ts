@@ -364,8 +364,7 @@ export class PaypalService {
     platform: PaypalPlatform;
     appVariant?: string | null;
   }): Promise<{ paymentId: string; approveUrl: string }> {
-    const { debtId, userId, appVariant } = params;
-    const platform = params.platform === "ios" ? "ios" : "web";
+    const { debtId, userId, platform, appVariant } = params;
     getPaypalCredentials();
     const appUrl = getAppUrl();
 
