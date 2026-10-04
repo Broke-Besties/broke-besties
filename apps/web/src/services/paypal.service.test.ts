@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 vi.mock("@/lib/prisma", async () => {
   const { createMockPrisma } = await import("../test/mocks");
@@ -450,6 +450,65 @@ describe("createDebtOrder", () => {
     db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
     onPaypal("POST", "/v2/checkout/orders", json(201, { id: "ORDER-NEW", status: "PAYER_ACTION_REQUIRED", links }));
   }
+
+  // The order transaction runs on the same mocks (tx === db), plus the row lock query.
+  let lockDebt: Mock;
+  let inTransaction: boolean;
+  beforeEach(() => {
+    lockDebt = vi.fn().mockResolvedValue([{ "?column?": 1 }]);
+    inTransaction = false;
+    db.$transaction.mockImplementation(async (fn: (client: unknown) => unknown) => {
+      inTransaction = true;
+      try {
+        return await fn({ ...db, $queryRaw: lockDebt });
+      } finally {
+        inTransaction = false;
+      }
+    });
+  });
+
+  it("locks the debt row, then checks and creates in that transaction; PayPal is called after it", async () => {
+    const steps: string[] = [];
+    lockDebt.mockImplementation(async () => {
+      steps.push(`lock in tx: ${inTransaction}`);
+      return [{ "?column?": 1 }];
+    });
+    db.paypalPayment.findFirst.mockImplementation(async () => {
+      steps.push(`check in tx: ${inTransaction}`);
+      return null;
+    });
+    db.paypalPayment.create.mockImplementation(async () => {
+      steps.push(`create in tx: ${inTransaction}`);
+      return { id: "pay_new" };
+    });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/v2/checkout/orders")) steps.push(`PayPal in tx: ${inTransaction}`);
+      return fakePaypalFetch(String(input), init);
+    });
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    onPaypal("POST", "/v2/checkout/orders", json(201, { id: "ORDER-NEW", links: [{ rel: "payer-action", href: "https://pp.example/x" }] }));
+
+    await order();
+
+    expect(steps).toEqual([
+      "lock in tx: true",
+      "check in tx: true",
+      "create in tx: true",
+      "PayPal in tx: false",
+    ]);
+    const [sql, ...params] = lockDebt.mock.calls[0];
+    expect(sql.join("?")).toBe('SELECT 1 FROM "Debt" WHERE id = ? FOR UPDATE');
+    expect(params).toEqual([42]);
+  });
+
+  it("answers 404 when the debt is gone by the time it's locked", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    lockDebt.mockResolvedValueOnce([]);
+
+    flowError(404, "Debt not found").check(await rejection(order()));
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+    expect(paypalRequests).toHaveLength(0);
+  });
 
   it("checks the PayPal configuration before reading anything", async () => {
     vi.stubEnv("PAYPAL_CLIENT_SECRET", "");

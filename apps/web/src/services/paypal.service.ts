@@ -399,48 +399,55 @@ export class PaypalService {
     const payeePayerId = debt.lender.paypalAccount?.payerId;
     if (!payeePayerId) throw new PaypalFlowError(409, "The lender hasn't connected PayPal yet");
 
-    const inProgress = await prisma.paypalPayment.findFirst({
-      where: {
-        debtId,
-        OR: [
-          { status: "CREATED", createdAt: { gt: new Date(Date.now() - ORDER_RESUMABLE_MS) } },
-          // APPROVED = PayPal returned a PENDING capture (e.g. an eCheck can take days): money
-          // is in flight, so it blocks at any age. ponytail: if that capture never resolves
-          // (missed webhooks), PayPal stays blocked for this debt; the borrower can still
-          // "Mark as paid", and an admin can mark the payment FAILED to unblock it.
-          { status: "APPROVED" },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, status: true, orderId: true },
-    });
-    if (inProgress) {
-      throw new PaypalFlowError(409, "A PayPal payment is already in progress for this debt", {
-        paymentId: inProgress.id,
-        approveUrl:
-          inProgress.status === "CREATED" && inProgress.orderId
-            ? checkoutUrl(inProgress.orderId)
-            : null,
-      });
-    }
-
     const amountCents = Math.round(debt.amount * 100);
     if (!Number.isSafeInteger(amountCents) || amountCents < 1) {
       throw new PaypalFlowError(400, "This debt amount can't be paid with PayPal");
     }
 
-    // The row exists before the order: its id is the order's PayPal-Request-Id and custom_id.
-    const payment = await prisma.paypalPayment.create({
-      data: {
-        debtId,
-        payerUserId: userId,
-        payeeUserId: debt.lenderId,
-        payeePayerId,
-        amountCents,
-        currency: "USD",
-        platform,
-        returnScheme: platform === "ios" ? schemeForVariant(appVariant) : null,
-      },
+    // The debt row lock makes the in-progress check and the insert atomic per debt, so two
+    // concurrent requests can't both start an order. PayPal is called after the commit.
+    const payment = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<unknown[]>`SELECT 1 FROM "Debt" WHERE id = ${debtId} FOR UPDATE`;
+      if (locked.length === 0) throw new PaypalFlowError(404, "Debt not found");
+
+      const inProgress = await tx.paypalPayment.findFirst({
+        where: {
+          debtId,
+          OR: [
+            { status: "CREATED", createdAt: { gt: new Date(Date.now() - ORDER_RESUMABLE_MS) } },
+            // APPROVED = PayPal returned a PENDING capture (e.g. an eCheck can take days): money
+            // is in flight, so it blocks at any age. ponytail: if that capture never resolves
+            // (missed webhooks), PayPal stays blocked for this debt; the borrower can still
+            // "Mark as paid", and an admin can mark the payment FAILED to unblock it.
+            { status: "APPROVED" },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true, orderId: true },
+      });
+      if (inProgress) {
+        throw new PaypalFlowError(409, "A PayPal payment is already in progress for this debt", {
+          paymentId: inProgress.id,
+          approveUrl:
+            inProgress.status === "CREATED" && inProgress.orderId
+              ? checkoutUrl(inProgress.orderId)
+              : null,
+        });
+      }
+
+      // The row exists before the order: its id is the order's PayPal-Request-Id and custom_id.
+      return tx.paypalPayment.create({
+        data: {
+          debtId,
+          payerUserId: userId,
+          payeeUserId: debt.lenderId,
+          payeePayerId,
+          amountCents,
+          currency: "USD",
+          platform,
+          returnScheme: platform === "ios" ? schemeForVariant(appVariant) : null,
+        },
+      });
     });
 
     const prefix = "Broke Besties: ";
