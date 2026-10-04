@@ -1,9 +1,5 @@
 export type PaypalErrorDetail = {
   issue?: string;
-  description?: string;
-  field?: string;
-  value?: string;
-  location?: string;
 };
 
 /** A non-2xx response from the PayPal REST API. */
