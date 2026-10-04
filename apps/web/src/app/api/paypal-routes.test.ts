@@ -260,15 +260,18 @@ describe("POST /api/debts/[id]/paypal/order", () => {
     expect(paypalService.createDebtOrder).not.toHaveBeenCalled();
   });
 
-  it.each(["abc", "1.5", "12abc"])("returns 400 for debt id %j", async (id) => {
-    signIn();
+  it.each(["abc", "1.5", "12abc", "0", "-3", "99999999999"])(
+    "returns 400 for debt id %j",
+    async (id) => {
+      signIn();
 
-    const res = await createOrder(id);
+      const res = await createOrder(id);
 
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "Invalid debt ID" });
-    expect(paypalService.createDebtOrder).not.toHaveBeenCalled();
-  });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Invalid debt ID" });
+      expect(paypalService.createDebtOrder).not.toHaveBeenCalled();
+    },
+  );
 
   it("creates an order for the iOS app and answers 201", async () => {
     signIn();

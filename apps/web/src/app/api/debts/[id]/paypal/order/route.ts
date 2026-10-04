@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { id } = await params;
     const debtId = Number(id);
-    if (!Number.isInteger(debtId)) {
+    if (!Number.isInteger(debtId) || debtId < 1 || debtId > 2 ** 31 - 1) {
       return NextResponse.json({ error: "Invalid debt ID" }, { status: 400 });
     }
 
