@@ -498,6 +498,8 @@ export class PaypalService {
    * 404 `Payment not found`; 403 `Only the payer can capture this payment`;
    * 409 `Payment wasn't approved in PayPal`; 409 `This PayPal payment was refunded`;
    * 409 `This PayPal payment failed. Start a new payment.`;
+   * 409 `This debt is already settled` | `This debt's amount changed. Start a new PayPal payment.`
+   *     (checked before capturing; the payment becomes CANCELLED and nothing is charged);
    * 402 `PayPal declined the payment method. Try again with a different one.`;
    * 502 `PayPal couldn't complete the payment`;
    * 502 `PayPal payment couldn't be verified` (capture didn't match the debt).
@@ -515,13 +517,45 @@ export class PaypalService {
   }
 
   /** capturePayment without the payer check; also run for CHECKOUT.ORDER.APPROVED webhooks. */
-  private async capture(payment: { id: string; status: string; orderId: string | null; updatedAt: Date }) {
+  private async capture(payment: {
+    id: string;
+    status: string;
+    orderId: string | null;
+    debtId: number | null;
+    amountCents: number;
+    updatedAt: Date;
+  }) {
     if (payment.status === "COMPLETED") return this.captureResult(payment.id);
     if (payment.status === "REFUNDED") throw new PaypalFlowError(409, "This PayPal payment was refunded");
     if (payment.status === "FAILED") {
       throw new PaypalFlowError(409, "This PayPal payment failed. Start a new payment.");
     }
     if (!payment.orderId) throw new PaypalFlowError(409, "Payment wasn't approved in PayPal");
+
+    if (payment.status === "CREATED" || payment.status === "CANCELLED") {
+      // Nothing is captured yet: don't take money for a debt that was settled or changed since
+      // the order. CANCELLED doesn't block a new order, so the borrower can start over.
+      const debt = payment.debtId
+        ? await prisma.debt.findUnique({
+            where: { id: payment.debtId },
+            select: { status: true, amount: true },
+          })
+        : null;
+      const settled = !debt || debt.status !== "pending";
+      if (settled || Math.round(debt.amount * 100) !== payment.amountCents) {
+        await prisma.paypalPayment.updateMany({
+          where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
+          data: {
+            status: "CANCELLED",
+            failureReason: settled ? "Debt settled before capture" : "Debt amount changed before capture",
+          },
+        });
+        throw new PaypalFlowError(
+          409,
+          settled ? "This debt is already settled" : "This debt's amount changed. Start a new PayPal payment.",
+        );
+      }
+    }
 
     const orderPath = `/v2/checkout/orders/${encodeURIComponent(payment.orderId)}`;
     const failed = new PaypalFlowError(502, "PayPal couldn't complete the payment");

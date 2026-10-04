@@ -820,9 +820,15 @@ function mockSettlement({ claimed = 1, settled = 1 } = {}) {
 const CAPTURE_PATH = "/v2/checkout/orders/ORDER-1/capture";
 const captureKey = (updatedAt: Date) => `capture-pay_1-${updatedAt.getTime()}`;
 
+/** The debt the pre-capture check reads: still pending, still the ordered amount. */
+const mockUnchangedDebt = () =>
+  db.debt.findUnique.mockResolvedValue({ status: "pending", amount: 42.5 });
+
 describe("capturePayment", () => {
   const capture = () => paypalService.capturePayment("pay_1", BORROWER_ID);
   const debtWithParties = { ...makeDebt({ id: 42, status: "paid" }), lender: {}, borrower: {} };
+
+  beforeEach(mockUnchangedDebt);
 
   it("checks the PayPal configuration first", async () => {
     vi.stubEnv("PAYPAL_CLIENT_ID", "");
@@ -1068,11 +1074,70 @@ describe("capturePayment", () => {
     flowError(502, "PayPal payment couldn't be verified").check(await rejection(capture()));
     expect(db.$transaction).not.toHaveBeenCalled();
   });
+
+  it("refuses to capture when the debt amount changed after the order was created", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(paymentRow());
+    db.debt.findUnique.mockResolvedValueOnce({ status: "pending", amount: 80 });
+
+    flowError(409, "This debt's amount changed. Start a new PayPal payment.").check(
+      await rejection(capture()),
+    );
+    expect(db.debt.findUnique).toHaveBeenCalledWith({
+      where: { id: 42 },
+      select: { status: true, amount: true },
+    });
+    expect(paypalCalls("POST", CAPTURE_PATH)).toHaveLength(0);
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: { in: ["CREATED", "CANCELLED"] } },
+      data: { status: "CANCELLED", failureReason: "Debt amount changed before capture" },
+    });
+  });
+
+  it("refuses to capture when the debt was paid or deleted meanwhile", async () => {
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow())
+      .mockResolvedValueOnce(paymentRow({ status: "CANCELLED" }))
+      .mockResolvedValueOnce(paymentRow({ debtId: null }));
+    db.debt.findUnique
+      .mockResolvedValueOnce({ status: "paid", amount: 42.5 })
+      .mockResolvedValueOnce(null);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      flowError(409, "This debt is already settled").check(await rejection(capture()));
+    }
+
+    expect(paypalCalls("POST", CAPTURE_PATH)).toHaveLength(0);
+    expect(db.debt.findUnique).toHaveBeenCalledTimes(2);
+    expect(db.paypalPayment.updateMany.mock.calls.map(([args]) => args)).toEqual(
+      Array(3).fill({
+        where: { id: "pay_1", status: { in: ["CREATED", "CANCELLED"] } },
+        data: { status: "CANCELLED", failureReason: "Debt settled before capture" },
+      }),
+    );
+  });
+
+  it("skips the debt check for an APPROVED payment (its capture is already in flight)", async () => {
+    db.debt.findUnique.mockResolvedValue({ status: "pending", amount: 80 });
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow({ status: "APPROVED", captureId: "CAPTURE-1" }))
+      .mockResolvedValueOnce(paymentRow({ status: "APPROVED", captureId: "CAPTURE-1" }));
+    onPaypal("POST", CAPTURE_PATH, paypalError(422, "ORDER_ALREADY_CAPTURED"));
+    onPaypal(
+      "GET",
+      "/v2/checkout/orders/ORDER-1",
+      json(200, capturedOrder(captureObject({ status: "PENDING" }))),
+    );
+
+    expect(await capture()).toMatchObject({ httpStatus: 202 });
+    expect(db.debt.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 describe("completeFromCapture", () => {
   const complete = (capture: Record<string, unknown> = captureObject()) =>
     paypalService.completeFromCapture("pay_1", capture as PaypalCapture);
+
+  beforeEach(mockUnchangedDebt);
 
   it("settles exactly once when the client capture and the webhook race", async () => {
     // One shared row: both completions read it before either claims it, so the guarded
@@ -1416,6 +1481,8 @@ describe("handleWebhook", () => {
     );
   }
 
+  beforeEach(mockUnchangedDebt);
+
   it("captures an approved order (found by the purchase unit's custom_id)", async () => {
     paymentFoundBy("id", "pay_1", paymentRow());
     onPaypal("POST", CAPTURE_PATH, json(201, capturedOrder(captureObject({ status: "PENDING" }))));
@@ -1445,6 +1512,24 @@ describe("handleWebhook", () => {
 
     expect(result).toEqual({ handled: true });
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it("doesn't capture an approved order whose debt amount changed", async () => {
+    paymentFoundBy("orderId", "ORDER-1", paymentRow());
+    db.debt.findUnique.mockResolvedValue({ status: "pending", amount: 80 });
+
+    const result = await paypalService.handleWebhook({
+      event_type: "CHECKOUT.ORDER.APPROVED",
+      resource_type: "checkout-order",
+      resource: { id: "ORDER-1" },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(paypalCalls("POST", CAPTURE_PATH)).toHaveLength(0);
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: { in: ["CREATED", "CANCELLED"] } },
+      data: { status: "CANCELLED", failureReason: "Debt amount changed before capture" },
+    });
   });
 
   it("settles a completed capture", async () => {
