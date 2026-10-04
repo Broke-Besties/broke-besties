@@ -9,20 +9,26 @@ vi.mock("@/services/paypal.service", () => ({
     handleOAuthCallback: vi.fn(),
     getAccount: vi.fn(),
     disconnect: vi.fn(),
+    createDebtOrder: vi.fn(),
+    capturePayment: vi.fn(),
+    getReturnRedirect: vi.fn(),
   },
 }));
 
 import { NextRequest } from "next/server";
 import { getUser } from "@/lib/supabase";
-import { PaypalConfigError } from "@/lib/paypal-errors";
+import { PaypalConfigError, PaypalFlowError } from "@/lib/paypal-errors";
 import { paypalService } from "@/services/paypal.service";
 import { GET as connectRoute } from "@/app/api/paypal/connect/route";
 import { GET as callbackRoute } from "@/app/api/paypal/callback/route";
 import { DELETE as disconnectRoute, GET as getAccountRoute } from "@/app/api/paypal/account/route";
-import { BORROWER_ID } from "../../test/mocks";
+import { POST as createOrderRoute } from "@/app/api/debts/[id]/paypal/order/route";
+import { POST as captureRoute } from "@/app/api/paypal/payments/[id]/capture/route";
+import { GET as returnRoute } from "@/app/paypal/return/route";
+import { BORROWER_ID, LENDER_ID } from "../../test/mocks";
 
-function signIn() {
-  vi.mocked(getUser).mockResolvedValue({ id: BORROWER_ID } as never);
+function signIn(id = BORROWER_ID) {
+  vi.mocked(getUser).mockResolvedValue({ id } as never);
 }
 
 function signOut() {
@@ -217,5 +223,272 @@ describe("DELETE /api/paypal/account", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: "PayPal disconnected" });
     expect(paypalService.disconnect).toHaveBeenCalledWith(BORROWER_ID);
+  });
+});
+
+describe("POST /api/debts/[id]/paypal/order", () => {
+  const order = {
+    paymentId: "pay_1",
+    approveUrl: "https://www.sandbox.paypal.com/checkoutnow?token=O-1",
+  };
+  let now = Date.UTC(2026, 9, 4);
+
+  function createOrder(id: string, init: { body?: string; headers?: Record<string, string> } = {}) {
+    return createOrderRoute(
+      new NextRequest(`http://localhost/api/debts/${id}/paypal/order`, { method: "POST", ...init }),
+      { params: Promise.resolve({ id }) },
+    );
+  }
+
+  beforeEach(() => {
+    // The limiter lives in the route module: start every test in a fresh window.
+    now += 10 * 60_000;
+    vi.setSystemTime(now);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    signOut();
+
+    const res = await createOrder("42");
+
+    expect(res.status).toBe(401);
+    expect(paypalService.createDebtOrder).not.toHaveBeenCalled();
+  });
+
+  it.each(["abc", "1.5", "12abc"])("returns 400 for debt id %j", async (id) => {
+    signIn();
+
+    const res = await createOrder(id);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid debt ID" });
+    expect(paypalService.createDebtOrder).not.toHaveBeenCalled();
+  });
+
+  it("creates an order for the iOS app and answers 201", async () => {
+    signIn();
+    vi.mocked(paypalService.createDebtOrder).mockResolvedValue(order);
+
+    const res = await createOrder("42", {
+      body: JSON.stringify({ platform: "ios" }),
+      headers: { "content-type": "application/json", "X-App-Variant": "development" },
+    });
+
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual(order);
+    expect(paypalService.createDebtOrder).toHaveBeenCalledWith({
+      debtId: 42,
+      userId: BORROWER_ID,
+      platform: "ios",
+      appVariant: "development",
+    });
+  });
+
+  it.each([
+    ["no body", undefined],
+    ["invalid JSON", "{platform:"],
+    ["platform web", JSON.stringify({ platform: "web" })],
+    ["a JSON string", JSON.stringify("ios")],
+    ["null", "null"],
+  ])("uses web for %s", async (_label, body) => {
+    signIn();
+    vi.mocked(paypalService.createDebtOrder).mockResolvedValue(order);
+
+    const res = await createOrder("42", { body });
+
+    expect(res.status).toBe(201);
+    expect(paypalService.createDebtOrder).toHaveBeenCalledWith({
+      debtId: 42,
+      userId: BORROWER_ID,
+      platform: "web",
+      appVariant: null,
+    });
+  });
+
+  const inProgress = "A PayPal payment is already in progress for this debt";
+  const resume = {
+    paymentId: "pay_0",
+    approveUrl: "https://www.sandbox.paypal.com/checkoutnow?token=O-0",
+  };
+  it.each([
+    [new PaypalFlowError(409, inProgress, resume), 409, { error: inProgress, ...resume }],
+    [
+      new PaypalFlowError(403, "Only the borrower can pay this debt with PayPal"),
+      403,
+      { error: "Only the borrower can pay this debt with PayPal" },
+    ],
+    [
+      new PaypalConfigError("PAYPAL_CLIENT_SECRET is not set"),
+      503,
+      { error: "PayPal is not configured" },
+    ],
+    [
+      new Error("password authentication failed for user postgres"),
+      500,
+      { error: "Internal server error" },
+    ],
+  ])("maps %s to %i", async (error, status, body) => {
+    signIn();
+    vi.mocked(paypalService.createDebtOrder).mockRejectedValue(error);
+
+    const res = await createOrder("42");
+
+    expect(res.status).toBe(status);
+    expect(await res.json()).toEqual(body);
+  });
+
+  it("allows 5 orders per user per minute, then answers 429 with Retry-After", async () => {
+    vi.mocked(paypalService.createDebtOrder).mockResolvedValue(order);
+    signIn();
+    for (let i = 0; i < 5; i++) expect((await createOrder("42")).status).toBe(201);
+
+    const limited = await createOrder("42");
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(await limited.json()).toEqual({
+      error: "Too many PayPal requests. Try again in a minute.",
+    });
+    expect(paypalService.createDebtOrder).toHaveBeenCalledTimes(5);
+
+    signIn(LENDER_ID);
+    expect((await createOrder("42")).status).toBe(201);
+
+    signIn();
+    vi.setSystemTime(now + 60_000);
+    expect((await createOrder("42")).status).toBe(201);
+  });
+});
+
+describe("POST /api/paypal/payments/[id]/capture", () => {
+  const payment = {
+    id: "pay_1",
+    status: "COMPLETED" as const,
+    amountCents: 4250,
+    createdAt: new Date("2026-10-04T10:00:00.000Z"),
+    completedAt: new Date("2026-10-04T10:01:00.000Z"),
+  };
+  const paymentJson = {
+    ...payment,
+    createdAt: "2026-10-04T10:00:00.000Z",
+    completedAt: "2026-10-04T10:01:00.000Z",
+  };
+
+  function capture() {
+    return captureRoute(
+      new NextRequest("http://localhost/api/paypal/payments/pay_1/capture", {
+        method: "POST",
+        body: "{}",
+      }),
+      { params: Promise.resolve({ id: "pay_1" }) },
+    );
+  }
+
+  it("returns 401 when unauthenticated", async () => {
+    signOut();
+
+    const res = await capture();
+
+    expect(res.status).toBe(401);
+    expect(paypalService.capturePayment).not.toHaveBeenCalled();
+  });
+
+  it("answers 200 with the payment and the paid debt", async () => {
+    signIn();
+    vi.mocked(paypalService.capturePayment).mockResolvedValue({
+      httpStatus: 200,
+      payment,
+      debt: { id: 42, status: "paid" } as never,
+    });
+
+    const res = await capture();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ payment: paymentJson, debt: { id: 42, status: "paid" } });
+    expect(paypalService.capturePayment).toHaveBeenCalledWith("pay_1", BORROWER_ID);
+  });
+
+  it("answers 202 with just the payment while PayPal is processing", async () => {
+    signIn();
+    vi.mocked(paypalService.capturePayment).mockResolvedValue({
+      httpStatus: 202,
+      payment: { ...payment, status: "APPROVED", completedAt: null },
+    });
+
+    const res = await capture();
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({
+      payment: { ...paymentJson, status: "APPROVED", completedAt: null },
+    });
+  });
+
+  it("passes a 402 decline through", async () => {
+    signIn();
+    const declined = "PayPal declined the payment method. Try again with a different one.";
+    vi.mocked(paypalService.capturePayment).mockRejectedValue(new PaypalFlowError(402, declined));
+
+    const res = await capture();
+
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({ error: declined });
+  });
+});
+
+describe("GET /paypal/return (public)", () => {
+  it("hands pp, token and cancelled=1 to the service without a session", async () => {
+    vi.mocked(paypalService.getReturnRedirect).mockResolvedValue("https://brokebesties.app/debts");
+
+    await returnRoute(
+      new NextRequest(
+        "https://brokebesties.app/paypal/return?pp=pay_1&platform=web&token=O-1&PayerID=P1",
+      ),
+    );
+    await returnRoute(
+      new NextRequest("https://brokebesties.app/paypal/return?pp=pay_1&platform=ios&cancelled=1"),
+    );
+    await returnRoute(new NextRequest("https://brokebesties.app/paypal/return?cancelled=true"));
+
+    expect(paypalService.getReturnRedirect).toHaveBeenNthCalledWith(1, {
+      paymentId: "pay_1",
+      orderToken: "O-1",
+      cancelled: false,
+    });
+    expect(paypalService.getReturnRedirect).toHaveBeenNthCalledWith(2, {
+      paymentId: "pay_1",
+      orderToken: null,
+      cancelled: true,
+    });
+    expect(paypalService.getReturnRedirect).toHaveBeenNthCalledWith(3, {
+      paymentId: null,
+      orderToken: null,
+      cancelled: false,
+    });
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "https://brokebesties.app/debts/42?paypal=approved&pp=pay_1",
+      "https://brokebesties.app/debts/42?paypal=approved&pp=pay_1",
+    ],
+    [
+      "brokebesties://paypal/return?pp=pay_1&status=approved",
+      "brokebesties://paypal/return?pp=pay_1&status=approved",
+    ],
+    ["/debts?paypal=error", "https://brokebesties.app/debts?paypal=error"],
+  ])("302s to %s", async (target, location) => {
+    vi.mocked(paypalService.getReturnRedirect).mockResolvedValue(target);
+
+    const res = await returnRoute(
+      new NextRequest("https://brokebesties.app/paypal/return?pp=pay_1&token=O-1"),
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(location);
   });
 });
