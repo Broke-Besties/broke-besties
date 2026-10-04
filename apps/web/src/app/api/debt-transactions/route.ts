@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { errorResponse } from '@/lib/api-error'
 import { getUser } from '@/lib/supabase'
 import { debtTransactionService } from '@/services/debt-transaction.service'
+
+const ERROR_STATUS = new Map([
+  ['Debt not found', 404],
+  ['You are not authorized to create a transaction for this debt', 403],
+  ['Modification must include at least one change (amount or description)', 400],
+  ['Proposed amount must be positive', 400],
+  ['There is already a pending transaction for this debt', 400],
+])
 
 // GET /api/debt-transactions - Get pending transactions for current user
 export async function GET() {
@@ -31,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { debtId, type, proposedAmount, proposedDescription, reason } =
-      await request.json()
+      (await request.json().catch(() => null)) ?? {}
 
     if (!debtId || !type) {
       return NextResponse.json(
@@ -59,14 +68,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ transaction }, { status: 201 })
   } catch (error) {
     console.error('Error creating transaction:', error)
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-    const status =
-      message === 'Debt not found'
-        ? 404
-        : message.includes('not authorized')
-          ? 403
-          : 400
-    return NextResponse.json({ error: message }, { status })
+    return errorResponse(error, ERROR_STATUS)
   }
 }
