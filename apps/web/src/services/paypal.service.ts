@@ -12,6 +12,7 @@ import {
   fetchUserInfo,
   getAppUrl,
   getPaypalCredentials,
+  getWebhookId,
   isAppScheme,
   paypalFetch,
   paypalWebBase,
@@ -84,6 +85,22 @@ async function sendEmails(sends: Promise<unknown>[]) {
     if (result.status === "rejected") console.error("[PaypalService] Email failed:", result.reason);
   }
 }
+
+/** The parts of a webhook resource (order, capture or refund) used to find our payment. */
+type WebhookResource = PaypalCapture & {
+  purchase_units?: { custom_id?: string }[];
+  supplementary_data?: { related_ids?: { order_id?: string; capture_id?: string } };
+  links?: { rel?: string; href?: string }[];
+};
+
+const WEBHOOK_EVENTS = [
+  "CHECKOUT.ORDER.APPROVED",
+  "PAYMENT.CAPTURE.COMPLETED",
+  "PAYMENT.CAPTURE.PENDING",
+  "PAYMENT.CAPTURE.DENIED",
+  "PAYMENT.CAPTURE.REFUNDED",
+  "PAYMENT.CAPTURE.REVERSED",
+];
 
 const paymentWithPartiesInclude = {
   payer: { select: { name: true, email: true } },
@@ -684,10 +701,64 @@ export class PaypalService {
     });
   }
 
-  /** Refund/reversal path (spec P.8 `markRefunded`). Idempotent. */
+  /**
+   * Refund/reversal path (spec P.8 `markRefunded`). Idempotent.
+   * ponytail: a partial refund counts as a full one (payment REFUNDED, debt reopened). Compare
+   * the refunded amount with amountCents if partial refunds ever matter.
+   */
   async markRefunded(paymentId: string): Promise<void> {
-    void paymentId;
-    throw new Error("Not implemented");
+    const payment = await prisma.paypalPayment.findUnique({
+      where: { id: paymentId },
+      include: paymentWithPartiesInclude,
+    });
+    if (!payment || payment.status === "REFUNDED") return;
+    const { debtId, captureId } = payment;
+
+    const debtReopened = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.paypalPayment.updateMany({
+        where: { id: payment.id, status: { not: "REFUNDED" } },
+        data: { status: "REFUNDED" },
+      });
+      if (claimed.count === 0) return null;
+      if (debtId === null || !captureId) return false;
+
+      // Reopen only if this capture is what marked the debt paid.
+      const latestPaid = await tx.debtTransaction.findFirst({
+        where: { debtId, type: "confirm_paid", status: "approved" },
+        orderBy: [{ resolvedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+        select: { reason: true },
+      });
+      if (!latestPaid?.reason?.includes(`(capture ${captureId})`)) return false;
+
+      const reopened = await tx.debt.updateMany({
+        where: { id: debtId, status: "paid" },
+        data: { status: "pending" },
+      });
+      if (reopened.count === 0) return false;
+      await tx.debtTransaction.create({
+        data: {
+          debtId,
+          type: "confirm_paid",
+          status: "cancelled",
+          requesterId: payment.payeeUserId,
+          reason: "PayPal payment refunded",
+          resolvedAt: new Date(),
+        },
+      });
+      return true;
+    });
+
+    if (debtReopened === null) return;
+    await sendEmails(
+      [payment.payee, payment.payer].map((person) =>
+        emailService.sendPaypalPaymentRefunded({
+          to: person.email,
+          recipientName: person.name || person.email,
+          ...paymentEmail(payment),
+          debtReopened,
+        }),
+      ),
+    );
   }
 
   /**
@@ -738,9 +809,34 @@ export class PaypalService {
    * and rethrows network/PayPal errors (the route answers 500 so PayPal retries).
    */
   async verifyWebhookSignature(headers: Headers, rawBody: string): Promise<boolean> {
-    void headers;
-    void rawBody;
-    throw new Error("Not implemented");
+    const webhookId = getWebhookId();
+    getPaypalCredentials();
+
+    const fields: Record<string, string | null> = {
+      auth_algo: headers.get("paypal-auth-algo"),
+      cert_url: headers.get("paypal-cert-url"),
+      transmission_id: headers.get("paypal-transmission-id"),
+      transmission_sig: headers.get("paypal-transmission-sig"),
+      transmission_time: headers.get("paypal-transmission-time"),
+    };
+    if (Object.values(fields).some((value) => !value)) return false;
+
+    // The raw body is embedded verbatim (re-serializing the parsed event can break PayPal's
+    // check), so it must be exactly one JSON object or it could inject fields like webhook_id.
+    let event: unknown;
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      return false;
+    }
+    if (!event || typeof event !== "object" || Array.isArray(event)) return false;
+
+    const head = JSON.stringify({ ...fields, webhook_id: webhookId }).slice(0, -1);
+    const result = await paypalFetch<{ verification_status?: string } | null>(
+      "/v1/notifications/verify-webhook-signature",
+      { method: "POST", body: `${head},"webhook_event":${rawBody}}` },
+    );
+    return result?.verification_status === "SUCCESS";
   }
 
   /**
@@ -748,8 +844,54 @@ export class PaypalService {
    * events about orders that aren't ours or event types we ignore.
    */
   async handleWebhook(event: PaypalWebhookEvent): Promise<{ handled: boolean }> {
-    void event;
-    throw new Error("Not implemented");
+    const type = event.event_type ?? "";
+    if (!WEBHOOK_EVENTS.includes(type)) return { handled: false };
+    const resource = (event.resource ?? {}) as WebhookResource;
+
+    // Refund resources don't always carry custom_id/order_id, so also match by capture id.
+    const related = resource.supplementary_data?.related_ids;
+    const upHref = resource.links?.find((link) => link.rel === "up")?.href ?? "";
+    const lookups: ["id" | "orderId" | "captureId", unknown][] = [
+      ["id", resource.custom_id],
+      ["id", resource.purchase_units?.[0]?.custom_id],
+      ["orderId", type.startsWith("CHECKOUT.ORDER.") ? resource.id : undefined],
+      ["orderId", related?.order_id],
+      ["captureId", event.resource_type === "capture" ? resource.id : undefined],
+      ["captureId", related?.capture_id],
+      ["captureId", /\/v2\/payments\/captures\/([^/?#]+)/.exec(upHref)?.[1]],
+    ];
+    let payment = null;
+    for (const [field, value] of lookups) {
+      if (typeof value !== "string" || !value) continue;
+      payment = await prisma.paypalPayment.findUnique({
+        where:
+          field === "id" ? { id: value } : field === "orderId" ? { orderId: value } : { captureId: value },
+      });
+      if (payment) break;
+    }
+    if (!payment) return { handled: false };
+
+    if (type === "CHECKOUT.ORDER.APPROVED") {
+      // The client may never come back (app killed), so capture here too.
+      try {
+        await this.capture(payment);
+      } catch (error) {
+        if (!(error instanceof PaypalFlowError)) throw error;
+        console.error("[PaypalService] Webhook capture failed:", { paymentId: payment.id, error: error.message });
+      }
+    } else if (type === "PAYMENT.CAPTURE.COMPLETED") {
+      await this.completeFromCapture(payment.id, resource);
+    } else if (type === "PAYMENT.CAPTURE.PENDING") {
+      await prisma.paypalPayment.updateMany({
+        where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
+        data: { status: "APPROVED", captureId: resource.id, failureReason: null },
+      });
+    } else if (type === "PAYMENT.CAPTURE.DENIED") {
+      await this.markFailed(payment.id, `PayPal denied capture ${resource.id}`);
+    } else {
+      await this.markRefunded(payment.id);
+    }
+    return { handled: true };
   }
 }
 

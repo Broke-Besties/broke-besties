@@ -1201,3 +1201,349 @@ describe("completeFromCapture", () => {
     expect(db.paypalPayment.findUnique).not.toHaveBeenCalled();
   });
 });
+
+// --- refunds + webhooks --------------------------------------------------------------------------
+
+describe("markRefunded", () => {
+  const completed = (overrides: Record<string, unknown> = {}) =>
+    paymentWithParties({ status: "COMPLETED", captureId: "CAPTURE-1", ...overrides });
+
+  function mockRefund({ claimed = 1, latestReason = "Paid with PayPal (capture CAPTURE-1)", reopened = 1 } = {}) {
+    const tx = createMockPrisma();
+    tx.paypalPayment.updateMany.mockResolvedValue({ count: claimed });
+    tx.debtTransaction.findFirst.mockResolvedValue(latestReason ? { reason: latestReason } : null);
+    tx.debt.updateMany.mockResolvedValue({ count: reopened });
+    db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
+    return tx;
+  }
+
+  const refundEmails = () =>
+    email.sendPaypalPaymentRefunded.mock.calls.map(([params]) => [params.to, params.debtReopened]);
+
+  it("puts the debt back to pending, records the refund and emails both people", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed());
+    const tx = mockRefund();
+
+    await paypalService.markRefunded("pay_1");
+
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: { not: "REFUNDED" } },
+      data: { status: "REFUNDED" },
+    });
+    expect(tx.debtTransaction.findFirst).toHaveBeenCalledWith({
+      where: { debtId: 42, type: "confirm_paid", status: "approved" },
+      orderBy: [{ resolvedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+      select: { reason: true },
+    });
+    expect(tx.debt.updateMany).toHaveBeenCalledWith({
+      where: { id: 42, status: "paid" },
+      data: { status: "pending" },
+    });
+    expect(tx.debtTransaction.create).toHaveBeenCalledWith({
+      data: {
+        debtId: 42,
+        type: "confirm_paid",
+        status: "cancelled",
+        requesterId: LENDER_ID,
+        reason: "PayPal payment refunded",
+        resolvedAt: expect.any(Date),
+      },
+    });
+    expect(refundEmails()).toEqual([
+      ["larry@example.com", true],
+      ["bob@example.com", true],
+    ]);
+    expect(email.sendPaypalPaymentRefunded).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 42.5, description: "Dinner", debtLink: "https://app.test/debts/42" }),
+    );
+  });
+
+  it("is idempotent", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed({ status: "REFUNDED" }));
+    await paypalService.markRefunded("pay_1");
+    expect(db.$transaction).not.toHaveBeenCalled();
+
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed());
+    const tx = mockRefund({ claimed: 0 });
+    await paypalService.markRefunded("pay_1");
+    expect(tx.debt.updateMany).not.toHaveBeenCalled();
+
+    expect(email.sendPaypalPaymentRefunded).not.toHaveBeenCalled();
+  });
+
+  it("leaves the debt alone when this capture isn't what marked it paid", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed());
+    const tx = mockRefund({ latestReason: "Paid with PayPal (capture CAPTURE-OTHER)" });
+
+    await paypalService.markRefunded("pay_1");
+
+    expect(tx.debt.updateMany).not.toHaveBeenCalled();
+    expect(tx.debtTransaction.create).not.toHaveBeenCalled();
+    expect(refundEmails()).toEqual([
+      ["larry@example.com", false],
+      ["bob@example.com", false],
+    ]);
+  });
+
+  it("doesn't reopen a debt that isn't paid any more", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed());
+    const tx = mockRefund({ reopened: 0 });
+
+    await paypalService.markRefunded("pay_1");
+
+    expect(tx.debtTransaction.create).not.toHaveBeenCalled();
+    expect(refundEmails()).toEqual([
+      ["larry@example.com", false],
+      ["bob@example.com", false],
+    ]);
+  });
+
+  it("marks a payment that never settled REFUNDED without touching the debt", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed({ status: "APPROVED", captureId: null }));
+    const tx = mockRefund();
+
+    await paypalService.markRefunded("pay_1");
+
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.debtTransaction.findFirst).not.toHaveBeenCalled();
+    expect(tx.debt.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("verifyWebhookSignature", () => {
+  const signatureHeaders = {
+    "paypal-auth-algo": "SHA256withRSA",
+    "paypal-cert-url": "https://api-m.sandbox.paypal.com/v1/notifications/certs/CERT-1",
+    "paypal-transmission-id": "TRANSMISSION-1",
+    "paypal-transmission-sig": "c2lnbmF0dXJl",
+    "paypal-transmission-time": "2026-10-04T12:00:00Z",
+  };
+  // Spacing, key order and escapes that re-serializing would change.
+  const rawBody = '{"id":"WH-EVT-1",  "event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"note":"caf\\u00e9"}}';
+  const verify = (headers: Record<string, string> = signatureHeaders, body = rawBody) =>
+    paypalService.verifyWebhookSignature(new Headers(headers), body);
+  const VERIFY_PATH = "/v1/notifications/verify-webhook-signature";
+
+  it("asks PayPal to verify the event with the raw body embedded verbatim", async () => {
+    onPaypal("POST", VERIFY_PATH, json(200, { verification_status: "SUCCESS" }));
+
+    expect(await verify()).toBe(true);
+
+    const [request] = paypalCalls("POST", VERIFY_PATH);
+    expect(request.headers.get("authorization")).toBe("Bearer app-token");
+    expect(request.body!.endsWith(`,"webhook_event":${rawBody}}`)).toBe(true);
+    expect(JSON.parse(request.body!)).toEqual({
+      auth_algo: "SHA256withRSA",
+      cert_url: "https://api-m.sandbox.paypal.com/v1/notifications/certs/CERT-1",
+      transmission_id: "TRANSMISSION-1",
+      transmission_sig: "c2lnbmF0dXJl",
+      transmission_time: "2026-10-04T12:00:00Z",
+      webhook_id: "WH-1",
+      webhook_event: JSON.parse(rawBody),
+    });
+  });
+
+  it("is false without every signature header, without calling PayPal", async () => {
+    for (const missing of Object.keys(signatureHeaders)) {
+      const headers: Record<string, string> = { ...signatureHeaders };
+      delete headers[missing];
+      expect(await verify(headers)).toBe(false);
+    }
+    expect(paypalRequests).toHaveLength(0);
+  });
+
+  it("is false for a body that isn't a JSON object, so it can't inject fields", async () => {
+    for (const body of ["", "garbage", "[]", "null", '{"id":1},"webhook_id":"WH-ATTACKER"']) {
+      expect(await verify(signatureHeaders, body)).toBe(false);
+    }
+    expect(paypalRequests).toHaveLength(0);
+  });
+
+  it("is false unless PayPal answers SUCCESS", async () => {
+    onPaypal("POST", VERIFY_PATH, json(200, { verification_status: "FAILURE" }), json(200, {}));
+    expect(await verify()).toBe(false);
+    expect(await verify()).toBe(false);
+  });
+
+  it("throws PaypalConfigError when the webhook id or credentials are missing", async () => {
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
+    expect(await rejection(verify())).toBeInstanceOf(PaypalConfigError);
+
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "WH-1");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "");
+    expect(await rejection(verify())).toBeInstanceOf(PaypalConfigError);
+    expect(paypalRequests).toHaveLength(0);
+  });
+
+  it("rethrows PayPal errors so the route answers 500 and PayPal retries", async () => {
+    onPaypal("POST", VERIFY_PATH, paypalError(503));
+    await expect(verify()).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe("handleWebhook", () => {
+  /** findUnique finds the row only through the given lookup (or its own id, like the DB). */
+  function paymentFoundBy(key: string, value: string, row: Record<string, unknown>) {
+    db.paypalPayment.findUnique.mockImplementation(async ({ where }: { where: Record<string, string> }) =>
+      where[key] === value || where.id === row.id ? row : null,
+    );
+  }
+
+  it("captures an approved order (found by the purchase unit's custom_id)", async () => {
+    paymentFoundBy("id", "pay_1", paymentRow());
+    onPaypal("POST", CAPTURE_PATH, json(201, capturedOrder(captureObject({ status: "PENDING" }))));
+
+    const result = await paypalService.handleWebhook({
+      event_type: "CHECKOUT.ORDER.APPROVED",
+      resource_type: "checkout-order",
+      resource: { id: "ORDER-1", status: "APPROVED", purchase_units: [{ custom_id: "pay_1" }] },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(paypalCalls("POST", CAPTURE_PATH)).toHaveLength(1);
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "APPROVED" }) }),
+    );
+  });
+
+  it("logs capture flow errors for an approved order instead of throwing", async () => {
+    paymentFoundBy("orderId", "ORDER-1", paymentRow());
+    onPaypal("POST", CAPTURE_PATH, paypalError(422, "INSTRUMENT_DECLINED"));
+
+    const result = await paypalService.handleWebhook({
+      event_type: "CHECKOUT.ORDER.APPROVED",
+      resource_type: "checkout-order",
+      resource: { id: "ORDER-1" },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("settles a completed capture", async () => {
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow())
+      .mockResolvedValueOnce(paymentWithParties());
+    const tx = mockSettlement();
+
+    const result = await paypalService.handleWebhook({
+      event_type: "PAYMENT.CAPTURE.COMPLETED",
+      resource_type: "capture",
+      resource: captureObject(),
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(db.paypalPayment.findUnique).toHaveBeenNthCalledWith(1, { where: { id: "pay_1" } });
+    expect(tx.debtTransaction.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a pending capture APPROVED", async () => {
+    paymentFoundBy("orderId", "ORDER-1", paymentRow({ status: "CANCELLED" }));
+
+    const result = await paypalService.handleWebhook({
+      event_type: "PAYMENT.CAPTURE.PENDING",
+      resource_type: "capture",
+      resource: {
+        id: "CAPTURE-1",
+        status: "PENDING",
+        supplementary_data: { related_ids: { order_id: "ORDER-1" } },
+      },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: { in: ["CREATED", "CANCELLED"] } },
+      data: { status: "APPROVED", captureId: "CAPTURE-1", failureReason: null },
+    });
+  });
+
+  it("marks a denied capture FAILED", async () => {
+    paymentFoundBy("captureId", "CAPTURE-1", paymentRow({ status: "APPROVED", captureId: "CAPTURE-1" }));
+
+    const result = await paypalService.handleWebhook({
+      event_type: "PAYMENT.CAPTURE.DENIED",
+      resource_type: "capture",
+      resource: { id: "CAPTURE-1", status: "DECLINED" },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
+      data: { status: "FAILED", failureReason: expect.stringContaining("CAPTURE-1") },
+    });
+  });
+
+  it("refunds a payment found through the refund's 'up' link", async () => {
+    paymentFoundBy("captureId", "CAPTURE-1", paymentWithParties({ status: "COMPLETED", captureId: "CAPTURE-1" }));
+    const tx = createMockPrisma();
+    tx.paypalPayment.updateMany.mockResolvedValue({ count: 1 });
+    db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
+
+    const result = await paypalService.handleWebhook({
+      event_type: "PAYMENT.CAPTURE.REFUNDED",
+      resource_type: "refund",
+      resource: {
+        id: "REFUND-1",
+        status: "COMPLETED",
+        links: [
+          { rel: "self", href: "https://api-m.sandbox.paypal.com/v2/payments/refunds/REFUND-1" },
+          { rel: "up", href: "https://api-m.sandbox.paypal.com/v2/payments/captures/CAPTURE-1" },
+        ],
+      },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { captureId: "CAPTURE-1" } });
+    expect(db.paypalPayment.findUnique).not.toHaveBeenCalledWith({ where: { captureId: "REFUND-1" } });
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "REFUNDED" } }),
+    );
+  });
+
+  it("refunds a reversed payment found through related_ids.capture_id", async () => {
+    paymentFoundBy("captureId", "CAPTURE-1", paymentWithParties({ status: "COMPLETED", captureId: "CAPTURE-1" }));
+    const tx = createMockPrisma();
+    tx.paypalPayment.updateMany.mockResolvedValue({ count: 1 });
+    db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
+
+    const result = await paypalService.handleWebhook({
+      event_type: "PAYMENT.CAPTURE.REVERSED",
+      resource_type: "refund",
+      resource: { id: "REVERSAL-1", supplementary_data: { related_ids: { capture_id: "CAPTURE-1" } } },
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { captureId: "CAPTURE-1" } });
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores events for unknown payments and event types it doesn't handle", async () => {
+    db.paypalPayment.findUnique.mockResolvedValue(null);
+    expect(
+      await paypalService.handleWebhook({
+        event_type: "PAYMENT.CAPTURE.COMPLETED",
+        resource_type: "capture",
+        resource: captureObject({ custom_id: "not-ours" }),
+      }),
+    ).toEqual({ handled: false });
+
+    db.paypalPayment.findUnique.mockClear();
+    expect(
+      await paypalService.handleWebhook({ event_type: "BILLING.SUBSCRIPTION.CREATED", resource: { id: "X" } }),
+    ).toEqual({ handled: false });
+    expect(await paypalService.handleWebhook({})).toEqual({ handled: false });
+    expect(db.paypalPayment.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("lets unexpected errors propagate so PayPal retries", async () => {
+    db.paypalPayment.findUnique.mockRejectedValueOnce(new Error("db down"));
+
+    await expect(
+      paypalService.handleWebhook({
+        event_type: "PAYMENT.CAPTURE.COMPLETED",
+        resource_type: "capture",
+        resource: captureObject(),
+      }),
+    ).rejects.toThrow("db down");
+  });
+});
