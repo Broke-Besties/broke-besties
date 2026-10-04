@@ -767,7 +767,7 @@ export class EmailService {
         from: EmailService.FROM_EMAIL,
         to: params.to,
         subject: params.alreadySettled
-          ? "PayPal payment received for a debt that was already settled"
+          ? "A PayPal payment arrived, but the debt wasn't marked paid"
           : `${params.borrowerName} paid you $${params.amount.toFixed(2)} with PayPal`,
         react: PaypalPaymentReceivedEmail(params),
       });

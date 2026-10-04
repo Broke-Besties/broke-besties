@@ -808,10 +808,18 @@ const capturedOrder = (capture: Record<string, unknown> = captureObject()) => ({
   purchase_units: [{ payee: { merchant_id: "LENDER-PAYER" }, payments: { captures: [capture] } }],
 });
 
-/** A settlement transaction client; `claimed`/`settled` are the guarded updateMany counts. */
-function mockSettlement({ claimed = 1, settled = 1 } = {}) {
+/**
+ * A settlement transaction client: `claimed`/`settled` are the guarded updateMany counts and
+ * `debt` is what the transaction reads before settling.
+ */
+function mockSettlement({
+  claimed = 1,
+  debt = { status: "pending", amount: 42.5, alertId: 7 } as Record<string, unknown> | null,
+  settled = 1,
+} = {}) {
   const tx = createMockPrisma();
   tx.paypalPayment.updateMany.mockResolvedValue({ count: claimed });
+  tx.debt.findUnique.mockResolvedValue(debt);
   tx.debt.updateMany.mockResolvedValue({ count: settled });
   db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
   return tx;
@@ -894,12 +902,16 @@ describe("capturePayment", () => {
       where: { id: "pay_1", status: { notIn: ["COMPLETED", "REFUNDED"] } },
       data: { status: "COMPLETED", captureId: "CAPTURE-1", completedAt: expect.any(Date), failureReason: null },
     });
+    expect(tx.debt.findUnique).toHaveBeenCalledWith({
+      where: { id: 42 },
+      select: { status: true, amount: true, alertId: true },
+    });
     expect(tx.debt.updateMany).toHaveBeenCalledWith({
-      where: { id: 42, status: "pending" },
+      where: { id: 42, status: "pending", amount: 42.5 },
       data: { status: "paid" },
     });
     expect(tx.alert.updateMany).toHaveBeenCalledWith({
-      where: { debt: { id: 42 } },
+      where: { id: 7 },
       data: { isActive: false },
     });
     expect(tx.debtTransaction.updateMany).toHaveBeenCalledWith({
@@ -1154,6 +1166,7 @@ describe("completeFromCapture", () => {
         return { count: 1 };
       },
     );
+    tx.debt.findUnique.mockResolvedValue({ status: "pending", amount: 42.5, alertId: null });
     tx.debt.updateMany.mockResolvedValue({ count: 1 });
     db.$transaction.mockImplementation(async (fn: (client: unknown) => unknown) => fn(tx));
     onPaypal("POST", CAPTURE_PATH, json(201, capturedOrder()));
@@ -1223,13 +1236,36 @@ describe("completeFromCapture", () => {
   });
 
   it("keeps the payment COMPLETED and emails both people when the debt was already paid", async () => {
+    for (const settlement of [
+      { debt: { status: "paid", amount: 42.5, alertId: 7 } },
+      { debt: null }, // deleted after the payment was read
+      { settled: 0 }, // changed between the read and the guarded update
+    ]) {
+      db.paypalPayment.findUnique.mockResolvedValueOnce(paymentWithParties());
+      const tx = mockSettlement(settlement);
+
+      expect(await complete()).toBe("already_settled");
+      expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
+      expect(tx.debtTransaction.create).not.toHaveBeenCalled();
+      expect(tx.alert.updateMany).not.toHaveBeenCalled();
+    }
+    expect(email.sendPaypalPaymentReceived.mock.calls.map(([params]) => [params.to, params.alreadySettled])).toEqual(
+      Array(3).fill([["larry@example.com", true], ["bob@example.com", true]]).flat(),
+    );
+  });
+
+  it("doesn't mark the debt paid when its amount changed after checkout started", async () => {
     db.paypalPayment.findUnique.mockResolvedValueOnce(paymentWithParties());
-    const tx = mockSettlement({ settled: 0 });
+    const tx = mockSettlement({ debt: { status: "pending", amount: 80, alertId: 7 } });
 
     expect(await complete()).toBe("already_settled");
-    expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
-    expect(tx.debtTransaction.create).not.toHaveBeenCalled();
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "COMPLETED" }) }),
+    );
+    expect(tx.debt.updateMany).not.toHaveBeenCalled();
     expect(tx.alert.updateMany).not.toHaveBeenCalled();
+    expect(tx.debtTransaction.updateMany).not.toHaveBeenCalled();
+    expect(tx.debtTransaction.create).not.toHaveBeenCalled();
     expect(email.sendPaypalPaymentReceived.mock.calls.map(([params]) => [params.to, params.alreadySettled])).toEqual([
       ["larry@example.com", true],
       ["bob@example.com", true],
@@ -1547,6 +1583,30 @@ describe("handleWebhook", () => {
     expect(result).toEqual({ handled: true });
     expect(db.paypalPayment.findUnique).toHaveBeenNthCalledWith(1, { where: { id: "pay_1" } });
     expect(tx.debtTransaction.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a completed capture but leaves the debt alone when its amount changed", async () => {
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow())
+      .mockResolvedValueOnce(paymentWithParties());
+    const tx = mockSettlement({ debt: { status: "pending", amount: 80, alertId: 7 } });
+
+    const result = await paypalService.handleWebhook({
+      event_type: "PAYMENT.CAPTURE.COMPLETED",
+      resource_type: "capture",
+      resource: captureObject(),
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "COMPLETED" }) }),
+    );
+    expect(tx.debt.updateMany).not.toHaveBeenCalled();
+    expect(tx.debtTransaction.create).not.toHaveBeenCalled();
+    expect(email.sendPaypalPaymentReceived.mock.calls.map(([params]) => [params.to, params.alreadySettled])).toEqual([
+      ["larry@example.com", true],
+      ["bob@example.com", true],
+    ]);
   });
 
   it("marks a pending capture APPROVED", async () => {

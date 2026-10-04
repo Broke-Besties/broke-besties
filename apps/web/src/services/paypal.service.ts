@@ -198,7 +198,10 @@ export type CompletionOutcome =
   | "completed"
   /** The payment was already COMPLETED or REFUNDED; nothing changed. */
   | "already_completed"
-  /** Payment completed, but the debt was deleted or already paid; both people were emailed. */
+  /**
+   * Payment completed, but the debt was deleted, already paid, or its amount changed after
+   * checkout started: the debt was left alone and both people were emailed.
+   */
   | "already_settled"
   /** Amount, currency or payee didn't match; payment marked FAILED, debt untouched. */
   | "failed";
@@ -686,14 +689,24 @@ export class PaypalService {
       if (claimed.count === 0) return "already_completed" as const;
       if (debtId === null) return "already_settled" as const;
 
+      // Settle only the debt this money was for: still pending, still the paid amount.
+      const debt = await tx.debt.findUnique({
+        where: { id: debtId },
+        select: { status: true, amount: true, alertId: true },
+      });
+      if (!debt || debt.status !== "pending" || Math.round(debt.amount * 100) !== payment.amountCents) {
+        return "already_settled" as const;
+      }
       const settled = await tx.debt.updateMany({
-        where: { id: debtId, status: "pending" },
+        where: { id: debtId, status: "pending", amount: debt.amount },
         data: { status: "paid" },
       });
       if (settled.count === 0) return "already_settled" as const;
 
       // Same effects as an approved confirm_paid, plus its audit record for the Activity list.
-      await tx.alert.updateMany({ where: { debt: { id: debtId } }, data: { isActive: false } });
+      if (debt.alertId) {
+        await tx.alert.updateMany({ where: { id: debt.alertId }, data: { isActive: false } });
+      }
       await tx.debtTransaction.updateMany({
         where: { debtId, status: "pending" },
         data: { status: "cancelled", resolvedAt: now },

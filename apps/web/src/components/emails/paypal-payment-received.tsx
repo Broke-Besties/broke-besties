@@ -17,7 +17,10 @@ interface PaypalPaymentReceivedEmailProps {
   amount?: number;
   description?: string | null;
   debtLink?: string;
-  /** The debt was already paid or deleted when the payment arrived (sent to both people). */
+  /**
+   * The debt was already paid, deleted, or its amount changed when the payment arrived, so it
+   * wasn't marked paid (sent to both people).
+   */
   alreadySettled?: boolean;
 }
 
@@ -33,7 +36,7 @@ export const PaypalPaymentReceivedEmail = ({
   const amountText = `$${amount.toFixed(2)}`;
   const forText = description ? ` for ${description}` : "";
   const previewText = alreadySettled
-    ? "A PayPal payment was received for a debt that was already settled"
+    ? "A PayPal payment arrived, but the debt wasn't marked paid"
     : `${borrowerName} paid you ${amountText} with PayPal`;
 
   return (
@@ -43,21 +46,15 @@ export const PaypalPaymentReceivedEmail = ({
         <Preview>{previewText}</Preview>
         <Container style={container}>
           <Heading style={h1}>
-            {alreadySettled ? "Debt Already Settled" : "Payment Received"}
+            {alreadySettled ? "Debt Not Marked Paid" : "Payment Received"}
           </Heading>
 
           <Text style={text}>Hi {recipientName},</Text>
 
           {alreadySettled ? (
-            <>
-              <Text style={text}>
-                A PayPal payment was received for a debt that was already
-                settled.
-              </Text>
-              <Text style={text}>
-                {`${borrowerName} paid ${lenderName} ${amountText} with PayPal${forText}, but the debt had already been marked as paid or deleted, so nothing changed in Broke Besties. If the payment isn't needed, ${lenderName} can refund it in PayPal.`}
-              </Text>
-            </>
+            <Text style={text}>
+              {`${borrowerName}'s PayPal payment of ${amountText} to ${lenderName}${forText} arrived, but the debt was already settled, deleted, or its amount changed after checkout started, so it wasn't marked paid automatically. The lender can refund it in PayPal.`}
+            </Text>
           ) : (
             <Text style={text}>
               {`${borrowerName} paid you ${amountText} with PayPal${forText}. The debt is now marked as paid.`}
