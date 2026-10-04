@@ -391,6 +391,17 @@ describe("POST /api/paypal/payments/[id]/capture", () => {
       { params: Promise.resolve({ id: "pay_1" }) },
     );
   }
+  let now = Date.UTC(2026, 9, 4);
+
+  beforeEach(() => {
+    // The limiter lives in the route module: start every test in a fresh window.
+    now += 10 * 60_000;
+    vi.setSystemTime(now);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("returns 401 when unauthenticated", async () => {
     signOut();
@@ -440,6 +451,32 @@ describe("POST /api/paypal/payments/[id]/capture", () => {
 
     expect(res.status).toBe(402);
     expect(await res.json()).toEqual({ error: declined });
+  });
+
+  it("allows 10 captures per user per minute, then answers 429 with Retry-After", async () => {
+    // Every declined or not-approved capture renews the PayPal-Request-Id, so each retry is a
+    // fresh capture at PayPal.
+    vi.mocked(paypalService.capturePayment).mockRejectedValue(
+      new PaypalFlowError(409, "Payment wasn't approved in PayPal"),
+    );
+    signIn();
+    for (let i = 0; i < 10; i++) expect((await capture()).status).toBe(409);
+
+    const limited = await capture();
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(await limited.json()).toEqual({
+      error: "Too many PayPal requests. Try again in a minute.",
+    });
+    expect(paypalService.capturePayment).toHaveBeenCalledTimes(10);
+
+    signIn(LENDER_ID);
+    expect((await capture()).status).toBe(409);
+
+    signIn();
+    vi.setSystemTime(now + 60_000);
+    expect((await capture()).status).toBe(409);
   });
 });
 
