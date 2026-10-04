@@ -16,6 +16,8 @@ import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-r
 import { TabCreatedEmail } from "@/components/emails/tab-created";
 import { TabMarkedPaidEmail } from "@/components/emails/tab-marked-paid";
 import { AlertReminderEmail } from "@/components/emails/email";
+import { PaypalPaymentReceivedEmail } from "@/components/emails/paypal-payment-received";
+import { PaypalPaymentRefundedEmail } from "@/components/emails/paypal-payment-refunded";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -743,6 +745,74 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send debt request cancelled email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendPaypalPaymentReceived(params: {
+    to: string;
+    recipientName: string;
+    borrowerName: string;
+    lenderName: string;
+    amount: number;
+    description: string | null;
+    debtLink: string;
+    alreadySettled?: boolean;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: params.alreadySettled
+          ? "PayPal payment received for a debt that was already settled"
+          : `${params.borrowerName} paid you $${params.amount.toFixed(2)} with PayPal`,
+        react: PaypalPaymentReceivedEmail(params),
+      });
+
+      if (error) {
+        console.error("Failed to send PayPal payment received email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send PayPal payment received email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async sendPaypalPaymentRefunded(params: {
+    to: string;
+    recipientName: string;
+    borrowerName: string;
+    lenderName: string;
+    amount: number;
+    description: string | null;
+    debtLink: string;
+    debtReopened: boolean;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `PayPal payment of $${params.amount.toFixed(2)} was refunded`,
+        react: PaypalPaymentRefundedEmail(params),
+      });
+
+      if (error) {
+        console.error("Failed to send PayPal payment refunded email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send PayPal payment refunded email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
