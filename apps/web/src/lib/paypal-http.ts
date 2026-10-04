@@ -6,9 +6,9 @@ export function paypalErrorResponse(error: unknown, { configStatus = 503 } = {})
   if (error instanceof PaypalFlowError) {
     return NextResponse.json({ error: error.message, ...error.body }, { status: error.status });
   }
+  console.error("PayPal route error:", error);
   if (error instanceof PaypalConfigError) {
     return NextResponse.json({ error: "PayPal is not configured" }, { status: configStatus });
   }
-  console.error("PayPal route error:", error);
   return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 }

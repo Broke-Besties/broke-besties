@@ -90,6 +90,7 @@ describe("POST /api/paypal/webhook (public)", () => {
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: message });
+    expect(consoleError).toHaveBeenCalled();
     expect(paypalService.handleWebhook).not.toHaveBeenCalled();
   });
 

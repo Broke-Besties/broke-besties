@@ -103,6 +103,7 @@ describe("GET /api/paypal/connect", () => {
 
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "PayPal is not configured" });
+    expect(consoleError).toHaveBeenCalled();
   });
 
   it("answers 500 without leaking an unexpected error", async () => {

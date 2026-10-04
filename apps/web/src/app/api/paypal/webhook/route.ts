@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
     verified = await paypalService.verifyWebhookSignature(request.headers, rawBody);
   } catch (error) {
     if (!(error instanceof PaypalConfigError)) return paypalErrorResponse(error);
+    console.error("PayPal webhook is not configured:", error.message);
     return NextResponse.json({ error: "PayPal webhook is not configured" }, { status: 500 });
   }
   if (!verified) {
