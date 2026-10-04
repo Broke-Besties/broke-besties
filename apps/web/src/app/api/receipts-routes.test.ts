@@ -164,6 +164,20 @@ describe("receipt routes", () => {
       expect(receiptService.uploadAndParseReceipt).not.toHaveBeenCalled();
     });
 
+    it("returns 400 instead of 500 for a body that isn't multipart form data", async () => {
+      const res = await uploadReceiptRoute(
+        new NextRequest("http://localhost/api/receipts/upload", {
+          method: "POST",
+          body: JSON.stringify({ file: "x" }),
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "No file provided" });
+      expect(receiptService.uploadAndParseReceipt).not.toHaveBeenCalled();
+    });
+
     it("uploads the receipt for the parsed debt ids", async () => {
       const data = { id: RECEIPT_ID, signedUrl: "https://signed" };
       vi.mocked(receiptService.uploadAndParseReceipt).mockResolvedValueOnce(data);

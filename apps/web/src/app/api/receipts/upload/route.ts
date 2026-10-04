@@ -10,9 +10,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const debtIdsStr = formData.get("debtIds") as string | null;
+    // A non-multipart body makes formData() throw; treat it as "no file"
+    const formData = await request.formData().catch(() => null);
+    const file = formData?.get("file") as File | null;
+    const debtIdsStr = (formData?.get("debtIds") ?? null) as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });

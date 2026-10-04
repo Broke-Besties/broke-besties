@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import {
   createClient as createJsClient,
+  isAuthRetryableFetchError,
   type SupabaseClient,
 } from '@supabase/supabase-js'
 import { cookies, headers } from 'next/headers'
@@ -88,6 +89,8 @@ export async function getUser() {
     // A rejected token must not fall back to cookies: the mobile client
     // refreshes its session on 401 and retries.
     const { data: { user }, error } = await getTokenVerifier().auth.getUser(token)
+    // Supabase unreachable is not a bad token: a 401 would make the app sign out.
+    if (isAuthRetryableFetchError(error)) throw error
     return error || !user ? null : user
   }
 

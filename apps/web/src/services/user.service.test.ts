@@ -218,6 +218,16 @@ describe("userService", () => {
       expect(deleteAuthUser).toHaveBeenCalledWith(LENDER_ID);
     });
 
+    it("changes nothing when the admin client can't be built (misconfigured env)", async () => {
+      vi.mocked(createAdminClient).mockImplementationOnce(() => {
+        throw new Error("supabaseKey is required.");
+      });
+
+      await expect(userService.deleteAccount(LENDER_ID)).rejects.toThrow("supabaseKey is required.");
+
+      expect(db.$transaction).not.toHaveBeenCalled();
+    });
+
     it("keeps the auth user when the transaction fails", async () => {
       tx.user.update.mockRejectedValueOnce(new Error("deadlock detected"));
 

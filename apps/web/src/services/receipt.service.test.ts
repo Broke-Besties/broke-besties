@@ -47,10 +47,13 @@ function useReceiptStore() {
     return args.include?.debts ? { ...row, items: [], debts: [...debts] } : row;
   };
 
-  db.receipt.create.mockImplementation(async () => {
-    stored = { id: RECEIPT_ID, uploaderId: null, rawText: null, debts: [] };
-    return { id: RECEIPT_ID, uploaderId: null, rawText: null };
-  });
+  db.receipt.create.mockImplementation(
+    async ({ data }: { data: { uploaderId?: string } }) => {
+      const uploaderId = data.uploaderId ?? null;
+      stored = { id: RECEIPT_ID, uploaderId, rawText: null, debts: [] };
+      return { id: RECEIPT_ID, uploaderId, rawText: null };
+    },
+  );
   db.receipt.update.mockImplementation(
     async ({ data }: { data: Record<string, unknown> }) => {
       if (!stored) throw new Error("Record to update not found.");
@@ -103,6 +106,18 @@ describe("receiptService", () => {
     db.debt.findMany.mockResolvedValue([]);
 
     useReceiptStore();
+  });
+
+  it("records the uploader when the row is created, so the receipt is never open mid-upload", async () => {
+    let uploaderDuringUpload: string | null | undefined;
+    storage.upload.mockImplementationOnce(async () => {
+      uploaderDuringUpload = stored?.uploaderId;
+      return { data: { path: "x" }, error: null };
+    });
+
+    await uploadAs(USER_A);
+
+    expect(uploaderDuringUpload).toBe(USER_A);
   });
 
   describe("a pending receipt (uploaded by A, no debts yet)", () => {

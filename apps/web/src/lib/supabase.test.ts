@@ -13,9 +13,12 @@ vi.mock("next/headers", () => ({
   headers: mocks.headers,
   cookies: mocks.cookies,
 }));
-vi.mock("@supabase/supabase-js", () => ({
+vi.mock("@supabase/supabase-js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@supabase/supabase-js")>()),
   createClient: mocks.createJsClient,
 }));
+
+import { AuthRetryableFetchError } from "@supabase/supabase-js";
 vi.mock("@supabase/ssr", () => ({
   createServerClient: mocks.createServerClient,
 }));
@@ -96,6 +99,18 @@ describe("getUser", () => {
     expect(mocks.cookies).not.toHaveBeenCalled();
     expect(mocks.createServerClient).not.toHaveBeenCalled();
     expect(mocks.cookieGetUser).not.toHaveBeenCalled();
+  });
+
+  it("throws when Supabase can't be reached, so an outage isn't reported as a bad token", async () => {
+    requestHeaders({ authorization: "Bearer good-token" });
+    mocks.verifierGetUser.mockResolvedValueOnce({
+      data: { user: null },
+      error: new AuthRetryableFetchError("fetch failed", 0),
+    });
+    const getUser = await loadGetUser();
+
+    await expect(getUser()).rejects.toThrow("fetch failed");
+    expect(mocks.cookies).not.toHaveBeenCalled();
   });
 
   it("uses the cookie session when there is no Authorization header", async () => {

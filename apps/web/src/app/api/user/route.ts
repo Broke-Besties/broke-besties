@@ -29,11 +29,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { name } = body;
+    const body = await request.json().catch(() => null);
+    const name = body?.name;
 
     // Validate input
-    if (!name || name.trim() === "") {
+    if (typeof name !== "string" || name.trim() === "") {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 

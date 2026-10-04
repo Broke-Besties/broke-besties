@@ -28,12 +28,15 @@ export class ReceiptService {
       }
     }
 
-    // Create receipt record, optionally linking to debts
+    // Record the uploader up front: a receipt with no uploader and no debts is
+    // readable by anyone (legacy rule), even for the length of the upload.
     const receipt = await prisma.receipt.create({
-      data:
-        debtIds && debtIds.length > 0
+      data: {
+        uploaderId: userId,
+        ...(debtIds && debtIds.length > 0
           ? { debts: { connect: debtIds.map((id) => ({ id })) } }
-          : {},
+          : {}),
+      },
     });
 
     try {
@@ -63,13 +66,6 @@ export class ReceiptService {
 
       console.log("[Receipt Upload] Successfully uploaded to Supabase");
       console.log("[Receipt Upload] Presigned URL:", signedUrlData.signedUrl);
-
-      // Track the uploader so pending receipts (no debts yet) are only
-      // accessible to whoever uploaded them
-      await prisma.receipt.update({
-        where: { id: receipt.id },
-        data: { uploaderId: userId },
-      });
 
       return {
         id: receipt.id,
@@ -108,8 +104,8 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    // Otherwise anyone could attach someone else's receipt to their own debt
-    // and then read it through that debt
+    // Only the uploader or a party on an already-linked debt may link; otherwise
+    // anyone could attach someone else's receipt to their own debt and read it
     if (receipt.uploaderId !== userId && !ReceiptPolicy.canView(userId, receipt)) {
       throw new Error("Access denied");
     }

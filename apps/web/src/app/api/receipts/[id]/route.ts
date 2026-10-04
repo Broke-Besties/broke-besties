@@ -31,7 +31,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!debtIds.every((debtId): debtId is number => Number.isInteger(debtId))) {
+    if (!debtIds.every(Number.isInteger)) {
       return NextResponse.json({ error: "Invalid debt ID" }, { status: 400 });
     }
 

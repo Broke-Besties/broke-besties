@@ -2,13 +2,50 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/supabase", () => ({ getUser: vi.fn() }));
 vi.mock("@/services/user.service", () => ({
-  userService: { deleteAccount: vi.fn() },
+  userService: { deleteAccount: vi.fn(), updateUser: vi.fn() },
 }));
 
 import { getUser } from "@/lib/supabase";
 import { userService } from "@/services/user.service";
-import { DELETE as deleteUserRoute } from "@/app/api/user/route";
+import {
+  DELETE as deleteUserRoute,
+  PATCH as patchUserRoute,
+} from "@/app/api/user/route";
 import { LENDER_ID } from "../../test/mocks";
+
+describe("PATCH /api/user", () => {
+  const patch = (body: string) =>
+    patchUserRoute(
+      new Request("http://localhost/api/user", {
+        method: "PATCH",
+        body,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getUser).mockResolvedValue({ id: LENDER_ID } as never);
+  });
+
+  it("returns 400 instead of 500 for malformed JSON or a non-string name", async () => {
+    for (const body of ["{oops", "null", JSON.stringify({ name: 5 }), JSON.stringify({ name: "  " })]) {
+      const res = await patch(body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Name is required" });
+    }
+    expect(userService.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("saves the trimmed name", async () => {
+    vi.mocked(userService.updateUser).mockResolvedValueOnce({ id: LENDER_ID, name: "Ada" } as never);
+
+    const res = await patch(JSON.stringify({ name: "  Ada " }));
+
+    expect(res.status).toBe(200);
+    expect(userService.updateUser).toHaveBeenCalledWith(LENDER_ID, { name: "Ada" });
+  });
+});
 
 describe("DELETE /api/user", () => {
   beforeEach(() => {
