@@ -1,11 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -31,7 +42,9 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { PageHeader } from '@/components/page-header'
 import { logoutAction } from '@/components/actions'
+import type { PaypalAccountInfo } from '@/services/paypal.service'
 import { updateProfile } from './actions'
+import { paypalConnectError } from './paypal-messages'
 
 type User = {
   id: string
@@ -43,6 +56,9 @@ type User = {
 
 type ProfilePageClientProps = {
   user: User
+  paypalAccount: PaypalAccountInfo | null
+  paypalStatus?: string
+  paypalReason?: string
 }
 
 function initials(value: string): string {
@@ -59,10 +75,29 @@ function formatDate(date: Date | string) {
   })
 }
 
-export default function ProfilePageClient({ user }: ProfilePageClientProps) {
+export default function ProfilePageClient({
+  user,
+  paypalAccount,
+  paypalStatus,
+  paypalReason,
+}: ProfilePageClientProps) {
   const [name, setName] = useState(user.name)
   const [isLoading, setIsLoading] = useState(false)
+  const [paypalPending, setPaypalPending] = useState(false)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const paypalFeedbackShown = useRef(false)
   const router = useRouter()
+
+  // ?paypal=connected|error comes back from the PayPal OAuth callback. The ref
+  // keeps StrictMode's double effect run in dev from toasting twice.
+  useEffect(() => {
+    if (paypalFeedbackShown.current) return
+    if (paypalStatus === 'connected') toast.success('PayPal connected')
+    else if (paypalStatus === 'error') toast.error(paypalConnectError(paypalReason))
+    else return
+    paypalFeedbackShown.current = true
+    router.replace('/profile')
+  }, [paypalStatus, paypalReason, router])
 
   const isDirty = name.trim() !== user.name
 
@@ -91,6 +126,47 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
       toast.success('Copied')
     } catch {
       toast.error('Failed to copy')
+    }
+  }
+
+  const handleConnectPaypal = async () => {
+    setPaypalPending(true)
+    try {
+      const response = await fetch('/api/paypal/connect?platform=web')
+      const data = await response.json()
+      if (response.ok && data.url) {
+        window.location.assign(data.url)
+      } else {
+        toast.error(data.error || paypalConnectError())
+      }
+    } catch {
+      toast.error(paypalConnectError())
+    } finally {
+      // ponytail: also clears once the redirect starts, so a bfcache Back from
+      // PayPal can't restore a stuck spinner (a second click just refetches the
+      // URL). Keep it busy + reset on `pageshow` if the brief re-enable matters.
+      setPaypalPending(false)
+    }
+  }
+
+  const handleDisconnectPaypal = async () => {
+    setPaypalPending(true)
+    try {
+      const response = await fetch('/api/paypal/account', { method: 'DELETE' })
+      if (response.ok) {
+        toast.success('PayPal disconnected')
+        router.refresh()
+      } else {
+        toast.error(
+          (await response.json()).error ||
+            "Couldn't disconnect PayPal. Try again."
+        )
+      }
+    } catch {
+      toast.error("Couldn't disconnect PayPal. Try again.")
+    } finally {
+      setPaypalPending(false)
+      setConfirmDisconnect(false)
     }
   }
 
@@ -208,6 +284,68 @@ export default function ProfilePageClient({ user }: ProfilePageClientProps) {
             </Item>
           </ItemGroup>
         </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>PayPal</CardTitle>
+          {paypalAccount ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <CardDescription className="min-w-0 break-words">
+                Connected as {paypalAccount.email}
+              </CardDescription>
+              {paypalAccount.emailVerified && (
+                <Badge variant="secondary">Verified</Badge>
+              )}
+            </div>
+          ) : (
+            <CardDescription>
+              Connect PayPal so friends can pay you back in one tap.
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent>
+          {paypalAccount ? (
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmDisconnect(true)}
+            >
+              Disconnect
+            </Button>
+          ) : (
+            <Button onClick={handleConnectPaypal} disabled={paypalPending}>
+              {paypalPending && <Spinner />}
+              Connect PayPal
+            </Button>
+          )}
+        </CardContent>
+
+        <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Disconnect PayPal?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Friends won&apos;t be able to pay you with PayPal until you
+                connect again.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={paypalPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={paypalPending}
+                onClick={(e) => {
+                  e.preventDefault()
+                  handleDisconnectPaypal()
+                }}
+              >
+                {paypalPending && <Spinner />}
+                Disconnect
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </Card>
 
       <Card className="max-w-2xl">
