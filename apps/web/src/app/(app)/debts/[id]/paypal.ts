@@ -15,9 +15,7 @@ export function parsePaypalReturn(
   return null;
 }
 
-export const isPaypalTransaction = (t: { type: string; reason: string | null }) =>
-  t.type === "confirm_paid" && !!t.reason?.startsWith("Paid with PayPal");
-
-// Payments come newest first.
-export const isPaypalProcessing = (payments: { status: string }[]) =>
-  payments[0]?.status === "APPROVED";
+// The reason text is user-writable on change requests, so only approved
+// confirmations (the settlement's own audit row) count.
+export const isPaypalTransaction = (t: { type: string; status: string; reason: string | null }) =>
+  t.type === "confirm_paid" && t.status === "approved" && !!t.reason?.startsWith("Paid with PayPal");

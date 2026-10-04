@@ -37,7 +37,7 @@ import { ActivityCard } from "./activity-card";
 import { PendingRequestCard } from "./pending-request-card";
 import { ReceiptsCard } from "./receipts-card";
 import { ReminderCard } from "./reminder-card";
-import { isPaypalProcessing, type PaypalReturn } from "./paypal";
+import type { PaypalReturn } from "./paypal";
 import {
   displayName,
   initials,
@@ -147,6 +147,7 @@ export default function DebtDetailClient({
         window.location.assign(data.approveUrl);
       } else {
         toast.error(data.error || "Couldn't start PayPal. Try again.");
+        router.refresh(); // the debt may have changed (paid, request pending, payment processing)
       }
     } catch {
       toast.error("Couldn't start PayPal. Try again.");
@@ -166,10 +167,7 @@ export default function DebtDetailClient({
         description={description}
         actions={
           canAct ? (
-            // ponytail: PageHeader's actions row can't wrap, so cap it at the
-            // phone content width (p-4 gutters) and let the PayPal button wrap
-            // instead of overflowing. Upgrade: flex-wrap in PageHeader itself.
-            <div className="flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-2">
+            <>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline">
@@ -209,12 +207,7 @@ export default function DebtDetailClient({
                 <CheckCircle2 />
                 Mark as paid
               </Button>
-              {isBorrower && !paypal.lenderConnected && (
-                <p className="text-sm text-muted-foreground">
-                  {lenderName} hasn&apos;t connected PayPal
-                </p>
-              )}
-            </div>
+            </>
           ) : pendingTransaction ? (
             <p className="text-sm text-muted-foreground">
               Actions are unavailable while a request is pending.
@@ -257,12 +250,18 @@ export default function DebtDetailClient({
 
               {isBorrower &&
                 debt.status === "pending" &&
-                isPaypalProcessing(paypal.payments) && (
+                paypal.payments.some((p) => p.status === "APPROVED") && (
                   <p className="max-w-sm text-sm text-muted-foreground">
                     PayPal is processing your payment. We&apos;ll mark this debt
                     paid when it clears.
                   </p>
                 )}
+
+              {isBorrower && canAct && !paypal.lenderConnected && (
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  {lenderName} hasn&apos;t connected PayPal
+                </p>
+              )}
             </CardContent>
           </Card>
 

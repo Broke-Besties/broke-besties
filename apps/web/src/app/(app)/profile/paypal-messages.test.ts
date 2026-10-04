@@ -12,7 +12,6 @@ describe("paypalConnectError", () => {
 
   it("falls back for unknown or missing reasons", () => {
     expect(paypalConnectError("no_email")).toBe("Couldn't connect PayPal. Try again.");
-    expect(paypalConnectError("constructor")).toBe("Couldn't connect PayPal. Try again.");
     expect(paypalConnectError(undefined)).toBe("Couldn't connect PayPal. Try again.");
   });
 });

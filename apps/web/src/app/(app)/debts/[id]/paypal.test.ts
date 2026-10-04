@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isPaypalProcessing,
-  isPaypalTransaction,
-  parsePaypalReturn,
-} from "./paypal";
+import { isPaypalTransaction, parsePaypalReturn } from "./paypal";
 
 describe("parsePaypalReturn", () => {
   it("reads an approved return with its payment id", () => {
@@ -34,26 +30,21 @@ describe("parsePaypalReturn", () => {
 });
 
 describe("isPaypalTransaction", () => {
-  it("is a confirm_paid whose reason starts with Paid with PayPal", () => {
+  it("is an approved confirm_paid whose reason starts with Paid with PayPal", () => {
     expect(
       isPaypalTransaction({
         type: "confirm_paid",
+        status: "approved",
         reason: "Paid with PayPal (capture 1AB23456CD789012E)",
       }),
     ).toBe(true);
   });
 
-  it("rejects other types and reasons", () => {
-    expect(isPaypalTransaction({ type: "modify", reason: "Paid with PayPal" })).toBe(false);
-    expect(isPaypalTransaction({ type: "confirm_paid", reason: "PayPal payment refunded" })).toBe(false);
-    expect(isPaypalTransaction({ type: "confirm_paid", reason: null })).toBe(false);
-  });
-});
-
-describe("isPaypalProcessing", () => {
-  it("looks only at the newest payment (payments come newest first)", () => {
-    expect(isPaypalProcessing([{ status: "APPROVED" }, { status: "FAILED" }])).toBe(true);
-    expect(isPaypalProcessing([{ status: "COMPLETED" }, { status: "APPROVED" }])).toBe(false);
-    expect(isPaypalProcessing([])).toBe(false);
+  it("rejects other types, reasons, and unapproved requests (reason is user-writable)", () => {
+    const paid = "Paid with PayPal";
+    expect(isPaypalTransaction({ type: "modify", status: "approved", reason: paid })).toBe(false);
+    expect(isPaypalTransaction({ type: "confirm_paid", status: "pending", reason: paid })).toBe(false);
+    expect(isPaypalTransaction({ type: "confirm_paid", status: "cancelled", reason: "PayPal payment refunded" })).toBe(false);
+    expect(isPaypalTransaction({ type: "confirm_paid", status: "approved", reason: null })).toBe(false);
   });
 });

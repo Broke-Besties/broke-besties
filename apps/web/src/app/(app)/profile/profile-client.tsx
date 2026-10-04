@@ -96,7 +96,7 @@ export default function ProfilePageClient({
     else if (paypalStatus === 'error') toast.error(paypalConnectError(paypalReason))
     else return
     paypalFeedbackShown.current = true
-    router.replace('/profile')
+    router.replace('/profile', { scroll: false })
   }, [paypalStatus, paypalReason, router])
 
   const isDirty = name.trim() !== user.name
@@ -310,6 +310,7 @@ export default function ProfilePageClient({
               variant="outline"
               className="text-destructive hover:text-destructive"
               onClick={() => setConfirmDisconnect(true)}
+              aria-label="Disconnect PayPal"
             >
               Disconnect
             </Button>
