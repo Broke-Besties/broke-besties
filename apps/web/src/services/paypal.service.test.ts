@@ -902,9 +902,14 @@ const mockUncapturedOrder = (times = 1) => {
   }
 };
 
-/** The debt the pre-capture check reads: still pending, still the ordered amount. */
-const mockUnchangedDebt = () =>
-  db.debt.findUnique.mockResolvedValue({ status: "pending", amount: 42.5 });
+/** The debt the pre-capture check reads: still pending, still the ordered amount and payee. */
+const unchangedDebt = (overrides: Record<string, unknown> = {}) => ({
+  status: "pending",
+  amount: 42.5,
+  lender: { paypalAccount: { payerId: "LENDER-PAYER" } },
+  ...overrides,
+});
+const mockUnchangedDebt = () => db.debt.findUnique.mockResolvedValue(unchangedDebt());
 
 describe("capturePayment", () => {
   const capture = () => paypalService.capturePayment("pay_1", BORROWER_ID);
@@ -1177,7 +1182,11 @@ describe("capturePayment", () => {
     );
     expect(db.debt.findUnique).toHaveBeenCalledWith({
       where: { id: 42 },
-      select: { status: true, amount: true },
+      select: {
+        status: true,
+        amount: true,
+        lender: { select: { paypalAccount: { select: { payerId: true } } } },
+      },
     });
     expect(paypalCalls("GET", ORDER_PATH)).toHaveLength(1);
     expect(paypalCalls("POST", CAPTURE_PATH)).toHaveLength(0);
@@ -1209,6 +1218,43 @@ describe("capturePayment", () => {
         where: { id: "pay_1", status: { in: ["CREATED", "CANCELLED"] } },
         data: { status: "CANCELLED", failureReason: "Debt settled before capture" },
       }),
+    );
+  });
+
+  it("refuses to capture to the lender's old PayPal account (re-linked or disconnected)", async () => {
+    db.paypalPayment.findUnique.mockResolvedValue(paymentRow());
+    db.debt.findUnique
+      .mockResolvedValueOnce(unchangedDebt({ lender: { paypalAccount: { payerId: "NEW-PAYER" } } }))
+      .mockResolvedValueOnce(unchangedDebt({ lender: { paypalAccount: null } }));
+    mockUncapturedOrder(2);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      flowError(409, "The lender's PayPal account changed. Start a new PayPal payment.").check(
+        await rejection(capture()),
+      );
+    }
+
+    expect(paypalCalls("GET", ORDER_PATH)).toHaveLength(2);
+    expect(paypalCalls("POST", CAPTURE_PATH)).toHaveLength(0);
+    expect(db.paypalPayment.updateMany.mock.calls.map(([args]) => args)).toEqual(
+      Array(2).fill({
+        where: { id: "pay_1", status: { in: ["CREATED", "CANCELLED"] } },
+        data: { status: "CANCELLED", failureReason: "Lender's PayPal account changed before capture" },
+      }),
+    );
+  });
+
+  it("reports a settled debt first, then a changed amount, then a changed payee", async () => {
+    const relinked = { lender: { paypalAccount: { payerId: "NEW-PAYER" } } };
+    db.paypalPayment.findUnique.mockResolvedValue(paymentRow());
+    db.debt.findUnique
+      .mockResolvedValueOnce(unchangedDebt({ status: "paid", amount: 80, ...relinked }))
+      .mockResolvedValueOnce(unchangedDebt({ amount: 80, ...relinked }));
+    mockUncapturedOrder(2);
+
+    flowError(409, "This debt is already settled").check(await rejection(capture()));
+    flowError(409, "This debt's amount changed. Start a new PayPal payment.").check(
+      await rejection(capture()),
     );
   });
 

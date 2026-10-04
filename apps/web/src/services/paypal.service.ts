@@ -509,9 +509,10 @@ export class PaypalService {
    * 404 `Payment not found`; 403 `Only the payer can capture this payment`;
    * 409 `Payment wasn't approved in PayPal`; 409 `This PayPal payment was refunded`;
    * 409 `This PayPal payment failed. Start a new payment.`;
-   * 409 `This debt is already settled` | `This debt's amount changed. Start a new PayPal payment.`
-   *     (checked before capturing; PayPal is asked first, and unless an earlier attempt already
-   *     captured, the payment becomes CANCELLED and nothing is charged);
+   * 409 `This debt is already settled` | `This debt's amount changed. Start a new PayPal payment.` |
+   *     `The lender's PayPal account changed. Start a new PayPal payment.` (checked in that order
+   *     before capturing; PayPal is asked first, and unless an earlier attempt already captured,
+   *     the payment becomes CANCELLED and nothing is charged);
    * 402 `PayPal declined the payment method. Try again with a different one.`;
    * 502 `PayPal couldn't complete the payment`;
    * 502 `PayPal payment couldn't be verified` (capture didn't match the debt).
@@ -535,6 +536,7 @@ export class PaypalService {
     orderId: string | null;
     debtId: number | null;
     amountCents: number;
+    payeePayerId: string;
     updatedAt: Date;
   }) {
     // Already settled: captureResult answers 200 (COMPLETED) or the refunded/failed 409.
@@ -552,11 +554,16 @@ export class PaypalService {
     let refusal: { reason: string; message: string } | null = null;
     if (payment.status === "CREATED" || payment.status === "CANCELLED") {
       // Before capturing: don't take money for a debt that was settled or changed since the
-      // order. CANCELLED doesn't block a new order, so the borrower can start over.
+      // order, or pay a PayPal account the lender has since replaced. CANCELLED doesn't block a
+      // new order, so the borrower can start over.
       const debt = payment.debtId
         ? await prisma.debt.findUnique({
             where: { id: payment.debtId },
-            select: { status: true, amount: true },
+            select: {
+              status: true,
+              amount: true,
+              lender: { select: { paypalAccount: { select: { payerId: true } } } },
+            },
           })
         : null;
       if (!debt || debt.status !== "pending") {
@@ -565,6 +572,11 @@ export class PaypalService {
         refusal = {
           reason: "Debt amount changed before capture",
           message: "This debt's amount changed. Start a new PayPal payment.",
+        };
+      } else if (debt.lender.paypalAccount?.payerId !== payment.payeePayerId) {
+        refusal = {
+          reason: "Lender's PayPal account changed before capture",
+          message: "The lender's PayPal account changed. Start a new PayPal payment.",
         };
       }
     }
