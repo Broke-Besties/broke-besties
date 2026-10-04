@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
     console.error("Error uploading receipt:", error);
     const message =
       error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.startsWith("Access denied") ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
