@@ -953,6 +953,15 @@ export class PaypalService {
         await this.capture(payment);
       } catch (error) {
         if (!(error instanceof PaypalFlowError)) throw error;
+        if (error.status === 502) {
+          // Row untouched means the outcome is unknown: fail the delivery so PayPal sends the
+          // event again, and the retry reuses the same PayPal-Request-Id.
+          const current = await prisma.paypalPayment.findUnique({
+            where: { id: payment.id },
+            select: { status: true },
+          });
+          if (current?.status === "CREATED" || current?.status === "APPROVED") throw error;
+        }
         console.error("[PaypalService] Webhook capture failed:", { paymentId: payment.id, error: error.message });
       }
     } else if (type === "PAYMENT.CAPTURE.COMPLETED") {

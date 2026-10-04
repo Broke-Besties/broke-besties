@@ -1617,6 +1617,40 @@ describe("handleWebhook", () => {
     expect(console.error).toHaveBeenCalled();
   });
 
+  const orderApproved = {
+    event_type: "CHECKOUT.ORDER.APPROVED",
+    resource_type: "checkout-order",
+    resource: { id: "ORDER-1", purchase_units: [{ custom_id: "pay_1" }] },
+  };
+
+  it("rethrows an unknown capture outcome so PayPal redelivers the event (same key)", async () => {
+    for (const status of ["CREATED", "APPROVED"]) {
+      db.paypalPayment.findUnique
+        .mockResolvedValueOnce(paymentRow({ status }))
+        .mockResolvedValueOnce({ status }); // re-read: the row is untouched
+      onPaypal("POST", CAPTURE_PATH, paypalError(503));
+
+      await expect(paypalService.handleWebhook(orderApproved)).rejects.toMatchObject({
+        status: 502,
+        message: "PayPal couldn't complete the payment",
+      });
+      expect(db.paypalPayment.findUnique).toHaveBeenLastCalledWith({
+        where: { id: "pay_1" },
+        select: { status: true },
+      });
+    }
+  });
+
+  it("only logs a capture that failed for good", async () => {
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow())
+      .mockResolvedValueOnce({ status: "FAILED" }); // re-read: markFailed ran
+    onPaypal("POST", CAPTURE_PATH, paypalError(422, "TRANSACTION_REFUSED"));
+
+    expect(await paypalService.handleWebhook(orderApproved)).toEqual({ handled: true });
+    expect(console.error).toHaveBeenCalled();
+  });
+
   it("doesn't capture an approved order whose debt amount changed", async () => {
     paymentFoundBy("orderId", "ORDER-1", paymentRow());
     db.debt.findUnique.mockResolvedValue({ status: "pending", amount: 80 });
