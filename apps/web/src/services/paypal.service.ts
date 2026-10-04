@@ -4,21 +4,42 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  centsToAmount,
+  checkoutUrl,
   decodeStateUnverified,
   exchangeAuthorizationCode,
   fetchUserInfo,
   getAppUrl,
   getPaypalCredentials,
   isAppScheme,
+  paypalFetch,
   paypalWebBase,
   schemeForVariant,
   signState,
   verifyState,
 } from "@/lib/paypal";
-import { PaypalConfigError } from "@/lib/paypal-errors";
+import { PaypalConfigError, PaypalError, PaypalFlowError } from "@/lib/paypal-errors";
 import { PaypalPolicy } from "@/policies";
 
 const CONNECT_SCOPES = "openid email https://uri.paypal.com/services/paypalattributes";
+const ORDER_RESUMABLE_MS = 3 * 60 * 60 * 1000;
+
+/** The parts of a PayPal order (Orders v2) we read. */
+type PaypalOrder = {
+  id?: string;
+  links?: { rel?: string; href?: string }[];
+  purchase_units?: {
+    payee?: PaypalCapture["payee"];
+    payments?: { captures?: PaypalCapture[] };
+  }[];
+};
+
+function describeError(error: unknown): string {
+  if (error instanceof PaypalError) {
+    return `${error.issue ?? error.paypalName} (HTTP ${error.status}, debug id ${error.debugId ?? "none"})`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 /** NEXT_PUBLIC_APP_URL, or "" so redirects stay relative (the routes resolve them). */
 function appUrlOrRelative(): string {
@@ -281,8 +302,124 @@ export class PaypalService {
     platform: PaypalPlatform;
     appVariant?: string | null;
   }): Promise<{ paymentId: string; approveUrl: string }> {
-    void params;
-    throw new Error("Not implemented");
+    const { debtId, userId, appVariant } = params;
+    const platform = params.platform === "ios" ? "ios" : "web";
+    getPaypalCredentials();
+    const appUrl = getAppUrl();
+
+    const debt = await prisma.debt.findUnique({
+      where: { id: debtId },
+      include: {
+        lender: { select: { paypalAccount: { select: { payerId: true } } } },
+        transactions: { where: { status: "pending" }, select: { id: true } },
+      },
+    });
+    if (!debt) throw new PaypalFlowError(404, "Debt not found");
+    if (debt.borrowerId !== userId) {
+      throw new PaypalFlowError(403, "Only the borrower can pay this debt with PayPal");
+    }
+    if (debt.status !== "pending") throw new PaypalFlowError(403, "This debt is already paid");
+    if (debt.transactions.length > 0) {
+      throw new PaypalFlowError(403, "This debt has a pending change request");
+    }
+    const payeePayerId = debt.lender.paypalAccount?.payerId;
+    if (!payeePayerId) throw new PaypalFlowError(409, "The lender hasn't connected PayPal yet");
+
+    const inProgress = await prisma.paypalPayment.findFirst({
+      where: {
+        debtId,
+        OR: [
+          { status: "CREATED", createdAt: { gt: new Date(Date.now() - ORDER_RESUMABLE_MS) } },
+          // APPROVED = PayPal returned a PENDING capture (e.g. an eCheck can take days): money
+          // is in flight, so it blocks at any age. ponytail: if that capture never resolves
+          // (missed webhooks), PayPal stays blocked for this debt; the borrower can still
+          // "Mark as paid", and an admin can mark the payment FAILED to unblock it.
+          { status: "APPROVED" },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true, orderId: true },
+    });
+    if (inProgress) {
+      throw new PaypalFlowError(409, "A PayPal payment is already in progress for this debt", {
+        paymentId: inProgress.id,
+        approveUrl:
+          inProgress.status === "CREATED" && inProgress.orderId
+            ? checkoutUrl(inProgress.orderId)
+            : null,
+      });
+    }
+
+    const amountCents = Math.round(debt.amount * 100);
+    if (!Number.isSafeInteger(amountCents) || amountCents < 1) {
+      throw new PaypalFlowError(400, "This debt amount can't be paid with PayPal");
+    }
+
+    // The row exists before the order: its id is the order's PayPal-Request-Id and custom_id.
+    const payment = await prisma.paypalPayment.create({
+      data: {
+        debtId,
+        payerUserId: userId,
+        payeeUserId: debt.lenderId,
+        payeePayerId,
+        amountCents,
+        currency: "USD",
+        platform,
+        returnScheme: platform === "ios" ? schemeForVariant(appVariant) : null,
+      },
+    });
+
+    const prefix = "Broke Besties: ";
+    const suffix = ` (debt #${debtId})`;
+    const text = debt.description?.trim();
+    const returnUrl = `${appUrl}/paypal/return?pp=${encodeURIComponent(payment.id)}&platform=${platform}`;
+    try {
+      const order = await paypalFetch<PaypalOrder | null>("/v2/checkout/orders", {
+        method: "POST",
+        requestId: payment.id,
+        body: JSON.stringify({
+          intent: "CAPTURE",
+          purchase_units: [
+            {
+              reference_id: `debt-${debtId}`,
+              custom_id: payment.id,
+              // PayPal allows at most 127 characters here.
+              description: text
+                ? `${prefix}${Array.from(text).slice(0, 127 - prefix.length - suffix.length).join("")}${suffix}`
+                : `${prefix}debt #${debtId}`,
+              amount: { currency_code: "USD", value: centsToAmount(amountCents) },
+              payee: { merchant_id: payeePayerId },
+            },
+          ],
+          payment_source: {
+            paypal: {
+              experience_context: {
+                brand_name: "Broke Besties",
+                shipping_preference: "NO_SHIPPING",
+                user_action: "PAY_NOW",
+                return_url: returnUrl,
+                cancel_url: `${returnUrl}&cancelled=1`,
+              },
+            },
+          },
+        }),
+      });
+      const links = order?.links ?? [];
+      const approveUrl = (
+        links.find((link) => link.rel === "payer-action") ?? links.find((link) => link.rel === "approve")
+      )?.href;
+      if (!order?.id || !approveUrl) throw new Error("PayPal order has no id or approve link");
+
+      await prisma.paypalPayment.update({ where: { id: payment.id }, data: { orderId: order.id } });
+      return { paymentId: payment.id, approveUrl };
+    } catch (error) {
+      console.error("[PaypalService] Creating a PayPal order failed:", { paymentId: payment.id, error });
+      await this.markFailed(payment.id, `Order creation failed: ${describeError(error)}`);
+      if (error instanceof PaypalError && error.details.some((d) => d.issue?.startsWith("PAYEE_"))) {
+        throw new PaypalFlowError(409, "The lender's PayPal account can't receive payments right now");
+      }
+      throw new PaypalFlowError(502, "PayPal couldn't start the payment. Try again.");
+    }
   }
 
   /**
@@ -314,9 +451,11 @@ export class PaypalService {
 
   /** Marks a not-yet-completed payment FAILED with a reason. */
   async markFailed(paymentId: string, reason: string): Promise<void> {
-    void paymentId;
-    void reason;
-    throw new Error("Not implemented");
+    // Never COMPLETED/REFUNDED: a late error from a racing capture must not undo a settlement.
+    await prisma.paypalPayment.updateMany({
+      where: { id: paymentId, status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
+      data: { status: "FAILED", failureReason: reason },
+    });
   }
 
   /** Refund/reversal path (spec P.8 `markRefunded`). Idempotent. */
@@ -336,8 +475,34 @@ export class PaypalService {
     orderToken: string | null;
     cancelled: boolean;
   }): Promise<string> {
-    void params;
-    throw new Error("Not implemented");
+    const { paymentId, orderToken, cancelled } = params;
+    const appUrl = appUrlOrRelative();
+    const status = cancelled ? "cancelled" : "approved";
+    try {
+      const payment = paymentId
+        ? await prisma.paypalPayment.findUnique({ where: { id: paymentId } })
+        : null;
+      if (!payment) return `${appUrl}/debts?paypal=error`;
+
+      // PayPal sends the order id as `token`; requiring it means a guessed link can't cancel.
+      if (cancelled && orderToken && orderToken === payment.orderId) {
+        await prisma.paypalPayment.updateMany({
+          where: { id: payment.id, status: "CREATED" },
+          data: { status: "CANCELLED" },
+        });
+      }
+
+      const pp = encodeURIComponent(payment.id);
+      if (payment.platform === "ios") {
+        const scheme = isAppScheme(payment.returnScheme) ? payment.returnScheme : "brokebesties";
+        return `${scheme}://paypal/return?pp=${pp}&status=${status}`;
+      }
+      const debtPath = payment.debtId ? `/debts/${payment.debtId}` : "/debts";
+      return `${appUrl}${debtPath}?paypal=${status}&pp=${pp}`;
+    } catch (error) {
+      console.error("[PaypalService] PayPal return redirect failed:", error);
+      return `${appUrl}/debts?paypal=error`;
+    }
   }
 
   /**

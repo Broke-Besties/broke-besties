@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { emailService } from "@/services/email.service";
 import { paypalService } from "@/services/paypal.service";
 import { resetPaypalTokenCacheForTests, signState, verifyState } from "@/lib/paypal";
-import { PaypalConfigError } from "@/lib/paypal-errors";
+import { PaypalConfigError, PaypalFlowError } from "@/lib/paypal-errors";
 import {
   BORROWER_ID,
   LENDER_ID,
@@ -403,5 +403,358 @@ describe("getDebtPaypalInfo", () => {
       orderBy: { createdAt: "desc" },
       select: { id: true, status: true, amountCents: true, createdAt: true, completedAt: true },
     });
+  });
+});
+
+// --- pay -----------------------------------------------------------------------------------------
+
+/** The error a promise rejects with (fails the test if it resolves). */
+async function rejection(promise: Promise<unknown>) {
+  return promise.then(
+    () => {
+      throw new Error("expected the promise to reject");
+    },
+    (error: unknown) => error,
+  );
+}
+
+function flowError(status: number, message: string, body?: Record<string, unknown>) {
+  const error = expect.objectContaining({ status, message, ...(body ? { body } : {}) });
+  return { error, check: (actual: unknown) => {
+    expect(actual).toBeInstanceOf(PaypalFlowError);
+    expect(actual).toEqual(error);
+  } };
+}
+
+function paypalError(status: number, issue?: string) {
+  return json(status, {
+    name: status >= 500 ? "INTERNAL_SERVER_ERROR" : "UNPROCESSABLE_ENTITY",
+    message: "PayPal says no",
+    debug_id: "debug-1",
+    details: issue ? [{ issue, description: issue }] : [],
+  });
+}
+
+describe("createDebtOrder", () => {
+  const payableDebt = (overrides: Record<string, unknown> = {}) => ({
+    ...makeDebt({ id: 42, amount: 42.5, description: "Dinner" }),
+    lender: { paypalAccount: { payerId: "LENDER-PAYER" } },
+    transactions: [],
+    ...overrides,
+  });
+  const order = (params: Partial<Parameters<typeof paypalService.createDebtOrder>[0]> = {}) =>
+    paypalService.createDebtOrder({ debtId: 42, userId: BORROWER_ID, platform: "web", ...params });
+
+  function mockOrderCreated(links = [{ rel: "payer-action", href: "https://pp.example/checkout?token=ORDER-NEW" }]) {
+    db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
+    onPaypal("POST", "/v2/checkout/orders", json(201, { id: "ORDER-NEW", status: "PAYER_ACTION_REQUIRED", links }));
+  }
+
+  it("checks the PayPal configuration before reading anything", async () => {
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "");
+    expect(await rejection(order())).toBeInstanceOf(PaypalConfigError);
+
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    expect(await rejection(order())).toBeInstanceOf(PaypalConfigError);
+
+    expect(db.debt.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing, foreign, paid and contested debts in order", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(null);
+    flowError(404, "Debt not found").check(await rejection(order()));
+
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    flowError(403, "Only the borrower can pay this debt with PayPal").check(
+      await rejection(order({ userId: LENDER_ID })),
+    );
+
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ status: "paid", transactions: [{ id: 9 }] }));
+    flowError(403, "This debt is already paid").check(await rejection(order()));
+
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ transactions: [{ id: 9 }] }));
+    flowError(403, "This debt has a pending change request").check(await rejection(order()));
+
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ lender: { paypalAccount: null } }));
+    flowError(409, "The lender hasn't connected PayPal yet").check(await rejection(order()));
+
+    expect(db.debt.findUnique).toHaveBeenCalledWith({
+      where: { id: 42 },
+      include: {
+        lender: { select: { paypalAccount: { select: { payerId: true } } } },
+        transactions: { where: { status: "pending" }, select: { id: true } },
+      },
+    });
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+    expect(paypalRequests).toHaveLength(0);
+  });
+
+  it("applies the 3-hour window to CREATED payments only; APPROVED blocks at any age", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-04T12:00:00Z"));
+    const fiveHoursAgo = new Date("2026-10-04T07:00:00Z");
+    let rows: { id: string; status: string; orderId: string; createdAt: Date }[] = [];
+    // Evaluates the in-progress query like Postgres would (checked against a real DB too).
+    db.paypalPayment.findFirst.mockImplementation(
+      async ({ where }: { where: { OR: { status: string; createdAt?: { gt: Date } }[] } }) =>
+        rows.find((row) =>
+          where.OR.some(
+            (c) => row.status === c.status && (!c.createdAt || row.createdAt > c.createdAt.gt),
+          ),
+        ) ?? null,
+    );
+
+    rows = [{ id: "pay_old", status: "APPROVED", orderId: "ORDER-OLD", createdAt: fiveHoursAgo }];
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    flowError(409, "A PayPal payment is already in progress for this debt", {
+      paymentId: "pay_old",
+      approveUrl: null,
+    }).check(await rejection(order()));
+
+    rows = [{ id: "pay_old", status: "CREATED", orderId: "ORDER-OLD", createdAt: fiveHoursAgo }];
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    mockOrderCreated();
+    expect(await order()).toMatchObject({ paymentId: "pay_new" });
+
+    expect(db.paypalPayment.findFirst).toHaveBeenLastCalledWith({
+      where: {
+        debtId: 42,
+        OR: [
+          { status: "CREATED", createdAt: { gt: new Date("2026-10-04T09:00:00Z") } },
+          { status: "APPROVED" },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true, orderId: true },
+    });
+  });
+
+  it("returns the in-progress payment so the client can resume it", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    db.paypalPayment.findFirst.mockResolvedValueOnce({ id: "pay_old", status: "CREATED", orderId: "ORDER-OLD" });
+
+    flowError(409, "A PayPal payment is already in progress for this debt", {
+      paymentId: "pay_old",
+      approveUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-OLD",
+    }).check(await rejection(order()));
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks without a resume link while a capture is pending or the order isn't created yet", async () => {
+    for (const inProgress of [
+      { id: "pay_old", status: "APPROVED", orderId: "ORDER-OLD" },
+      { id: "pay_old", status: "CREATED", orderId: null },
+    ]) {
+      db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+      db.paypalPayment.findFirst.mockResolvedValueOnce(inProgress);
+      flowError(409, "A PayPal payment is already in progress for this debt", {
+        paymentId: "pay_old",
+        approveUrl: null,
+      }).check(await rejection(order()));
+    }
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an amount below one cent", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ amount: 0.004 }));
+    flowError(400, "This debt amount can't be paid with PayPal").check(await rejection(order()));
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+  });
+
+  it("creates the payment, then the order with the DB amount and the lender as payee", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ amount: 19.99 }));
+    mockOrderCreated();
+
+    const result = await order();
+
+    expect(result).toEqual({
+      paymentId: "pay_new",
+      approveUrl: "https://pp.example/checkout?token=ORDER-NEW",
+    });
+    expect(db.paypalPayment.create).toHaveBeenCalledWith({
+      data: {
+        debtId: 42,
+        payerUserId: BORROWER_ID,
+        payeeUserId: LENDER_ID,
+        payeePayerId: "LENDER-PAYER",
+        amountCents: 1999,
+        currency: "USD",
+        platform: "web",
+        returnScheme: null,
+      },
+    });
+    const [request] = paypalCalls("POST", "/v2/checkout/orders");
+    expect(request.headers.get("paypal-request-id")).toBe("pay_new");
+    expect(JSON.parse(request.body!)).toEqual({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: "debt-42",
+          custom_id: "pay_new",
+          description: "Broke Besties: Dinner (debt #42)",
+          amount: { currency_code: "USD", value: "19.99" },
+          payee: { merchant_id: "LENDER-PAYER" },
+        },
+      ],
+      payment_source: {
+        paypal: {
+          experience_context: {
+            brand_name: "Broke Besties",
+            shipping_preference: "NO_SHIPPING",
+            user_action: "PAY_NOW",
+            return_url: "https://app.test/paypal/return?pp=pay_new&platform=web",
+            cancel_url: "https://app.test/paypal/return?pp=pay_new&platform=web&cancelled=1",
+          },
+        },
+      },
+    });
+    expect(db.paypalPayment.update).toHaveBeenCalledWith({
+      where: { id: "pay_new" },
+      data: { orderId: "ORDER-NEW" },
+    });
+  });
+
+  it("returns iOS payments to the app scheme for the variant", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    mockOrderCreated([{ rel: "approve", href: "https://pp.example/approve" }]);
+
+    const result = await order({ platform: "ios", appVariant: "preview" });
+
+    expect(result.approveUrl).toBe("https://pp.example/approve");
+    expect(db.paypalPayment.create.mock.calls[0][0].data).toMatchObject({
+      platform: "ios",
+      returnScheme: "brokebesties-preview",
+    });
+    const body = JSON.parse(paypalCalls("POST", "/v2/checkout/orders")[0].body!);
+    expect(body.payment_source.paypal.experience_context.return_url).toBe(
+      "https://app.test/paypal/return?pp=pay_new&platform=ios",
+    );
+  });
+
+  it("keeps the order description within PayPal's 127 characters", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ description: null }));
+    mockOrderCreated();
+    await order();
+
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ description: "🍕".repeat(200) }));
+    mockOrderCreated();
+    await order();
+
+    const [short, long] = paypalCalls("POST", "/v2/checkout/orders").map(
+      (call) => JSON.parse(call.body!).purchase_units[0].description as string,
+    );
+    expect(short).toBe("Broke Besties: debt #42");
+    expect(Array.from(long)).toHaveLength(127);
+    expect(long.startsWith("Broke Besties: 🍕")).toBe(true);
+    expect(long.endsWith("🍕 (debt #42)")).toBe(true);
+  });
+
+  it("marks the payment FAILED and answers 502 when PayPal fails", async () => {
+    for (const failure of [
+      paypalError(500),
+      paypalError(422, "INVALID_PARAMETER_VALUE"),
+      new TypeError("fetch failed"),
+      json(201, { id: "ORDER-NEW", links: [] }),
+    ]) {
+      db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+      db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
+      onPaypal("POST", "/v2/checkout/orders", failure);
+
+      flowError(502, "PayPal couldn't start the payment. Try again.").check(await rejection(order()));
+    }
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledTimes(4);
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_new", status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
+      data: { status: "FAILED", failureReason: expect.stringContaining("Order creation failed") },
+    });
+    expect(db.paypalPayment.update).not.toHaveBeenCalled();
+  });
+
+  it("answers 409 when PayPal rejects the lender as payee", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
+    onPaypal("POST", "/v2/checkout/orders", paypalError(422, "PAYEE_ACCOUNT_RESTRICTED"));
+
+    flowError(409, "The lender's PayPal account can't receive payments right now").check(
+      await rejection(order()),
+    );
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) }),
+    );
+  });
+});
+
+describe("getReturnRedirect", () => {
+  const payment = (overrides: Record<string, unknown> = {}) => ({
+    id: "pay_1",
+    debtId: 42,
+    orderId: "ORDER-1",
+    status: "CREATED",
+    platform: "web",
+    returnScheme: null,
+    ...overrides,
+  });
+  const redirect = (params: Partial<Parameters<typeof paypalService.getReturnRedirect>[0]> = {}) =>
+    paypalService.getReturnRedirect({ paymentId: "pay_1", orderToken: "ORDER-1", cancelled: false, ...params });
+
+  it("sends web payers back to the debt", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(payment());
+
+    expect(await redirect()).toBe("https://app.test/debts/42?paypal=approved&pp=pay_1");
+    expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { id: "pay_1" } });
+    expect(db.paypalPayment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("sends iOS payers back to the stored app scheme, re-checked against the allow-list", async () => {
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(payment({ platform: "ios", returnScheme: "brokebesties-preview" }))
+      .mockResolvedValueOnce(payment({ platform: "ios", returnScheme: "javascript" }));
+
+    expect(await redirect()).toBe("brokebesties-preview://paypal/return?pp=pay_1&status=approved");
+    expect(await redirect()).toBe("brokebesties://paypal/return?pp=pay_1&status=approved");
+  });
+
+  it("marks a still-CREATED payment CANCELLED when the order token matches", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(payment());
+
+    expect(await redirect({ cancelled: true })).toBe(
+      "https://app.test/debts/42?paypal=cancelled&pp=pay_1",
+    );
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: "CREATED" },
+      data: { status: "CANCELLED" },
+    });
+  });
+
+  it("doesn't cancel when the order token doesn't match", async () => {
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(payment())
+      .mockResolvedValueOnce(payment({ orderId: null }));
+
+    expect(await redirect({ cancelled: true, orderToken: "ORDER-OTHER" })).toBe(
+      "https://app.test/debts/42?paypal=cancelled&pp=pay_1",
+    );
+    expect(await redirect({ cancelled: true, orderToken: null })).toBe(
+      "https://app.test/debts/42?paypal=cancelled&pp=pay_1",
+    );
+    expect(db.paypalPayment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the debts list for unknown payments and errors, and never throws", async () => {
+    expect(await redirect({ paymentId: null })).toBe("https://app.test/debts?paypal=error");
+
+    db.paypalPayment.findUnique.mockResolvedValueOnce(null);
+    expect(await redirect()).toBe("https://app.test/debts?paypal=error");
+
+    db.paypalPayment.findUnique.mockRejectedValueOnce(new Error("db down"));
+    expect(await redirect()).toBe("https://app.test/debts?paypal=error");
+  });
+
+  it("returns a relative path when NEXT_PUBLIC_APP_URL is missing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    db.paypalPayment.findUnique.mockResolvedValueOnce(payment({ debtId: null }));
+
+    expect(await redirect()).toBe("/debts?paypal=approved&pp=pay_1");
   });
 });
