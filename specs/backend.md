@@ -482,11 +482,13 @@ PayPal ──webhook PAYMENT.CAPTURE.COMPLETED──► POST /api/paypal/webhook
 8. **`GET /api/debts/:id`** (extends B7) adds:
    ```jsonc
    "paypal": {
+     "enabled": true,
      "lenderConnected": true,
      "canPay": true,                       // viewer is the borrower and canPayDebt(...)
      "payments": [ { "id": "…", "status": "COMPLETED", "amountCents": 4250, "createdAt": "…", "completedAt": "…" } ]
    }
    ```
+   `enabled` is `false` when the server has no PayPal configuration. Clients then hide every PayPal affordance (and `canPay` is `false`).
 
 ### P.7 Webhook
 
@@ -685,7 +687,7 @@ Vercel limits serverless request bodies to **4.5 MB**. The app resizes and compr
 | 53 | GET | `/api/paypal/connect` **NEW** | `?platform=ios` + header `X-App-Variant` | `{ url }` (open it in the auth browser) | 401 |
 | 54 | DELETE | `/api/paypal/account` **NEW** | – | `{ message }` | 401 |
 | 55 | POST | `/api/debts/:id/paypal/order` **NEW** | `{ platform: 'ios' }` | `{ paymentId, approveUrl }` | 403 not the borrower / debt not payable; 409 lender not connected / payment in progress (body includes `approveUrl` to resume); 502 PayPal error |
-| 56 | POST | `/api/paypal/payments/:id/capture` **NEW** | – | `200 { payment: PaypalPaymentInfo, debt }` or `202 { payment }` (pending at PayPal) | 402 declined; 403 not the payer; 409 not approved; 502 |
+| 56 | POST | `/api/paypal/payments/:id/capture` **NEW** | – | `200 { payment, debt: Debt \| null }` or `202 { payment }` (pending at PayPal) | 402 declined; 403 not the payer; 409 not approved; 502 |
 
 Not called by the app (browser/PayPal only): `GET /api/paypal/callback`, `GET /paypal/return`, `POST /api/paypal/webhook`.
 
@@ -744,7 +746,7 @@ export type PendingTransaction = DebtTransaction & {
 export type PaypalPaymentStatus = 'CREATED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED' | 'FAILED' | 'REFUNDED';
 export type PaypalPaymentInfo = { id: ID; status: PaypalPaymentStatus; amountCents: number; createdAt: ISODate; completedAt: ISODate | null };
 export type PaypalAccountInfo = { email: string; emailVerified: boolean; connectedAt: ISODate };
-export type DebtPaypalInfo = { lenderConnected: boolean; canPay: boolean; payments: PaypalPaymentInfo[] };
+export type DebtPaypalInfo = { enabled: boolean; lenderConnected: boolean; canPay: boolean; payments: PaypalPaymentInfo[] };
 
 export type DebtDetailResponse = {
   debt: DebtDetail; transactions: DebtTransaction[]; receiptImageUrls: { id: ID; url: string }[];
@@ -899,7 +901,7 @@ export const paypalApi = {
   createOrder: (debtId: number) =>
     api.post<{ paymentId: ID; approveUrl: string }>(`/api/debts/${debtId}/paypal/order`, { platform: 'ios' }),
   capture: (paymentId: ID) =>
-    api.post<{ payment: PaypalPaymentInfo; debt?: Debt }>(`/api/paypal/payments/${paymentId}/capture`, {}, { timeoutMs: 45_000 }),
+    api.post<{ payment: PaypalPaymentInfo; debt?: Debt | null }>(`/api/paypal/payments/${paymentId}/capture`, {}, { timeoutMs: 45_000 }),
 };
 ```
 
