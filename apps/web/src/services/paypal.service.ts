@@ -4,6 +4,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  amountToCents,
   centsToAmount,
   checkoutUrl,
   decodeStateUnverified,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/paypal";
 import { PaypalConfigError, PaypalError, PaypalFlowError } from "@/lib/paypal-errors";
 import { PaypalPolicy } from "@/policies";
+import { emailService } from "./email.service";
 
 const CONNECT_SCOPES = "openid email https://uri.paypal.com/services/paypalattributes";
 const ORDER_RESUMABLE_MS = 3 * 60 * 60 * 1000;
@@ -40,6 +42,54 @@ function describeError(error: unknown): string {
   }
   return error instanceof Error ? error.message : String(error);
 }
+
+const hasIssue = (error: PaypalError, issue: string) => error.details.some((d) => d.issue === issue);
+
+/**
+ * PayPal may or may not have captured: server errors, auth/rate limits, and a racing request
+ * with the same PayPal-Request-Id (the client capture vs the CHECKOUT.ORDER.APPROVED webhook).
+ */
+function captureOutcomeUnknown(error: unknown): boolean {
+  return (
+    !(error instanceof PaypalError) ||
+    error.status >= 500 ||
+    [401, 408, 409, 429].includes(error.status) ||
+    ["PREVIOUS_REQUEST_IN_PROGRESS", "DUPLICATE_REQUEST_ID", "PAYPAL_REQUEST_ID_PREVIOUSLY_USED"].some(
+      (issue) => hasIssue(error, issue),
+    )
+  );
+}
+
+/** Email fields shared by the received/refunded emails. */
+function paymentEmail(payment: {
+  amountCents: number;
+  debtId: number | null;
+  payer: { name: string; email: string };
+  payee: { name: string; email: string };
+  debt: { description: string | null } | null;
+}) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return {
+    borrowerName: payment.payer.name || payment.payer.email,
+    lenderName: payment.payee.name || payment.payee.email,
+    amount: payment.amountCents / 100,
+    description: payment.debt?.description ?? null,
+    debtLink: payment.debtId ? `${baseUrl}/debts/${payment.debtId}` : `${baseUrl}/debts`,
+  };
+}
+
+/** Sends after commit; a failed email is logged and never fails the PayPal flow. */
+async function sendEmails(sends: Promise<unknown>[]) {
+  for (const result of await Promise.allSettled(sends)) {
+    if (result.status === "rejected") console.error("[PaypalService] Email failed:", result.reason);
+  }
+}
+
+const paymentWithPartiesInclude = {
+  payer: { select: { name: true, email: true } },
+  payee: { select: { name: true, email: true } },
+  debt: { select: { description: true } },
+} satisfies Prisma.PaypalPaymentInclude;
 
 /** NEXT_PUBLIC_APP_URL, or "" so redirects stay relative (the routes resolve them). */
 function appUrlOrRelative(): string {
@@ -434,9 +484,106 @@ export class PaypalService {
    * Throws PaypalConfigError when PayPal isn't configured.
    */
   async capturePayment(paymentId: string, userId: string): Promise<CaptureResult> {
-    void paymentId;
-    void userId;
-    throw new Error("Not implemented");
+    getPaypalCredentials();
+    const payment = await prisma.paypalPayment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new PaypalFlowError(404, "Payment not found");
+    if (payment.payerUserId !== userId) {
+      throw new PaypalFlowError(403, "Only the payer can capture this payment");
+    }
+    return this.capture(payment);
+  }
+
+  /** capturePayment without the payer check; also run for CHECKOUT.ORDER.APPROVED webhooks. */
+  private async capture(payment: { id: string; status: string; orderId: string | null; updatedAt: Date }) {
+    if (payment.status === "COMPLETED") return this.captureResult(payment.id);
+    if (payment.status === "REFUNDED") throw new PaypalFlowError(409, "This PayPal payment was refunded");
+    if (payment.status === "FAILED") {
+      throw new PaypalFlowError(409, "This PayPal payment failed. Start a new payment.");
+    }
+    if (!payment.orderId) throw new PaypalFlowError(409, "Payment wasn't approved in PayPal");
+
+    const orderPath = `/v2/checkout/orders/${encodeURIComponent(payment.orderId)}`;
+    const failed = new PaypalFlowError(502, "PayPal couldn't complete the payment");
+    let order: PaypalOrder | null;
+    try {
+      order = await paypalFetch<PaypalOrder | null>(`${orderPath}/capture`, {
+        method: "POST",
+        body: "{}",
+        headers: { Prefer: "return=representation" },
+        // PayPal replays its stored answer (even a 422) for a repeated PayPal-Request-Id, so the
+        // key follows the row: an unknown outcome leaves the row alone and the retry replays the
+        // original result (no double capture); a retryable decline touches the row so the next
+        // attempt is a fresh capture.
+        requestId: `capture-${payment.id}-${payment.updatedAt.getTime()}`,
+      });
+    } catch (error) {
+      console.error("[PaypalService] PayPal capture failed:", { paymentId: payment.id, error });
+      if (error instanceof PaypalError && hasIssue(error, "ORDER_ALREADY_CAPTURED")) {
+        order = await paypalFetch<PaypalOrder | null>(orderPath).catch(() => {
+          throw failed;
+        });
+      } else if (
+        error instanceof PaypalError &&
+        (hasIssue(error, "INSTRUMENT_DECLINED") || hasIssue(error, "ORDER_NOT_APPROVED"))
+      ) {
+        const declined = hasIssue(error, "INSTRUMENT_DECLINED");
+        await prisma.paypalPayment.updateMany({
+          where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
+          data: { failureReason: declined ? "INSTRUMENT_DECLINED" : "ORDER_NOT_APPROVED" },
+        });
+        throw declined
+          ? new PaypalFlowError(402, "PayPal declined the payment method. Try again with a different one.")
+          : new PaypalFlowError(409, "Payment wasn't approved in PayPal");
+      } else if (captureOutcomeUnknown(error)) {
+        throw failed;
+      } else {
+        await this.markFailed(payment.id, `Capture failed: ${describeError(error)}`);
+        throw failed;
+      }
+    }
+
+    const unit = order?.purchase_units?.[0];
+    const capture = unit?.payments?.captures?.[0];
+    if (!capture?.id) throw failed; // no capture to read: outcome unknown, leave the row alone
+
+    if (capture.status === "COMPLETED") {
+      const outcome = await this.completeFromCapture(
+        payment.id,
+        capture.payee?.merchant_id ? capture : { ...capture, payee: unit?.payee },
+      );
+      if (outcome === "failed") throw new PaypalFlowError(502, "PayPal payment couldn't be verified");
+    } else if (capture.status === "PENDING") {
+      // e.g. an eCheck: the PAYMENT.CAPTURE.* webhook finishes it.
+      await prisma.paypalPayment.updateMany({
+        where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
+        data: { status: "APPROVED", captureId: capture.id, failureReason: null },
+      });
+    } else {
+      await this.markFailed(payment.id, `Capture ${capture.id} is ${capture.status}`);
+      throw failed;
+    }
+    return this.captureResult(payment.id);
+  }
+
+  private async captureResult(paymentId: string): Promise<CaptureResult> {
+    const payment = await prisma.paypalPayment.findUnique({
+      where: { id: paymentId },
+      include: { debt: { include: debtWithPartiesInclude } },
+    });
+    if (!payment) throw new PaypalFlowError(404, "Payment not found");
+    const info: PaypalPaymentInfo = {
+      id: payment.id,
+      status: payment.status as PaypalPaymentStatus,
+      amountCents: payment.amountCents,
+      createdAt: payment.createdAt,
+      completedAt: payment.completedAt,
+    };
+    if (payment.status === "COMPLETED") return { httpStatus: 200, payment: info, debt: payment.debt };
+    if (payment.status === "REFUNDED") throw new PaypalFlowError(409, "This PayPal payment was refunded");
+    if (payment.status === "FAILED") {
+      throw new PaypalFlowError(409, "This PayPal payment failed. Start a new payment.");
+    }
+    return { httpStatus: 202, payment: info };
   }
 
   /** Settlement rules (spec P.8). Idempotent; safe for capture + webhook racing. */
@@ -444,9 +591,88 @@ export class PaypalService {
     paymentId: string,
     capture: PaypalCapture,
   ): Promise<CompletionOutcome> {
-    void paymentId;
-    void capture;
-    throw new Error("Not implemented");
+    if (capture.status !== "COMPLETED" || !capture.id) {
+      throw new Error(`Can't settle PayPal capture ${capture.id} with status ${capture.status}`);
+    }
+    const payment = await prisma.paypalPayment.findUnique({
+      where: { id: paymentId },
+      include: paymentWithPartiesInclude,
+    });
+    if (!payment) throw new Error(`PayPal payment ${paymentId} not found`);
+    if (payment.status === "COMPLETED" || payment.status === "REFUNDED") return "already_completed";
+
+    let payee = capture.payee?.merchant_id;
+    if (!payee && payment.orderId) {
+      const order = await paypalFetch<PaypalOrder | null>(
+        `/v2/checkout/orders/${encodeURIComponent(payment.orderId)}`,
+      );
+      payee = order?.purchase_units?.[0]?.payee?.merchant_id;
+    }
+    const mismatch = [
+      amountToCents(capture.amount?.value) !== payment.amountCents && `amount ${capture.amount?.value}`,
+      capture.amount?.currency_code !== "USD" && `currency ${capture.amount?.currency_code}`,
+      payee !== payment.payeePayerId && `payee ${payee ?? "missing"}`,
+    ].filter(Boolean);
+    if (mismatch.length > 0) {
+      const reason = `Capture ${capture.id} doesn't match the payment: ${mismatch.join(", ")}`;
+      console.error(`[PaypalService] ${reason}; debt left unchanged`, { paymentId });
+      await this.markFailed(payment.id, reason);
+      return "failed";
+    }
+
+    const debtId = payment.debtId;
+    const now = new Date();
+    const outcome = await prisma.$transaction(async (tx) => {
+      // The guarded update claims the payment: when capture and webhook race, one of them wins.
+      const claimed = await tx.paypalPayment.updateMany({
+        where: { id: payment.id, status: { notIn: ["COMPLETED", "REFUNDED"] } },
+        data: { status: "COMPLETED", captureId: capture.id, completedAt: now, failureReason: null },
+      });
+      if (claimed.count === 0) return "already_completed" as const;
+      if (debtId === null) return "already_settled" as const;
+
+      const settled = await tx.debt.updateMany({
+        where: { id: debtId, status: "pending" },
+        data: { status: "paid" },
+      });
+      if (settled.count === 0) return "already_settled" as const;
+
+      // Same effects as an approved confirm_paid, plus its audit record for the Activity list.
+      await tx.alert.updateMany({ where: { debt: { id: debtId } }, data: { isActive: false } });
+      await tx.debtTransaction.updateMany({
+        where: { debtId, status: "pending" },
+        data: { status: "cancelled", resolvedAt: now },
+      });
+      await tx.debtTransaction.create({
+        data: {
+          debtId,
+          type: "confirm_paid",
+          status: "approved",
+          requesterId: payment.payerUserId,
+          lenderApproved: true,
+          borrowerApproved: true,
+          reason: `Paid with PayPal (capture ${capture.id})`,
+          resolvedAt: now,
+        },
+      });
+      return "completed" as const;
+    });
+
+    if (outcome !== "already_completed") {
+      const alreadySettled = outcome === "already_settled";
+      const recipients = alreadySettled ? [payment.payee, payment.payer] : [payment.payee];
+      await sendEmails(
+        recipients.map((person) =>
+          emailService.sendPaypalPaymentReceived({
+            to: person.email,
+            recipientName: person.name || person.email,
+            ...paymentEmail(payment),
+            alreadySettled,
+          }),
+        ),
+      );
+    }
+    return outcome;
   }
 
   /** Marks a not-yet-completed payment FAILED with a reason. */
