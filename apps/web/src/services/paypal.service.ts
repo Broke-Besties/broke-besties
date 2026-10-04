@@ -147,7 +147,10 @@ export type PaypalPaymentInfo = {
 /** The `paypal` block of `GET /api/debts/:id`. */
 export type DebtPaypalInfo = {
   lenderConnected: boolean;
-  /** Viewer is the borrower, canPayDebt(...) holds, and the lender connected PayPal. */
+  /**
+   * Viewer is the borrower, canPayDebt(...) holds, the lender connected PayPal, and no
+   * payment is APPROVED (a pending capture: money already in flight).
+   */
   canPay: boolean;
   /** Every PayPal payment for the debt, newest first. */
   payments: PaypalPaymentInfo[];
@@ -354,7 +357,8 @@ export class PaypalService {
    * 403 `Only the borrower can pay this debt with PayPal` |
    *     `This debt is already paid` | `This debt has a pending change request`;
    * 409 `The lender hasn't connected PayPal yet`;
-   * 409 `A PayPal payment is already in progress for this debt`
+   * 409 `A PayPal payment is already in progress for this debt` (a CREATED
+   *     payment from the last 3 hours, or an APPROVED one of any age)
    *     (body `{ paymentId, approveUrl }`; approveUrl is null unless the
    *     in-progress payment is CREATED with an order id, i.e. resumable);
    * 409 `The lender's PayPal account can't receive payments right now`
