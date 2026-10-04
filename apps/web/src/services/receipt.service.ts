@@ -91,13 +91,27 @@ export class ReceiptService {
     debtIds: number[],
     userId: string
   ) {
-    // Verify receipt exists
     const receipt = await prisma.receipt.findUnique({
       where: { id: receiptId },
+      include: {
+        debts: {
+          select: {
+            id: true,
+            lenderId: true,
+            borrowerId: true,
+          },
+        },
+      },
     });
 
     if (!receipt) {
       throw new Error("Receipt not found");
+    }
+
+    // Otherwise anyone could attach someone else's receipt to their own debt
+    // and then read it through that debt
+    if (receipt.uploaderId !== userId && !ReceiptPolicy.canView(userId, receipt)) {
+      throw new Error("Access denied");
     }
 
     // Verify user has access to all debts
@@ -148,7 +162,7 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    if (!this.canAccessReceipt(userId, receipt)) {
+    if (!(await this.canAccessReceipt(userId, receipt))) {
       throw new Error("Access denied");
     }
 
@@ -178,7 +192,7 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    if (!this.canAccessReceipt(userId, receipt)) {
+    if (!(await this.canAccessReceipt(userId, receipt))) {
       throw new Error("Access denied");
     }
 
@@ -311,7 +325,15 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    // For pending receipts or receipts the user has access to
+    // Pending receipts (no debts yet) belong to whoever uploaded them
+    if (
+      receipt.debts.length === 0 &&
+      receipt.uploaderId &&
+      receipt.uploaderId !== userId
+    ) {
+      throw new Error("Access denied");
+    }
+
     if (receipt.debts.length > 0 && !ReceiptPolicy.canDelete(userId, receipt)) {
       throw new Error("Access denied");
     }
