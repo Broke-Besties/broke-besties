@@ -4,6 +4,7 @@ const storage = vi.hoisted(() => ({
   from: vi.fn(),
   upload: vi.fn(),
   createSignedUrl: vi.fn(),
+  createSignedUrls: vi.fn(),
   remove: vi.fn(),
 }));
 
@@ -90,6 +91,7 @@ describe("receiptService", () => {
     storage.from.mockReturnValue({
       upload: storage.upload,
       createSignedUrl: storage.createSignedUrl,
+      createSignedUrls: storage.createSignedUrls,
       remove: storage.remove,
     });
     storage.upload.mockResolvedValue({ data: { path: "x" }, error: null });
@@ -273,11 +275,15 @@ describe("receiptService", () => {
       expect(createClient).not.toHaveBeenCalled();
     });
 
-    it("signs receipts/{id} for an hour and keeps the input order", async () => {
-      // The first URL comes back last
-      storage.createSignedUrl.mockImplementation(async (path: string) => {
-        if (path === "receipts/a") await new Promise((resolve) => setTimeout(resolve, 5));
-        return { data: { signedUrl: `https://storage.test/${path}` }, error: null };
+    it("signs receipts/{id} for an hour in one call and keeps the input order", async () => {
+      // Matched by path, so the response order doesn't matter
+      storage.createSignedUrls.mockResolvedValueOnce({
+        data: ["c", "a", "b"].map((id) => ({
+          error: null,
+          path: `receipts/${id}`,
+          signedUrl: `https://storage.test/receipts/${id}`,
+        })),
+        error: null,
       });
 
       await expect(receiptService.getSignedImageUrls(["a", "b", "c"])).resolves.toEqual([
@@ -286,22 +292,47 @@ describe("receiptService", () => {
         { id: "c", url: "https://storage.test/receipts/c" },
       ]);
       expect(storage.from).toHaveBeenCalledWith("receipts");
-      expect(storage.createSignedUrl).toHaveBeenCalledWith("receipts/a", 3600);
+      expect(storage.createSignedUrls).toHaveBeenCalledOnce();
+      expect(storage.createSignedUrls).toHaveBeenCalledWith(
+        ["receipts/a", "receipts/b", "receipts/c"],
+        3600,
+      );
     });
 
     it("skips and logs the URLs that fail", async () => {
-      storage.createSignedUrl.mockImplementation(async (path: string) => {
-        if (path === "receipts/missing") {
-          return { data: null, error: new Error("Object not found") };
-        }
-        if (path === "receipts/boom") throw new Error("socket hang up");
-        return { data: { signedUrl: `https://storage.test/${path}` }, error: null };
+      storage.createSignedUrls.mockResolvedValueOnce({
+        data: [
+          {
+            error: "Either the object does not exist or you do not have access to it",
+            path: "receipts/missing",
+            signedUrl: null,
+          },
+          { error: null, path: "receipts/ok", signedUrl: "https://storage.test/receipts/ok" },
+        ],
+        error: null,
       });
 
       await expect(
-        receiptService.getSignedImageUrls(["missing", "ok", "boom"]),
+        receiptService.getSignedImageUrls(["missing", "ok", "absent"]),
       ).resolves.toEqual([{ id: "ok", url: "https://storage.test/receipts/ok" }]);
       expect(console.error).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns [] and logs when signing fails as a whole", async () => {
+      storage.createSignedUrls.mockResolvedValueOnce({
+        data: null,
+        error: new Error("Bucket not found"),
+      });
+
+      await expect(receiptService.getSignedImageUrls(["a"])).resolves.toEqual([]);
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns [] and logs when the request throws", async () => {
+      storage.createSignedUrls.mockRejectedValueOnce(new Error("socket hang up"));
+
+      await expect(receiptService.getSignedImageUrls(["a"])).resolves.toEqual([]);
+      expect(console.error).toHaveBeenCalledTimes(1);
     });
 
     it("returns [] and logs when the storage client can't be created", async () => {

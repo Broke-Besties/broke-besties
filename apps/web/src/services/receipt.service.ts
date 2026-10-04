@@ -283,24 +283,22 @@ export class ReceiptService {
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
 
-      const urls = await Promise.all(
-        receiptIds.map(async (id) => {
-          const { data, error } = await supabase.storage
-            .from("receipts")
-            .createSignedUrl(`receipts/${id}`, 3600)
-            .catch((error) => ({ data: null, error }));
+      const { data, error } = await supabase.storage
+        .from("receipts")
+        .createSignedUrls(receiptIds.map((id) => `receipts/${id}`), 3600);
+      if (error) throw error;
 
-          if (error || !data) {
-            console.error(`[Receipt URLs] Error signing receipts/${id}:`, error);
-            return [];
-          }
-          return [{ id, url: data.signedUrl }];
-        })
-      );
-
-      return urls.flat();
+      const signed = new Map(data.map((item) => [item.path, item]));
+      return receiptIds.flatMap((id) => {
+        const item = signed.get(`receipts/${id}`);
+        if (!item?.signedUrl || item.error) {
+          console.error(`[Receipt URLs] Error signing receipts/${id}:`, item?.error);
+          return [];
+        }
+        return [{ id, url: item.signedUrl }];
+      });
     } catch (error) {
-      console.error("[Receipt URLs] Error creating storage client:", error);
+      console.error("[Receipt URLs] Error signing receipt images:", error);
       return [];
     }
   }
