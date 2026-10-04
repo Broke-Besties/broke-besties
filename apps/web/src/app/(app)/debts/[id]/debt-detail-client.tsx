@@ -37,7 +37,7 @@ import { ActivityCard } from "./activity-card";
 import { PendingRequestCard } from "./pending-request-card";
 import { ReceiptsCard } from "./receipts-card";
 import { ReminderCard } from "./reminder-card";
-import type { PaypalReturn } from "./paypal";
+import { paypalCaptureToast, type PaypalReturn } from "./paypal";
 import {
   displayName,
   initials,
@@ -120,18 +120,18 @@ export default function DebtDetailClient({
       method: "POST",
     })
       .then(async (response) => {
-        if (response.status === 202) {
-          toast("PayPal is processing your payment");
-        } else if (response.ok) {
-          toast.success(`Paid ${lenderName} ${amountLabel} with PayPal`);
-        } else {
-          const data = await response.json().catch(() => ({}));
-          toast.error(data.error || "Couldn't confirm your PayPal payment");
-        }
+        const { tone, message } = paypalCaptureToast(
+          response.status,
+          await response.json().catch(() => ({})),
+          lenderName,
+        );
+        if (tone === "success") toast.success(message);
+        else if (tone === "error") toast.error(message);
+        else toast(message);
       })
       .catch(() => toast.error("Couldn't confirm your PayPal payment"))
       .finally(finish);
-  }, [paypalReturn, debt.id, lenderName, amountLabel, router]);
+  }, [paypalReturn, debt.id, lenderName, router]);
 
   const handlePayWithPaypal = async () => {
     setPaypalOpening(true);

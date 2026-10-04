@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPaypalTransaction, parsePaypalReturn } from "./paypal";
+import { isPaypalTransaction, parsePaypalReturn, paypalCaptureToast } from "./paypal";
 
 describe("parsePaypalReturn", () => {
   it("reads an approved return with its payment id", () => {
@@ -46,5 +46,46 @@ describe("isPaypalTransaction", () => {
     expect(isPaypalTransaction({ type: "confirm_paid", status: "pending", reason: paid })).toBe(false);
     expect(isPaypalTransaction({ type: "confirm_paid", status: "cancelled", reason: "PayPal payment refunded" })).toBe(false);
     expect(isPaypalTransaction({ type: "confirm_paid", status: "approved", reason: null })).toBe(false);
+  });
+});
+
+describe("paypalCaptureToast", () => {
+  const notMarkedPaid = {
+    tone: "neutral",
+    message: "PayPal payment received, but the debt wasn't marked paid. Check your email.",
+  };
+
+  it("reports success only when the capture marked the debt paid, with the amount PayPal took", () => {
+    const paid = { payment: { amountCents: 4250 }, debt: { status: "paid" } };
+    expect(paypalCaptureToast(200, paid, "Larry")).toEqual({
+      tone: "success",
+      message: "Paid Larry $42.50 with PayPal",
+    });
+  });
+
+  it("says the debt wasn't marked paid when it was settled, changed or deleted meanwhile", () => {
+    for (const debt of [{ status: "pending" }, null]) {
+      const body = { payment: { amountCents: 4250 }, debt };
+      expect(paypalCaptureToast(200, body, "Larry")).toEqual(notMarkedPaid);
+    }
+  });
+
+  it("says PayPal is still processing a pending capture", () => {
+    expect(paypalCaptureToast(202, { payment: { amountCents: 4250 } }, "Larry")).toEqual({
+      tone: "neutral",
+      message: "PayPal is processing your payment",
+    });
+  });
+
+  it("shows the server's error, or a generic one", () => {
+    const amountChanged = "This debt's amount changed. Start a new PayPal payment.";
+    expect(paypalCaptureToast(409, { error: amountChanged }, "Larry")).toEqual({
+      tone: "error",
+      message: amountChanged,
+    });
+    expect(paypalCaptureToast(500, {}, "Larry")).toEqual({
+      tone: "error",
+      message: "Couldn't confirm your PayPal payment",
+    });
   });
 });
