@@ -41,5 +41,3 @@ export async function getDashboardData(user: { id: string; email?: string | null
     counts,
   };
 }
-
-export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;

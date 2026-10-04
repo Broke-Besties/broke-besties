@@ -129,6 +129,43 @@ describe("friend routes", () => {
       expect(friendService.sendFriendRequest).not.toHaveBeenCalled();
     });
 
+    it.each(["{oops", "null"])("returns 400 for the malformed body %s", async (raw) => {
+      vi.mocked(getUser).mockResolvedValueOnce(authUser as never);
+
+      const res = await sendRequest(
+        new NextRequest("http://localhost/api/friends", {
+          method: "POST",
+          body: raw,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Invalid JSON body" });
+      expect(friendService.sendFriendRequest).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for a recipientId that isn't a string", async () => {
+      vi.mocked(getUser).mockResolvedValueOnce(authUser as never);
+
+      const res = await sendRequest(postFriend({ recipientId: 5 }));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Recipient ID is required" });
+      expect(friendService.sendFriendRequest).not.toHaveBeenCalled();
+    });
+
+    it("uses the email when both email and recipientId are sent", async () => {
+      vi.mocked(getUser).mockResolvedValueOnce(authUser as never);
+      vi.mocked(userService.searchUserByEmail).mockResolvedValueOnce({ id: "user-bob", email: "bob@x.com" });
+      vi.mocked(friendService.sendFriendRequest).mockResolvedValueOnce({ friend, autoAccepted: false } as never);
+
+      const res = await sendRequest(postFriend({ email: "bob@x.com", recipientId: BORROWER_ID }));
+
+      expect(res.status).toBe(201);
+      expect(friendService.sendFriendRequest).toHaveBeenCalledWith(LENDER_ID, "user-bob");
+    });
+
     it("still sends a request by recipientId", async () => {
       vi.mocked(getUser).mockResolvedValueOnce(authUser as never);
       vi.mocked(friendService.sendFriendRequest).mockResolvedValueOnce({

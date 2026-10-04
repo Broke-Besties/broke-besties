@@ -34,10 +34,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Either { recipientId } or { email } (the mobile app's add-by-email form).
-    const { recipientId, email } = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { recipientId, email } = body;
 
     if (email !== undefined && (typeof email !== "string" || !email.trim())) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
+    if (email === undefined && typeof recipientId !== "string") {
+      return NextResponse.json({ error: "Recipient ID is required" }, { status: 400 });
     }
 
     console.log("[Friend API] POST /friends - Sending friend request", {

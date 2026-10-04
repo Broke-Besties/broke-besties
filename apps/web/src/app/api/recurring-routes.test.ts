@@ -45,6 +45,22 @@ describe("POST /api/recurring-payments", () => {
     expect(recurringPaymentService.createRecurringPayment).not.toHaveBeenCalled();
   });
 
+  it.each(["{oops", "null"])("returns 400 for the malformed body %s", async (raw) => {
+    vi.mocked(getUser).mockResolvedValueOnce(authUser as never);
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/recurring-payments", {
+        method: "POST",
+        body: raw,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid JSON body" });
+    expect(recurringPaymentService.createRecurringPayment).not.toHaveBeenCalled();
+  });
+
   it("resolves borrower emails before creating the payment", async () => {
     const resolved = [{ userId: "user-bob", splitPercentage: 100 }];
     vi.mocked(getUser).mockResolvedValueOnce(authUser as never);

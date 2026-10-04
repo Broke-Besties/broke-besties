@@ -109,6 +109,15 @@ describe("recurringPaymentService", () => {
   });
 
   describe("resolveBorrowerInputs", () => {
+    it("uses the userId when a borrower has both a userId and an email", async () => {
+      const borrowers = await recurringPaymentService.resolveBorrowerInputs([
+        { userId: BORROWER_ID, email: "someone@else.com", splitPercentage: 100 },
+      ]);
+
+      expect(borrowers).toEqual([{ userId: BORROWER_ID, splitPercentage: 100 }]);
+      expect(db.user.findUnique).not.toHaveBeenCalled();
+    });
+
     it("passes userIds through and looks emails up trimmed and lowercased", async () => {
       db.user.findUnique.mockResolvedValueOnce({ id: "user-bob" });
 

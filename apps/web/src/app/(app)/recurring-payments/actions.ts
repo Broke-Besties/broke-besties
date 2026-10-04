@@ -3,7 +3,6 @@
 import { getUser } from '@/lib/supabase'
 import { recurringPaymentService } from '@/services/recurring-payment.service'
 import { userService } from '@/services/user.service'
-import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -27,30 +26,11 @@ export async function createRecurringPayment(data: {
       return { success: false, error: 'Split percentages must sum to 100%' }
     }
 
-    // Look up user IDs from emails
-    const borrowersWithIds = await Promise.all(
-      data.borrowers.map(async (b) => {
-        const borrowerUser = await prisma.user.findUnique({
-          where: { email: b.email },
-          select: { id: true },
-        })
-
-        if (!borrowerUser) {
-          throw new Error(`User with email ${b.email} not found`)
-        }
-
-        return {
-          userId: borrowerUser.id,
-          splitPercentage: b.splitPercentage,
-        }
-      })
-    )
-
     const recurringPayment = await recurringPaymentService.createRecurringPayment({
       amount: data.amount,
       description: data.description,
       frequency: data.frequency,
-      borrowers: borrowersWithIds,
+      borrowers: await recurringPaymentService.resolveBorrowerInputs(data.borrowers),
       lenderId: user.id,
     })
 

@@ -10,7 +10,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { amount, description, frequency, borrowers } = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { amount, description, frequency, borrowers } = body;
 
     const recurringPayment = await recurringPaymentService.createRecurringPayment({
       amount,
