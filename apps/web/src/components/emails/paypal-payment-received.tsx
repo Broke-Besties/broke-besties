@@ -18,8 +18,8 @@ interface PaypalPaymentReceivedEmailProps {
   description?: string | null;
   debtLink?: string;
   /**
-   * The debt was already paid, deleted, or its amount changed when the payment arrived, so it
-   * wasn't marked paid (sent to both people).
+   * The payment went through but the debt wasn't marked paid: it was already paid or deleted,
+   * its amount changed, or the payment couldn't be matched to it (sent to both people).
    */
   alreadySettled?: boolean;
 }
@@ -36,7 +36,7 @@ export const PaypalPaymentReceivedEmail = ({
   const amountText = `$${amount.toFixed(2)}`;
   const forText = description ? ` for ${description}` : "";
   const previewText = alreadySettled
-    ? "A PayPal payment arrived, but the debt wasn't marked paid"
+    ? "PayPal payment received, but the debt wasn't marked paid"
     : `${borrowerName} paid you ${amountText} with PayPal`;
 
   return (
@@ -53,7 +53,7 @@ export const PaypalPaymentReceivedEmail = ({
 
           {alreadySettled ? (
             <Text style={text}>
-              {`${borrowerName}'s PayPal payment of ${amountText} to ${lenderName}${forText} arrived, but the debt was already settled, deleted, or its amount changed after checkout started, so it wasn't marked paid automatically. The lender can refund it in PayPal.`}
+              {`${borrowerName}'s PayPal payment of ${amountText} to ${lenderName}${forText} went through, but the debt wasn't marked paid: it was already settled or deleted, its amount changed after checkout started, or the payment couldn't be matched to it. Don't pay again. The lender can refund it in PayPal.`}
             </Text>
           ) : (
             <Text style={text}>

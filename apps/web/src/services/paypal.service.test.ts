@@ -384,6 +384,27 @@ describe("getDebtPaypalInfo", () => {
     expect(info).toMatchObject({ lenderConnected: true, canPay: false });
   });
 
+  it("can't pay while a capture that didn't match the payment is unresolved", async () => {
+    db.paypalAccount.findUnique.mockResolvedValueOnce({ id: "acc" });
+    db.paypalPayment.findMany.mockResolvedValueOnce([
+      { id: "pay_1", status: "FAILED", amountCents: 4250, createdAt: new Date(0), completedAt: null },
+    ]);
+    db.paypalPayment.findFirst.mockResolvedValueOnce({ id: "pay_1" });
+
+    const info = await paypalService.getDebtPaypalInfo(debt, BORROWER_ID, false);
+
+    expect(info).toMatchObject({ lenderConnected: true, canPay: false });
+    expect(db.paypalPayment.findFirst).toHaveBeenCalledWith({
+      where: {
+        debtId: 42,
+        status: "FAILED",
+        captureId: { not: null },
+        failureReason: { contains: "doesn't match the payment" },
+      },
+      select: { id: true },
+    });
+  });
+
   it("lists the debt's payments newest first", async () => {
     const payments = [
       { id: "pay_2", status: "CREATED", amountCents: 4250, createdAt: new Date(), completedAt: null },
@@ -550,8 +571,21 @@ describe("createDebtOrder", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-04T12:00:00Z"));
     const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
-    type Row = { id: string; status: string; orderId: string | null; createdAt: Date };
-    type Condition = { status: string; orderId?: null | { not: null }; createdAt?: { gt: Date } };
+    type Row = {
+      id: string;
+      status: string;
+      orderId: string | null;
+      createdAt: Date;
+      captureId?: string | null;
+      failureReason?: string | null;
+    };
+    type Condition = {
+      status: string;
+      orderId?: null | { not: null };
+      createdAt?: { gt: Date };
+      captureId?: { not: null };
+      failureReason?: { contains: string };
+    };
     let rows: Row[] = [];
     // Evaluates the in-progress query like Postgres would (checked against a real DB too).
     db.paypalPayment.findFirst.mockImplementation(async ({ where }: { where: { OR: Condition[] } }) =>
@@ -560,7 +594,9 @@ describe("createDebtOrder", () => {
           (c) =>
             row.status === c.status &&
             (c.orderId === undefined || (c.orderId === null ? row.orderId === null : row.orderId !== null)) &&
-            (!c.createdAt || row.createdAt > c.createdAt.gt),
+            (!c.createdAt || row.createdAt > c.createdAt.gt) &&
+            (!c.captureId || row.captureId != null) &&
+            (!c.failureReason || !!row.failureReason?.includes(c.failureReason.contains)),
         ),
       ) ?? null,
     );
@@ -579,6 +615,16 @@ describe("createDebtOrder", () => {
     expect(await blocked({ id: "p", status: "CREATED", orderId: "O", createdAt: ago(181) })).toBe(false);
     expect(await blocked({ id: "p", status: "CREATED", orderId: null, createdAt: ago(1) })).toBe(true);
     expect(await blocked({ id: "p", status: "CREATED", orderId: null, createdAt: ago(3) })).toBe(false);
+    // A capture that didn't match moved money: it blocks at any age, until it's refunded.
+    const unmatched = { id: "p", status: "FAILED", orderId: "O", captureId: "C-1", createdAt: ago(9000) };
+    const mismatchReason = "Capture C-1 doesn't match the payment: payee SOMEONE-ELSE";
+    expect(await blocked({ ...unmatched, failureReason: mismatchReason })).toBe(true);
+    expect(await blocked({ ...unmatched, status: "REFUNDED", failureReason: mismatchReason })).toBe(false);
+    // A denied pending capture keeps its capture id but moved no money; other failures have none.
+    expect(await blocked({ ...unmatched, failureReason: "PayPal denied capture C-1" })).toBe(false);
+    expect(
+      await blocked({ ...unmatched, captureId: null, failureReason: "Order creation failed: doesn't match the payment" }),
+    ).toBe(false);
 
     expect(db.paypalPayment.findFirst).toHaveBeenLastCalledWith({
       where: {
@@ -587,6 +633,7 @@ describe("createDebtOrder", () => {
           { status: "CREATED", orderId: { not: null }, createdAt: { gt: new Date("2026-10-04T09:00:00Z") } },
           { status: "CREATED", orderId: null, createdAt: { gt: new Date("2026-10-04T11:58:00Z") } },
           { status: "APPROVED" },
+          { status: "FAILED", captureId: { not: null }, failureReason: { contains: "doesn't match the payment" } },
         ],
       },
       orderBy: { createdAt: "desc" },
@@ -618,6 +665,18 @@ describe("createDebtOrder", () => {
       }).check(await rejection(order()));
     }
     expect(db.paypalPayment.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks new orders while a capture that didn't match the payment is unresolved", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    db.paypalPayment.findFirst.mockResolvedValueOnce({ id: "pay_old", status: "FAILED", orderId: "ORDER-OLD" });
+
+    flowError(409, "A PayPal payment for this debt couldn't be matched. Check your email before paying again.", {
+      paymentId: "pay_old",
+      approveUrl: null,
+    }).check(await rejection(order()));
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+    expect(paypalRequests).toHaveLength(0);
   });
 
   it("rejects an amount below one cent", async () => {
@@ -1162,13 +1221,16 @@ describe("capturePayment", () => {
     }
   });
 
-  it("answers 502 when the capture doesn't match the payment", async () => {
+  it("answers 502 telling the payer not to pay again when the capture doesn't match the payment", async () => {
     db.paypalPayment.findUnique
       .mockResolvedValueOnce(paymentRow())
       .mockResolvedValueOnce(paymentWithParties());
     onPaypal("POST", CAPTURE_PATH, json(201, capturedOrder(captureObject({ amount: { currency_code: "USD", value: "4.25" } }))));
 
-    flowError(502, "PayPal payment couldn't be verified").check(await rejection(capture()));
+    flowError(
+      502,
+      "Your PayPal payment went through but couldn't be matched to this debt. Don't pay again: check your email.",
+    ).check(await rejection(capture()));
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 
@@ -1379,7 +1441,7 @@ describe("completeFromCapture", () => {
     expect(email.sendPaypalPaymentReceived).toHaveBeenCalledTimes(1);
   });
 
-  it("marks the payment FAILED and leaves the debt alone on an amount, currency or payee mismatch", async () => {
+  it("marks the payment FAILED, leaves the debt alone and emails both people on an amount, currency or payee mismatch", async () => {
     for (const mismatch of [
       { amount: { currency_code: "USD", value: "42.49" } },
       { amount: { currency_code: "USD", value: "42.5000001" } },
@@ -1396,10 +1458,25 @@ describe("completeFromCapture", () => {
     expect(db.paypalPayment.updateMany.mock.calls.map(([args]) => args)).toEqual(
       Array(4).fill({
         where: { id: "pay_1", status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
-        data: { status: "FAILED", failureReason: expect.stringContaining("CAPTURE-1"), captureId: "CAPTURE-1" },
+        data: {
+          status: "FAILED",
+          failureReason: expect.stringMatching(/^Capture CAPTURE-1 doesn't match the payment: /),
+          captureId: "CAPTURE-1",
+        },
       }),
     );
     expect(console.error).toHaveBeenCalled();
+    // The money moved but the debt didn't change: both people hear not to pay again.
+    expect(email.sendPaypalPaymentReceived.mock.calls.map(([params]) => [params.to, params.alreadySettled])).toEqual(
+      Array(4).fill([["larry@example.com", true], ["bob@example.com", true]]).flat(),
+    );
+  });
+
+  it("emails a mismatch only once (a racing call or a redelivery matches no row)", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(paymentWithParties({ status: "FAILED", captureId: "CAPTURE-1" }));
+    db.paypalPayment.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    expect(await complete(captureObject({ payee: { merchant_id: "SOMEONE-ELSE" } }))).toBe("failed");
     expect(email.sendPaypalPaymentReceived).not.toHaveBeenCalled();
   });
 
@@ -1612,6 +1689,25 @@ describe("markRefunded", () => {
     expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
     expect(tx.debtTransaction.findFirst).not.toHaveBeenCalled();
     expect(tx.debt.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("unblocks a capture that didn't match: the FAILED payment becomes REFUNDED, the debt stays", async () => {
+    db.paypalPayment.findUnique.mockResolvedValueOnce(
+      completed({ status: "FAILED", failureReason: "Capture CAPTURE-1 doesn't match the payment: amount 4.25" }),
+    );
+    const tx = mockRefund({ latestReason: "" });
+
+    await paypalService.markRefunded("pay_1");
+
+    expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_1", status: { not: "REFUNDED" } },
+      data: { status: "REFUNDED" },
+    });
+    expect(tx.debt.updateMany).not.toHaveBeenCalled();
+    expect(refundEmails()).toEqual([
+      ["larry@example.com", false],
+      ["bob@example.com", false],
+    ]);
   });
 
   it("uses the capture id read inside the transaction (a completion may commit in between)", async () => {

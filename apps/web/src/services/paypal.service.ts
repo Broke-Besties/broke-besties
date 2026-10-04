@@ -28,6 +28,19 @@ const CONNECT_SCOPES = "openid email https://uri.paypal.com/services/paypalattri
 const ORDER_RESUMABLE_MS = 3 * 60 * 60 * 1000;
 const ORDER_CREATION_MS = 2 * 60 * 1000;
 
+/** In the failureReason completeFromCapture writes when a COMPLETED capture didn't match. */
+const CAPTURE_MISMATCH = "doesn't match the payment";
+/**
+ * The money moved but the debt didn't change: blocks new orders and canPay (a systemic mismatch
+ * would charge again on every retry) until a refund marks the payment REFUNDED. A DENIED capture
+ * also leaves FAILED with a captureId, but moved no money, so the reason is part of the match.
+ */
+const UNMATCHED_CAPTURE = {
+  status: "FAILED",
+  captureId: { not: null },
+  failureReason: { contains: CAPTURE_MISMATCH },
+} satisfies Prisma.PaypalPaymentWhereInput;
+
 /** The parts of a PayPal order (Orders v2) we read. */
 type PaypalOrder = {
   id?: string;
@@ -142,8 +155,9 @@ export type PaypalPaymentInfo = {
 export type DebtPaypalInfo = {
   lenderConnected: boolean;
   /**
-   * Viewer is the borrower, canPayDebt(...) holds, the lender connected PayPal, and no
-   * payment is APPROVED (a pending capture: money already in flight).
+   * Viewer is the borrower, canPayDebt(...) holds, the lender connected PayPal, no payment is
+   * APPROVED (a pending capture: money already in flight), and no capture is unmatched (FAILED
+   * after money moved, until it's refunded).
    */
   canPay: boolean;
   /** Every PayPal payment for the debt, newest first. */
@@ -197,7 +211,10 @@ export type CompletionOutcome =
    * checkout started: the debt was left alone and both people were emailed.
    */
   | "already_settled"
-  /** Amount, currency or payee didn't match; payment marked FAILED, debt untouched. */
+  /**
+   * Amount, currency or payee didn't match: payment marked FAILED (blocking new orders until it's
+   * refunded), debt untouched, both people emailed.
+   */
   | "failed";
 
 /** A PayPal webhook event body (already signature-verified). */
@@ -322,21 +339,24 @@ export class PaypalService {
     viewerId: string,
     hasPendingTransaction: boolean,
   ): Promise<DebtPaypalInfo> {
-    const [lenderAccount, payments] = await Promise.all([
+    const [lenderAccount, payments, unmatched] = await Promise.all([
       prisma.paypalAccount.findUnique({ where: { userId: debt.lenderId }, select: { id: true } }),
       prisma.paypalPayment.findMany({
         where: { debtId: debt.id },
         orderBy: { createdAt: "desc" },
         select: { id: true, status: true, amountCents: true, createdAt: true, completedAt: true },
       }),
+      prisma.paypalPayment.findFirst({ where: { debtId: debt.id, ...UNMATCHED_CAPTURE }, select: { id: true } }),
     ]);
     return {
       lenderConnected: !!lenderAccount,
-      // An APPROVED payment is a pending capture (money in flight): same rule as createDebtOrder.
+      // An APPROVED payment is a pending capture (money in flight) and an unmatched capture took
+      // money without settling: same rules as createDebtOrder.
       canPay:
         !!lenderAccount &&
         PaypalPolicy.canPayDebt(viewerId, debt, hasPendingTransaction) &&
-        !payments.some((payment) => payment.status === "APPROVED"),
+        !payments.some((payment) => payment.status === "APPROVED") &&
+        !unmatched,
       payments: payments as PaypalPaymentInfo[],
     };
   }
@@ -348,10 +368,14 @@ export class PaypalService {
    * 403 `Only the borrower can pay this debt with PayPal` |
    *     `This debt is already paid` | `This debt has a pending change request`;
    * 409 `The lender hasn't connected PayPal yet`;
-   * 409 `A PayPal payment is already in progress for this debt` (a CREATED
-   *     payment from the last 3 hours, or an APPROVED one of any age)
-   *     (body `{ paymentId, approveUrl }`; approveUrl is null unless the
-   *     in-progress payment is CREATED with an order id, i.e. resumable);
+   * 409 `A PayPal payment is already in progress for this debt` while the debt has a CREATED
+   *     payment with an order id from the last 3 hours, a CREATED one without an order id from
+   *     the last 2 minutes, or an APPROVED one of any age (body `{ paymentId, approveUrl }`;
+   *     approveUrl is null unless the in-progress payment is CREATED with an order id, i.e.
+   *     resumable);
+   * 409 `A PayPal payment for this debt couldn't be matched. Check your email before paying again.`
+   *     while a FAILED payment holds a capture that didn't match it (money moved), at any age
+   *     until it's refunded (body `{ paymentId, approveUrl: null }`);
    * 409 `The lender's PayPal account can't receive payments right now`
    *     (PayPal rejected the payee, issue `PAYEE_*`);
    * 400 `This debt amount can't be paid with PayPal`;
@@ -418,11 +442,19 @@ export class PaypalService {
             // (missed webhooks), PayPal stays blocked for this debt; the borrower can still
             // "Mark as paid", and an admin can mark the payment FAILED to unblock it.
             { status: "APPROVED" },
+            UNMATCHED_CAPTURE,
           ],
         },
         orderBy: { createdAt: "desc" },
         select: { id: true, status: true, orderId: true },
       });
+      if (inProgress?.status === "FAILED") {
+        throw new PaypalFlowError(
+          409,
+          "A PayPal payment for this debt couldn't be matched. Check your email before paying again.",
+          { paymentId: inProgress.id, approveUrl: null },
+        );
+      }
       if (inProgress) {
         throw new PaypalFlowError(409, "A PayPal payment is already in progress for this debt", {
           paymentId: inProgress.id,
@@ -515,8 +547,11 @@ export class PaypalService {
    *     the payment becomes CANCELLED and nothing is charged);
    * 402 `PayPal declined the payment method. Try again with a different one.`;
    * 502 `PayPal couldn't complete the payment`;
-   * 502 `PayPal payment couldn't be verified` (capture didn't match the debt).
-   * Already COMPLETED → 200 with the current payment and debt (idempotent).
+   * 502 `Your PayPal payment went through but couldn't be matched to this debt. Don't pay again:
+   *     check your email.` (the capture didn't match the payment: it's marked FAILED, both people
+   *     are emailed, and new orders are blocked until it's refunded).
+   * Already COMPLETED → 200 with the current payment and debt (idempotent; debt is null when
+   * it was deleted).
    * Throws PaypalConfigError when PayPal isn't configured.
    */
   async capturePayment(paymentId: string, userId: string): Promise<CaptureResult> {
@@ -640,7 +675,12 @@ export class PaypalService {
         payment.id,
         capture.payee?.merchant_id ? capture : { ...capture, payee: unit?.payee },
       );
-      if (outcome === "failed") throw new PaypalFlowError(502, "PayPal payment couldn't be verified");
+      if (outcome === "failed") {
+        throw new PaypalFlowError(
+          502,
+          "Your PayPal payment went through but couldn't be matched to this debt. Don't pay again: check your email.",
+        );
+      }
     } else if (capture.status === "PENDING") {
       // e.g. an eCheck: the PAYMENT.CAPTURE.* webhook finishes it.
       await prisma.paypalPayment.updateMany({
@@ -690,6 +730,20 @@ export class PaypalService {
     if (!payment) throw new Error(`PayPal payment ${paymentId} not found`);
     if (payment.status === "COMPLETED" || payment.status === "REFUNDED") return "already_completed";
 
+    // After the write that decided it; emailService never throws (a failed send resolves
+    // { success: false }). When the debt wasn't marked paid, both people hear about it.
+    const emailReceived = (alreadySettled: boolean) =>
+      Promise.all(
+        (alreadySettled ? [payment.payee, payment.payer] : [payment.payee]).map((person) =>
+          emailService.sendPaypalPaymentReceived({
+            to: person.email,
+            recipientName: person.name || person.email,
+            ...paymentEmail(payment),
+            alreadySettled,
+          }),
+        ),
+      );
+
     let payee = capture.payee?.merchant_id;
     if (!payee && payment.orderId) {
       const order = await paypalFetch<PaypalOrder | null>(
@@ -703,13 +757,16 @@ export class PaypalService {
       payee !== payment.payeePayerId && `payee ${payee ?? "missing"}`,
     ].filter(Boolean);
     if (mismatch.length > 0) {
-      const reason = `Capture ${capture.id} doesn't match the payment: ${mismatch.join(", ")}`;
+      const reason = `Capture ${capture.id} ${CAPTURE_MISMATCH}: ${mismatch.join(", ")}`;
       console.error(`[PaypalService] ${reason}; debt left unchanged`, { paymentId });
       // Same guard as markFailed; the capture id lets a later refund/reversal still find it.
-      await prisma.paypalPayment.updateMany({
+      const marked = await prisma.paypalPayment.updateMany({
         where: { id: payment.id, status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
         data: { status: "FAILED", failureReason: reason, captureId: capture.id },
       });
+      // Money moved, so tell both people not to pay again; a racing call or redelivery matches
+      // no row and stays quiet.
+      if (marked.count > 0) await emailReceived(true);
       return "failed";
     }
 
@@ -761,21 +818,7 @@ export class PaypalService {
       return "completed" as const;
     });
 
-    if (outcome !== "already_completed") {
-      const alreadySettled = outcome === "already_settled";
-      const recipients = alreadySettled ? [payment.payee, payment.payer] : [payment.payee];
-      // After commit; emailService never throws (a failed send resolves { success: false }).
-      await Promise.all(
-        recipients.map((person) =>
-          emailService.sendPaypalPaymentReceived({
-            to: person.email,
-            recipientName: person.name || person.email,
-            ...paymentEmail(payment),
-            alreadySettled,
-          }),
-        ),
-      );
-    }
+    if (outcome !== "already_completed") await emailReceived(outcome === "already_settled");
     return outcome;
   }
 
