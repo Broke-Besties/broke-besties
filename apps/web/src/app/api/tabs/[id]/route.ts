@@ -2,36 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { tabService } from "@/services/tab.service";
 
-const UPDATE_ERROR_STATUS = new Map([
+const ERROR_STATUS = new Map([
   ["Amount must be positive", 400],
   ["Description cannot be empty", 400],
   ["Person name cannot be empty", 400],
   ["Invalid status value", 400],
   ["You don't have permission to update this tab", 403],
-  ["Tab not found", 404],
-]);
-
-const DELETE_ERROR_STATUS = new Map([
   ["You don't have permission to delete this tab", 403],
   ["Tab not found", 404],
 ]);
 
 // Tab ids are Postgres INTs; out-of-range values would make Prisma throw.
 function parseId(value: string) {
-  const id = Number(value);
-  return /^\d+$/.test(value) && id >= 1 && id <= 2147483647 ? id : null;
+  return /^\d+$/.test(value) && Number(value) <= 2147483647 ? Number(value) : null;
 }
 
 function badRequest(error: string) {
   return NextResponse.json({ error }, { status: 400 });
 }
 
-function errorResponse(error: unknown, statusByMessage: Map<string, number>) {
+function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  const status = statusByMessage.get(message);
-  return status
-    ? NextResponse.json({ error: message }, { status })
-    : NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  const status = ERROR_STATUS.get(message);
+  return NextResponse.json(
+    { error: status ? message : "Internal server error" },
+    { status: status ?? 500 }
+  );
 }
 
 // PATCH /api/tabs/[id] - Update a tab (amount, description, personName, status)
@@ -45,18 +41,16 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const tabId = parseId(id);
+    const tabId = parseId((await params).id);
     if (tabId === null) {
       return badRequest("Invalid tab ID");
     }
 
-    const body: unknown = await request.json().catch(() => null);
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    const body: Record<string, unknown> | null = await request.json().catch(() => null);
+    if (!body) {
       return badRequest("Invalid JSON body");
     }
-    const { amount, description, personName, status } =
-      body as Record<string, unknown>;
+    const { amount, description, personName, status } = body;
 
     // Omitted fields stay unchanged; a provided field of the wrong JSON type
     // gets the service's message for that field instead of a TypeError 500.
@@ -86,7 +80,7 @@ export async function PATCH(
     return NextResponse.json({ tab });
   } catch (error) {
     console.error("Error updating tab:", error);
-    return errorResponse(error, UPDATE_ERROR_STATUS);
+    return errorResponse(error);
   }
 }
 
@@ -101,8 +95,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const tabId = parseId(id);
+    const tabId = parseId((await params).id);
     if (tabId === null) {
       return badRequest("Invalid tab ID");
     }
@@ -112,6 +105,6 @@ export async function DELETE(
     return NextResponse.json({ message: "Tab deleted successfully" });
   } catch (error) {
     console.error("Error deleting tab:", error);
-    return errorResponse(error, DELETE_ERROR_STATUS);
+    return errorResponse(error);
   }
 }
