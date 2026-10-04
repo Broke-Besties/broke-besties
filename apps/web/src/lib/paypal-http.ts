@@ -1,0 +1,14 @@
+import { NextResponse } from "next/server";
+import { PaypalConfigError, PaypalFlowError } from "@/lib/paypal-errors";
+
+/** Maps an error from the PayPal service to the route's JSON error response. */
+export function paypalErrorResponse(error: unknown, { configStatus = 503 } = {}) {
+  if (error instanceof PaypalFlowError) {
+    return NextResponse.json({ error: error.message, ...error.body }, { status: error.status });
+  }
+  if (error instanceof PaypalConfigError) {
+    return NextResponse.json({ error: "PayPal is not configured" }, { status: configStatus });
+  }
+  console.error("PayPal route error:", error);
+  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+}
