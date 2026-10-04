@@ -1266,11 +1266,13 @@ describe("completeFromCapture", () => {
 
     expect(db.$transaction).not.toHaveBeenCalled();
     expect(db.debt.updateMany).not.toHaveBeenCalled();
-    expect(db.paypalPayment.updateMany).toHaveBeenCalledTimes(4);
-    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
-      where: { id: "pay_1", status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
-      data: { status: "FAILED", failureReason: expect.stringContaining("CAPTURE-1") },
-    });
+    // The capture id is stored so a later refund/reversal that only carries it still matches.
+    expect(db.paypalPayment.updateMany.mock.calls.map(([args]) => args)).toEqual(
+      Array(4).fill({
+        where: { id: "pay_1", status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
+        data: { status: "FAILED", failureReason: expect.stringContaining("CAPTURE-1"), captureId: "CAPTURE-1" },
+      }),
+    );
     expect(console.error).toHaveBeenCalled();
     expect(email.sendPaypalPaymentReceived).not.toHaveBeenCalled();
   });

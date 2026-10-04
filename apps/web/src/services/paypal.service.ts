@@ -696,7 +696,11 @@ export class PaypalService {
     if (mismatch.length > 0) {
       const reason = `Capture ${capture.id} doesn't match the payment: ${mismatch.join(", ")}`;
       console.error(`[PaypalService] ${reason}; debt left unchanged`, { paymentId });
-      await this.markFailed(payment.id, reason);
+      // Same guard as markFailed; the capture id lets a later refund/reversal still find it.
+      await prisma.paypalPayment.updateMany({
+        where: { id: payment.id, status: { in: ["CREATED", "APPROVED", "CANCELLED"] } },
+        data: { status: "FAILED", failureReason: reason, captureId: capture.id },
+      });
       return "failed";
     }
 
