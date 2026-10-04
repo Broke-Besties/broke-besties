@@ -1,14 +1,18 @@
 import { getUser } from "@/lib/supabase";
 import { debtService } from "@/services/debt.service";
 import { debtTransactionService } from "@/services/debt-transaction.service";
+import { paypalService } from "@/services/paypal.service";
+import { receiptService } from "@/services/receipt.service";
 import { notFound, redirect } from "next/navigation";
 import DebtDetailClient from "./debt-detail-client";
-import { createClient } from "@supabase/supabase-js";
+import { parsePaypalReturn } from "./paypal";
 
 export default async function DebtDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ paypal?: string; pp?: string }>;
 }) {
   const user = await getUser();
 
@@ -38,36 +42,15 @@ export default async function DebtDetailPage({
     notFound();
   }
 
-  // Get signed URLs for receipts if they exist
-  const receiptImageUrls: { id: string; url: string }[] = [];
-  if (debt.receipts && debt.receipts.length > 0) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    for (const receipt of debt.receipts) {
-      // Flat storage path: receipts/{receiptId}
-      const { data: signedUrlData, error: signedUrlError } =
-        await supabase.storage
-          .from("receipts")
-          .createSignedUrl(`receipts/${receipt.id}`, 3600); // 1 hour expiry
-
-      if (signedUrlError) {
-        console.error(
-          "[Debt Detail] Error creating signed URL:",
-          signedUrlError
-        );
-      }
-
-      if (signedUrlData) {
-        receiptImageUrls.push({
-          id: receipt.id,
-          url: signedUrlData.signedUrl,
-        });
-      }
-    }
-  }
+  const [receiptImageUrls, paypal, query] = await Promise.all([
+    receiptService.getSignedImageUrls(debt.receipts.map((r) => r.id)),
+    paypalService.getDebtPaypalInfo(
+      debt,
+      user.id,
+      transactions.some((t) => t.status === "pending")
+    ),
+    searchParams,
+  ]);
 
   return (
     <DebtDetailClient
@@ -75,6 +58,8 @@ export default async function DebtDetailPage({
       transactions={transactions}
       currentUserId={user.id}
       receiptImageUrls={receiptImageUrls}
+      paypal={paypal}
+      paypalReturn={parsePaypalReturn(query.paypal, query.pp)}
     />
   );
 }

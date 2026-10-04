@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
@@ -10,6 +10,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,8 +26,10 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
+import { Spinner } from "@/components/ui/spinner";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import type { DebtPaypalInfo } from "@/services/paypal.service";
 import { ConfirmPaidModal } from "../confirm-paid-modal";
 import { ModifyDebtModal } from "../modify-debt-modal";
 import { DeleteDebtModal } from "../delete-debt-modal";
@@ -34,6 +37,7 @@ import { ActivityCard } from "./activity-card";
 import { PendingRequestCard } from "./pending-request-card";
 import { ReceiptsCard } from "./receipts-card";
 import { ReminderCard } from "./reminder-card";
+import { isPaypalProcessing, type PaypalReturn } from "./paypal";
 import {
   displayName,
   initials,
@@ -48,6 +52,8 @@ type DebtDetailClientProps = {
   transactions: DebtTransactionRecord[];
   currentUserId: string;
   receiptImageUrls: { id: string; url: string }[];
+  paypal: DebtPaypalInfo;
+  paypalReturn: PaypalReturn | null;
 };
 
 export default function DebtDetailClient({
@@ -55,9 +61,13 @@ export default function DebtDetailClient({
   transactions,
   currentUserId,
   receiptImageUrls,
+  paypal,
+  paypalReturn,
 }: DebtDetailClientProps) {
   const router = useRouter();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [paypalOpening, setPaypalOpening] = useState(false);
+  const paypalReturnHandled = useRef(false);
 
   const isLender = debt.lender.id === currentUserId;
   const isBorrower = debt.borrower.id === currentUserId;
@@ -85,6 +95,69 @@ export default function DebtDetailClient({
   const handleModalClose = () => setActiveModal(null);
   const handleSuccess = () => router.refresh();
 
+  // Coming back from PayPal Checkout (?paypal=approved|cancelled&pp=). The ref
+  // keeps StrictMode's double effect run in dev from capturing twice.
+  const paypalConfirming = paypalReturn?.status === "approved";
+  useEffect(() => {
+    if (!paypalReturn || paypalReturnHandled.current) return;
+    paypalReturnHandled.current = true;
+
+    const page = window.location.pathname;
+    const finish = () => {
+      // Don't drag the user back if they navigated away mid-capture.
+      if (window.location.pathname !== page) return;
+      router.replace(`/debts/${debt.id}`, { scroll: false });
+      router.refresh();
+    };
+
+    if (paypalReturn.status === "cancelled") {
+      toast("PayPal payment cancelled");
+      finish();
+      return;
+    }
+
+    fetch(`/api/paypal/payments/${paypalReturn.paymentId}/capture`, {
+      method: "POST",
+    })
+      .then(async (response) => {
+        if (response.status === 202) {
+          toast("PayPal is processing your payment");
+        } else if (response.ok) {
+          toast.success(`Paid ${lenderName} ${amountLabel} with PayPal`);
+        } else {
+          const data = await response.json().catch(() => ({}));
+          toast.error(data.error || "Couldn't confirm your PayPal payment");
+        }
+      })
+      .catch(() => toast.error("Couldn't confirm your PayPal payment"))
+      .finally(finish);
+  }, [paypalReturn, debt.id, lenderName, amountLabel, router]);
+
+  const handlePayWithPaypal = async () => {
+    setPaypalOpening(true);
+    try {
+      const response = await fetch(`/api/debts/${debt.id}/paypal/order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: "web" }),
+      });
+      const data = await response.json();
+      // A 409 for a payment already in progress carries its approveUrl: resume it.
+      if ((response.ok || response.status === 409) && data.approveUrl) {
+        window.location.assign(data.approveUrl);
+      } else {
+        toast.error(data.error || "Couldn't start PayPal. Try again.");
+      }
+    } catch {
+      toast.error("Couldn't start PayPal. Try again.");
+    } finally {
+      // ponytail: re-enables as soon as the redirect starts so a bfcache Back
+      // can't restore a stuck spinner; a second click just resumes the same
+      // order (409 + approveUrl). Keep it busy + reset on `pageshow` if needed.
+      setPaypalOpening(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -93,7 +166,10 @@ export default function DebtDetailClient({
         description={description}
         actions={
           canAct ? (
-            <>
+            // ponytail: PageHeader's actions row can't wrap, so cap it at the
+            // phone content width (p-4 gutters) and let the PayPal button wrap
+            // instead of overflowing. Upgrade: flex-wrap in PageHeader itself.
+            <div className="flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline">
@@ -115,11 +191,30 @@ export default function DebtDetailClient({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {paypal.canPay && (
+                <Button
+                  variant="outline"
+                  onClick={handlePayWithPaypal}
+                  disabled={paypalOpening || paypalConfirming}
+                >
+                  {(paypalOpening || paypalConfirming) && <Spinner />}
+                  {paypalConfirming
+                    ? "Confirming payment…"
+                    : paypalOpening
+                      ? "Opening PayPal…"
+                      : `Pay ${amountLabel} with PayPal`}
+                </Button>
+              )}
               <Button onClick={() => setActiveModal("paid")}>
                 <CheckCircle2 />
                 Mark as paid
               </Button>
-            </>
+              {isBorrower && !paypal.lenderConnected && (
+                <p className="text-sm text-muted-foreground">
+                  {lenderName} hasn&apos;t connected PayPal
+                </p>
+              )}
+            </div>
           ) : pendingTransaction ? (
             <p className="text-sm text-muted-foreground">
               Actions are unavailable while a request is pending.
@@ -159,6 +254,15 @@ export default function DebtDetailClient({
               </div>
 
               <StatusBadge status={debt.status} />
+
+              {isBorrower &&
+                debt.status === "pending" &&
+                isPaypalProcessing(paypal.payments) && (
+                  <p className="max-w-sm text-sm text-muted-foreground">
+                    PayPal is processing your payment. We&apos;ll mark this debt
+                    paid when it clears.
+                  </p>
+                )}
             </CardContent>
           </Card>
 
