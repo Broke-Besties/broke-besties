@@ -82,8 +82,13 @@ export class UserService {
           where: { OR: [{ lenderId: userId }, { borrowerId: userId }] },
           data: { isActive: false },
         })
+        // Every pending request on their debts, also the other person's: nobody can answer
+        // them for a deleted account, and a pending request blocks actions on the debt
         await tx.debtTransaction.updateMany({
-          where: { requesterId: userId, status: 'pending' },
+          where: {
+            status: 'pending',
+            debt: { OR: [{ lenderId: userId }, { borrowerId: userId }] },
+          },
           data: { status: 'cancelled', resolvedAt: new Date() },
         })
         await tx.recurringPayment.updateMany({

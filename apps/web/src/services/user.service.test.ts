@@ -119,8 +119,13 @@ describe("userService", () => {
         where: { OR: [{ lenderId: LENDER_ID }, { borrowerId: LENDER_ID }] },
         data: { isActive: false },
       });
+      // Every pending request on their debts, not only their own: nobody can answer for them now,
+      // and a pending request blocks the other person's actions on the debt.
       expect(tx.debtTransaction.updateMany).toHaveBeenCalledWith({
-        where: { requesterId: LENDER_ID, status: "pending" },
+        where: {
+          status: "pending",
+          debt: { OR: [{ lenderId: LENDER_ID }, { borrowerId: LENDER_ID }] },
+        },
         data: { status: "cancelled", resolvedAt: expect.any(Date) },
       });
       expect(tx.recurringPayment.updateMany).toHaveBeenCalledWith({
