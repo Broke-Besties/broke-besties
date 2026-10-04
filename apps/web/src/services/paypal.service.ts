@@ -510,7 +510,8 @@ export class PaypalService {
    * 409 `Payment wasn't approved in PayPal`; 409 `This PayPal payment was refunded`;
    * 409 `This PayPal payment failed. Start a new payment.`;
    * 409 `This debt is already settled` | `This debt's amount changed. Start a new PayPal payment.`
-   *     (checked before capturing; the payment becomes CANCELLED and nothing is charged);
+   *     (checked before capturing; PayPal is asked first, and unless an earlier attempt already
+   *     captured, the payment becomes CANCELLED and nothing is charged);
    * 402 `PayPal declined the payment method. Try again with a different one.`;
    * 502 `PayPal couldn't complete the payment`;
    * 502 `PayPal payment couldn't be verified` (capture didn't match the debt).
@@ -540,68 +541,81 @@ export class PaypalService {
     if (["COMPLETED", "REFUNDED", "FAILED"].includes(payment.status)) return this.captureResult(payment.id);
     if (!payment.orderId) throw new PaypalFlowError(409, "Payment wasn't approved in PayPal");
 
+    const orderPath = `/v2/checkout/orders/${encodeURIComponent(payment.orderId)}`;
+    const failed = new PaypalFlowError(502, "PayPal couldn't complete the payment");
+    // The order as PayPal has it; a failed read leaves the row alone (outcome unknown).
+    const readOrder = () =>
+      paypalFetch<PaypalOrder | null>(orderPath).catch(() => {
+        throw failed;
+      });
+
+    let refusal: { reason: string; message: string } | null = null;
     if (payment.status === "CREATED" || payment.status === "CANCELLED") {
-      // Nothing is captured yet: don't take money for a debt that was settled or changed since
-      // the order. CANCELLED doesn't block a new order, so the borrower can start over.
+      // Before capturing: don't take money for a debt that was settled or changed since the
+      // order. CANCELLED doesn't block a new order, so the borrower can start over.
       const debt = payment.debtId
         ? await prisma.debt.findUnique({
             where: { id: payment.debtId },
             select: { status: true, amount: true },
           })
         : null;
-      const settled = !debt || debt.status !== "pending";
-      if (settled || Math.round(debt.amount * 100) !== payment.amountCents) {
-        await prisma.paypalPayment.updateMany({
-          where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
-          data: {
-            status: "CANCELLED",
-            failureReason: settled ? "Debt settled before capture" : "Debt amount changed before capture",
-          },
-        });
-        throw new PaypalFlowError(
-          409,
-          settled ? "This debt is already settled" : "This debt's amount changed. Start a new PayPal payment.",
-        );
+      if (!debt || debt.status !== "pending") {
+        refusal = { reason: "Debt settled before capture", message: "This debt is already settled" };
+      } else if (Math.round(debt.amount * 100) !== payment.amountCents) {
+        refusal = {
+          reason: "Debt amount changed before capture",
+          message: "This debt's amount changed. Start a new PayPal payment.",
+        };
       }
     }
 
-    const orderPath = `/v2/checkout/orders/${encodeURIComponent(payment.orderId)}`;
-    const failed = new PaypalFlowError(502, "PayPal couldn't complete the payment");
     let order: PaypalOrder | null;
-    try {
-      order = await paypalFetch<PaypalOrder | null>(`${orderPath}/capture`, {
-        method: "POST",
-        body: "{}",
-        headers: { Prefer: "return=representation" },
-        // PayPal replays its stored answer (even a 422) for a repeated PayPal-Request-Id, so the
-        // key follows the row: an unknown outcome leaves the row alone and the retry replays the
-        // original result (no double capture); a retryable decline touches the row so the next
-        // attempt is a fresh capture.
-        requestId: `capture-${payment.id}-${payment.updatedAt.getTime()}`,
-      });
-    } catch (error) {
-      console.error("[PaypalService] PayPal capture failed:", { paymentId: payment.id, error });
-      if (error instanceof PaypalError && hasIssue(error, "ORDER_ALREADY_CAPTURED")) {
-        order = await paypalFetch<PaypalOrder | null>(orderPath).catch(() => {
-          throw failed;
-        });
-      } else if (
-        error instanceof PaypalError &&
-        (hasIssue(error, "INSTRUMENT_DECLINED") || hasIssue(error, "ORDER_NOT_APPROVED"))
-      ) {
-        const declined = hasIssue(error, "INSTRUMENT_DECLINED");
-        await prisma.paypalPayment.updateMany({
+    if (refusal) {
+      // An earlier capture whose answer was lost may already have taken the money: ask PayPal.
+      order = await readOrder();
+      if (!order?.purchase_units?.[0]?.payments?.captures?.[0]?.id) {
+        const cancelled = await prisma.paypalPayment.updateMany({
           where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
-          data: { failureReason: declined ? "INSTRUMENT_DECLINED" : "ORDER_NOT_APPROVED" },
+          data: { status: "CANCELLED", failureReason: refusal.reason },
         });
-        throw declined
-          ? new PaypalFlowError(402, "PayPal declined the payment method. Try again with a different one.")
-          : new PaypalFlowError(409, "Payment wasn't approved in PayPal");
-      } else if (captureOutcomeUnknown(error)) {
-        throw failed;
-      } else {
-        await this.markFailed(payment.id, `Capture failed: ${describeError(error)}`);
-        throw failed;
+        // No row: a racing capture or webhook moved the payment on; answer with what it did.
+        if (cancelled.count === 0) return this.captureResult(payment.id);
+        throw new PaypalFlowError(409, refusal.message);
+      }
+    } else {
+      try {
+        order = await paypalFetch<PaypalOrder | null>(`${orderPath}/capture`, {
+          method: "POST",
+          body: "{}",
+          headers: { Prefer: "return=representation" },
+          // PayPal replays its stored answer (even a 422) for a repeated PayPal-Request-Id, so the
+          // key follows the row: an unknown outcome leaves the row alone and the retry replays the
+          // original result (no double capture); a retryable decline touches the row so the next
+          // attempt is a fresh capture.
+          requestId: `capture-${payment.id}-${payment.updatedAt.getTime()}`,
+        });
+      } catch (error) {
+        console.error("[PaypalService] PayPal capture failed:", { paymentId: payment.id, error });
+        if (error instanceof PaypalError && hasIssue(error, "ORDER_ALREADY_CAPTURED")) {
+          order = await readOrder();
+        } else if (
+          error instanceof PaypalError &&
+          (hasIssue(error, "INSTRUMENT_DECLINED") || hasIssue(error, "ORDER_NOT_APPROVED"))
+        ) {
+          const declined = hasIssue(error, "INSTRUMENT_DECLINED");
+          await prisma.paypalPayment.updateMany({
+            where: { id: payment.id, status: { in: ["CREATED", "CANCELLED"] } },
+            data: { failureReason: declined ? "INSTRUMENT_DECLINED" : "ORDER_NOT_APPROVED" },
+          });
+          throw declined
+            ? new PaypalFlowError(402, "PayPal declined the payment method. Try again with a different one.")
+            : new PaypalFlowError(409, "Payment wasn't approved in PayPal");
+        } else if (captureOutcomeUnknown(error)) {
+          throw failed;
+        } else {
+          await this.markFailed(payment.id, `Capture failed: ${describeError(error)}`);
+          throw failed;
+        }
       }
     }
 
