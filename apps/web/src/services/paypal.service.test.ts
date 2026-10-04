@@ -1208,9 +1208,15 @@ describe("markRefunded", () => {
   const completed = (overrides: Record<string, unknown> = {}) =>
     paymentWithParties({ status: "COMPLETED", captureId: "CAPTURE-1", ...overrides });
 
-  function mockRefund({ claimed = 1, latestReason = "Paid with PayPal (capture CAPTURE-1)", reopened = 1 } = {}) {
+  function mockRefund({
+    claimed = 1,
+    current = { debtId: 42, captureId: "CAPTURE-1" } as { debtId: number | null; captureId: string | null },
+    latestReason = "Paid with PayPal (capture CAPTURE-1)",
+    reopened = 1,
+  } = {}) {
     const tx = createMockPrisma();
     tx.paypalPayment.updateMany.mockResolvedValue({ count: claimed });
+    tx.paypalPayment.findUnique.mockResolvedValue(current);
     tx.debtTransaction.findFirst.mockResolvedValue(latestReason ? { reason: latestReason } : null);
     tx.debt.updateMany.mockResolvedValue({ count: reopened });
     db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
@@ -1300,13 +1306,34 @@ describe("markRefunded", () => {
 
   it("marks a payment that never settled REFUNDED without touching the debt", async () => {
     db.paypalPayment.findUnique.mockResolvedValueOnce(completed({ status: "APPROVED", captureId: null }));
-    const tx = mockRefund();
+    const tx = mockRefund({ current: { debtId: 42, captureId: null } });
 
     await paypalService.markRefunded("pay_1");
 
     expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
     expect(tx.debtTransaction.findFirst).not.toHaveBeenCalled();
     expect(tx.debt.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("uses the capture id read inside the transaction (a completion may commit in between)", async () => {
+    // Read before the completion committed; by the time the refund claims the row it's settled.
+    db.paypalPayment.findUnique.mockResolvedValueOnce(completed({ status: "CREATED", captureId: null }));
+    const tx = mockRefund();
+
+    await paypalService.markRefunded("pay_1");
+
+    expect(tx.paypalPayment.findUnique).toHaveBeenCalledWith({
+      where: { id: "pay_1" },
+      select: { debtId: true, captureId: true },
+    });
+    expect(tx.debt.updateMany).toHaveBeenCalledWith({
+      where: { id: 42, status: "paid" },
+      data: { status: "pending" },
+    });
+    expect(refundEmails()).toEqual([
+      ["larry@example.com", true],
+      ["bob@example.com", true],
+    ]);
   });
 });
 

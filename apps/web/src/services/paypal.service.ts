@@ -712,7 +712,6 @@ export class PaypalService {
       include: paymentWithPartiesInclude,
     });
     if (!payment || payment.status === "REFUNDED") return;
-    const { debtId, captureId } = payment;
 
     const debtReopened = await prisma.$transaction(async (tx) => {
       const claimed = await tx.paypalPayment.updateMany({
@@ -720,7 +719,14 @@ export class PaypalService {
         data: { status: "REFUNDED" },
       });
       if (claimed.count === 0) return null;
-      if (debtId === null || !captureId) return false;
+      // Re-read under the row lock: a racing completion may have committed since the read above.
+      const current = await tx.paypalPayment.findUnique({
+        where: { id: payment.id },
+        select: { debtId: true, captureId: true },
+      });
+      const debtId = current?.debtId;
+      const captureId = current?.captureId;
+      if (!debtId || !captureId) return false;
 
       // Reopen only if this capture is what marked the debt paid.
       const latestPaid = await tx.debtTransaction.findFirst({
