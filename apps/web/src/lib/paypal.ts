@@ -49,6 +49,19 @@ export function getWebhookId(): string {
   return requireEnv("PAYPAL_WEBHOOK_ID");
 }
 
+/** Every PayPal setting is present and valid; until then the UI shows no PayPal at all. */
+export function isPaypalConfigured(): boolean {
+  try {
+    getPaypalCredentials();
+    getAppUrl();
+    getStateSecret();
+    getWebhookId();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);

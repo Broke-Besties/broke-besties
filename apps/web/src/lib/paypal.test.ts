@@ -14,6 +14,7 @@ import {
   getStateSecret,
   getWebhookId,
   isAppScheme,
+  isPaypalConfigured,
   paypalBase,
   paypalEnv,
   paypalFetch,
@@ -118,6 +119,24 @@ describe("config getters", () => {
     expect(getWebhookId()).toBe("WH-1");
     vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
     expect(() => getWebhookId()).toThrow(PaypalConfigError);
+  });
+});
+
+describe("isPaypalConfigured", () => {
+  it("is true when every PayPal setting is present and valid", () => {
+    expect(isPaypalConfigured()).toBe(true);
+  });
+
+  it.each([
+    ["PAYPAL_CLIENT_ID", ""],
+    ["PAYPAL_CLIENT_SECRET", "  "],
+    ["NEXT_PUBLIC_APP_URL", ""],
+    ["PAYPAL_STATE_SECRET", ""],
+    ["PAYPAL_STATE_SECRET", "s".repeat(31)],
+    ["PAYPAL_WEBHOOK_ID", ""],
+  ])("is false when %s is %j", (name, value) => {
+    vi.stubEnv(name, value);
+    expect(isPaypalConfigured()).toBe(false);
   });
 });
 

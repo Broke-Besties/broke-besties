@@ -20,7 +20,7 @@ import { GET as getDebtRoute } from "@/app/api/debts/[id]/route";
 import { BORROWER_ID, makeDebt } from "../../test/mocks";
 
 const debt = makeDebt({ receipts: [{ id: "rcpt_1" }, { id: "rcpt_2" }], alert: null });
-const paypal = { lenderConnected: true, canPay: true, payments: [] };
+const paypal = { enabled: true, lenderConnected: true, canPay: true, payments: [] };
 
 function getDebt() {
   return getDebtRoute(new NextRequest("http://localhost/api/debts/1"), {

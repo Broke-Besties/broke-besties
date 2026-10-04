@@ -14,6 +14,7 @@ import {
   getPaypalCredentials,
   getWebhookId,
   isAppScheme,
+  isPaypalConfigured,
   paypalFetch,
   paypalWebBase,
   schemeForVariant,
@@ -155,11 +156,13 @@ export type PaypalPaymentInfo = {
 
 /** The `paypal` block of `GET /api/debts/:id`. */
 export type DebtPaypalInfo = {
+  /** The server has a full PayPal configuration; when false, clients hide every PayPal affordance. */
+  enabled: boolean;
   lenderConnected: boolean;
   /**
-   * Viewer is the borrower, canPayDebt(...) holds, the lender connected PayPal, no payment is
-   * APPROVED (a pending capture: money already in flight), and no capture is unmatched (FAILED
-   * after money moved, until it's refunded).
+   * PayPal is enabled, the viewer is the borrower, canPayDebt(...) holds, the lender connected
+   * PayPal, no payment is APPROVED (a pending capture: money already in flight), and no capture
+   * is unmatched (FAILED after money moved, until it's refunded).
    */
   canPay: boolean;
   /** Every PayPal payment for the debt, newest first. */
@@ -353,11 +356,14 @@ export class PaypalService {
         select: { id: true },
       }),
     ]);
+    const enabled = isPaypalConfigured();
     return {
+      enabled,
       lenderConnected: !!lenderAccount,
       // An APPROVED payment is a pending capture (money in flight) and an unmatched capture took
       // money without settling: same rules as createDebtOrder.
       canPay:
+        enabled &&
         !!lenderAccount &&
         PaypalPolicy.canPayDebt(viewerId, debt, hasPendingTransaction) &&
         !payments.some((payment) => payment.status === "APPROVED") &&

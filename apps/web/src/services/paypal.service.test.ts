@@ -361,6 +361,7 @@ describe("getDebtPaypalInfo", () => {
       db.paypalPayment.findMany.mockResolvedValueOnce([]);
 
       expect(await paypalService.getDebtPaypalInfo(d, viewer, hasPending)).toEqual({
+        enabled: true,
         lenderConnected,
         canPay,
         payments: [],
@@ -369,6 +370,23 @@ describe("getDebtPaypalInfo", () => {
     expect(db.paypalAccount.findUnique).toHaveBeenCalledWith({
       where: { userId: LENDER_ID },
       select: { id: true },
+    });
+    expect(paypalRequests).toHaveLength(0);
+  });
+
+  it("stays dark while PayPal isn't configured: not enabled and can't pay, the rest as usual", async () => {
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
+    const payments = [
+      { id: "pay_1", status: "COMPLETED", amountCents: 4250, createdAt: new Date(0), completedAt: new Date(0) },
+    ];
+    db.paypalAccount.findUnique.mockResolvedValueOnce({ id: "acc" });
+    db.paypalPayment.findMany.mockResolvedValueOnce(payments);
+
+    expect(await paypalService.getDebtPaypalInfo(debt, BORROWER_ID, false)).toEqual({
+      enabled: false,
+      lenderConnected: true,
+      canPay: false,
+      payments,
     });
     expect(paypalRequests).toHaveLength(0);
   });
