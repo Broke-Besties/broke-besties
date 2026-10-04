@@ -63,7 +63,6 @@ export async function DELETE() {
     return NextResponse.json({ message: "Account deleted" });
   } catch (error) {
     console.error("Error deleting account:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

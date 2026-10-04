@@ -73,15 +73,15 @@ describe("DELETE /api/user", () => {
     expect(userService.deleteAccount).toHaveBeenCalledWith(LENDER_ID);
   });
 
-  it("returns 500 with the message when deletion fails", async () => {
+  it("returns a generic 500 and logs the real error when deletion fails", async () => {
     vi.mocked(getUser).mockResolvedValueOnce({ id: LENDER_ID } as never);
-    vi.mocked(userService.deleteAccount).mockRejectedValueOnce(
-      new Error("Database error deleting user"),
-    );
+    const failure = new Error("Database error deleting user");
+    vi.mocked(userService.deleteAccount).mockRejectedValueOnce(failure);
 
     const res = await deleteUserRoute();
 
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Database error deleting user" });
+    expect(await res.json()).toEqual({ error: "Internal server error" });
+    expect(console.error).toHaveBeenCalledWith(expect.any(String), failure);
   });
 });
