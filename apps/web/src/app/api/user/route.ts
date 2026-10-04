@@ -49,3 +49,21 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+// DELETE /api/user - Delete the current user's account
+export async function DELETE() {
+  try {
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await userService.deleteAccount(user.id);
+
+    return NextResponse.json({ message: "Account deleted" });
+  } catch (error) {
+    console.error("Error deleting account:", error);
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
