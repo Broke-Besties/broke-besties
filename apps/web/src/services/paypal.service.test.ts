@@ -700,22 +700,25 @@ describe("createDebtOrder", () => {
     );
   });
 
-  it("keeps the order description within PayPal's 127 characters", async () => {
-    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ description: null }));
-    mockOrderCreated();
-    await order();
+  it("keeps the order description within 127 UTF-16 units without splitting a character", async () => {
+    for (const description of [null, "x".repeat(200), "🍕".repeat(200), `a${"🍕".repeat(200)}`]) {
+      db.debt.findUnique.mockResolvedValueOnce(payableDebt({ description }));
+      mockOrderCreated();
+      await order();
+    }
 
-    db.debt.findUnique.mockResolvedValueOnce(payableDebt({ description: "🍕".repeat(200) }));
-    mockOrderCreated();
-    await order();
-
-    const [short, long] = paypalCalls("POST", "/v2/checkout/orders").map(
+    const [none, ascii, pizza, mixed] = paypalCalls("POST", "/v2/checkout/orders").map(
       (call) => JSON.parse(call.body!).purchase_units[0].description as string,
     );
-    expect(short).toBe("Broke Besties: debt #42");
-    expect(Array.from(long)).toHaveLength(127);
-    expect(long.startsWith("Broke Besties: 🍕")).toBe(true);
-    expect(long.endsWith("🍕 (debt #42)")).toBe(true);
+    expect(none).toBe("Broke Besties: debt #42");
+    // 127 - "Broke Besties: " (15) - " (debt #42)" (11) = 101 units for the text; 🍕 is 2 units.
+    expect(ascii).toBe(`Broke Besties: ${"x".repeat(101)} (debt #42)`);
+    expect(pizza).toBe(`Broke Besties: ${"🍕".repeat(50)} (debt #42)`);
+    expect(mixed).toBe(`Broke Besties: a${"🍕".repeat(50)} (debt #42)`);
+    for (const text of [ascii, pizza, mixed]) {
+      expect(text.length).toBeLessThanOrEqual(127);
+      expect(text.isWellFormed()).toBe(true);
+    }
   });
 
   it("marks the payment FAILED and answers 502 when PayPal fails", async () => {

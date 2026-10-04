@@ -462,9 +462,15 @@ export class PaypalService {
       });
     });
 
+    // PayPal allows 127 characters (counted in UTF-16 units): clip the user's text by whole
+    // code points so the "(debt #id)" suffix stays and no surrogate pair is split.
     const prefix = "Broke Besties: ";
     const suffix = ` (debt #${debtId})`;
-    const text = debt.description?.trim();
+    let text = "";
+    for (const char of debt.description?.trim() ?? "") {
+      if (prefix.length + text.length + char.length + suffix.length > 127) break;
+      text += char;
+    }
     const returnUrl = `${appUrl}/paypal/return?pp=${encodeURIComponent(payment.id)}&platform=${platform}`;
     try {
       const order = await paypalFetch<PaypalOrder | null>("/v2/checkout/orders", {
@@ -476,10 +482,7 @@ export class PaypalService {
             {
               reference_id: `debt-${debtId}`,
               custom_id: payment.id,
-              // PayPal allows at most 127 characters here.
-              description: text
-                ? `${prefix}${Array.from(text).slice(0, 127 - prefix.length - suffix.length).join("")}${suffix}`
-                : `${prefix}debt #${debtId}`,
+              description: text ? `${prefix}${text}${suffix}` : `${prefix}debt #${debtId}`,
               amount: { currency_code: "USD", value: centsToAmount(amountCents) },
               payee: { merchant_id: payeePayerId },
             },
