@@ -137,7 +137,7 @@ These are settled. Re-open one only with a reason the doc didn't consider.
 
 ## Out-of-scope bugs found while writing this spec
 
-These are in `apps/web`. The first three are fixed in Phase 0 (backend.md Part A) because mobile depends on them; the fourth is a separate fix.
+These are in `apps/web`. The first three are fixed in Phase 0 (backend.md Part A) because mobile depends on them; the fourth was fixed alongside them (the Stripe webhook now returns 500 without `STRIPE_WEBHOOK_SECRET` and 400 without a signature).
 
 - `receipt.service.ts` calls the async `canAccessReceipt()` without `await` (lines 151 and 181). A Promise is always truthy, so the access check never denies. Any signed-in user can read or re-parse any receipt whose id they know.
 - The `handle_new_user` trigger raises an exception when an OAuth user has metadata but no name. Sign in with Apple doesn't put the name in its token, so every new Apple account would fail to be created.
