@@ -170,7 +170,7 @@ Exactly as the spec tables, plus rule 2 (JSON/type validation → 400). Notes:
 `paypalWebBase()` (`https://www.sandbox.paypal.com` / `https://www.paypal.com`),
 `getPaypalCredentials()` / `getAppUrl()` (trailing `/` trimmed) / state secret (≥ 32 chars) —
 each throws `PaypalConfigError` when missing; `getAppAccessToken()` (client-credentials, cached
-until `expires_in - 60s`, in-flight requests de-duplicated, cache keyed by env + client id);
+until `expires_in - 60s`, cache keyed by env + client id; no in-flight de-dup — ponytail ruling);
 `paypalFetch(path, init & { requestId?, accessToken? })` (Bearer + JSON headers,
 `PayPal-Request-Id` when given, 30 s timeout, one retry with a fresh app token on 401, throws
 `PaypalError` parsed from `{ name, message, debug_id, details }` or OAuth
