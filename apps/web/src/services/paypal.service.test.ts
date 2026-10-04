@@ -2075,7 +2075,7 @@ describe("handleWebhook", () => {
     );
   });
 
-  it("refunds a reversed payment found through related_ids.capture_id", async () => {
+  it("refunds a reversed payment in full, found through related_ids.capture_id", async () => {
     paymentFoundBy("captureId", "CAPTURE-1", paymentWithParties({ status: "COMPLETED", captureId: "CAPTURE-1" }));
     const tx = createMockPrisma();
     tx.paypalPayment.updateMany.mockResolvedValue({ count: 1 });
@@ -2084,12 +2084,107 @@ describe("handleWebhook", () => {
     const result = await paypalService.handleWebhook({
       event_type: "PAYMENT.CAPTURE.REVERSED",
       resource_type: "refund",
-      resource: { id: "REVERSAL-1", supplementary_data: { related_ids: { capture_id: "CAPTURE-1" } } },
+      resource: {
+        id: "REVERSAL-1",
+        amount: { currency_code: "USD", value: "10.00" }, // a reversal is never partial
+        supplementary_data: { related_ids: { capture_id: "CAPTURE-1" } },
+      },
     });
 
     expect(result).toEqual({ handled: true });
     expect(db.paypalPayment.findUnique).toHaveBeenCalledWith({ where: { captureId: "CAPTURE-1" } });
     expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  describe("refund amounts", () => {
+    const usd = (value: string) => ({ currency_code: "USD", value });
+    /** A PAYMENT.CAPTURE.REFUNDED event for CAPTURE-1 (a $42.50 payment), found by its 'up' link. */
+    const refundEvent = (resource: Record<string, unknown>) => ({
+      event_type: "PAYMENT.CAPTURE.REFUNDED",
+      resource_type: "refund",
+      resource: {
+        id: "REFUND-1",
+        status: "COMPLETED",
+        links: [{ rel: "up", href: "https://api-m.sandbox.paypal.com/v2/payments/captures/CAPTURE-1" }],
+        ...resource,
+      },
+    });
+    const refundEmails = () =>
+      email.sendPaypalPaymentRefunded.mock.calls.map(([params]) => [params.to, params.refundedAmount, params.debtReopened]);
+    /** The full-refund transaction (markRefunded); the debt isn't reopened in these tests. */
+    function mockFullRefund() {
+      const tx = createMockPrisma();
+      tx.paypalPayment.updateMany.mockResolvedValue({ count: 1 });
+      db.$transaction.mockImplementationOnce(async (fn: (client: unknown) => unknown) => fn(tx));
+      return tx;
+    }
+
+    beforeEach(() =>
+      paymentFoundBy("captureId", "CAPTURE-1", paymentWithParties({ status: "COMPLETED", captureId: "CAPTURE-1" })),
+    );
+
+    it("keeps the payment and the debt as they are for a partial refund, and tells both people", async () => {
+      // $10 now, after an earlier $5: the email names this refund, not the total.
+      const result = await paypalService.handleWebhook(
+        refundEvent({ amount: usd("10.00"), seller_payable_breakdown: { total_refunded_amount: usd("15.00") } }),
+      );
+
+      expect(result).toEqual({ handled: true });
+      expect(db.$transaction).not.toHaveBeenCalled();
+      expect(db.paypalPayment.updateMany).not.toHaveBeenCalled();
+      expect(db.debt.updateMany).not.toHaveBeenCalled();
+      expect(refundEmails()).toEqual([
+        ["larry@example.com", 10, false],
+        ["bob@example.com", 10, false],
+      ]);
+      expect(email.sendPaypalPaymentRefunded).toHaveBeenCalledWith(expect.objectContaining({ amount: 42.5 }));
+    });
+
+    it("refunds in full once the refunds add up to the paid amount", async () => {
+      // The second partial refund: $32.50 now, $42.50 refunded in total.
+      const tx = mockFullRefund();
+
+      await paypalService.handleWebhook(
+        refundEvent({ amount: usd("32.50"), seller_payable_breakdown: { total_refunded_amount: usd("42.50") } }),
+      );
+
+      expect(tx.paypalPayment.updateMany).toHaveBeenCalledWith({
+        where: { id: "pay_1", status: { not: "REFUNDED" } },
+        data: { status: "REFUNDED" },
+      });
+      expect(refundEmails()).toEqual([
+        ["larry@example.com", undefined, false],
+        ["bob@example.com", undefined, false],
+      ]);
+    });
+
+    it("uses the refund's own amount when there's no breakdown, for partial and full refunds", async () => {
+      await paypalService.handleWebhook(refundEvent({ amount: usd("10.00") }));
+      expect(db.$transaction).not.toHaveBeenCalled();
+      expect(refundEmails()).toEqual([
+        ["larry@example.com", 10, false],
+        ["bob@example.com", 10, false],
+      ]);
+
+      email.sendPaypalPaymentRefunded.mockClear();
+      const tx = mockFullRefund();
+      await paypalService.handleWebhook(refundEvent({ amount: usd("42.50") }));
+      expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
+      expect(refundEmails()).toEqual([
+        ["larry@example.com", undefined, false],
+        ["bob@example.com", undefined, false],
+      ]);
+    });
+
+    it("refunds in full when neither amount can be read", async () => {
+      const tx = mockFullRefund();
+
+      await paypalService.handleWebhook(
+        refundEvent({ amount: usd("ten"), seller_payable_breakdown: { total_refunded_amount: {} } }),
+      );
+
+      expect(tx.paypalPayment.updateMany).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("ignores events for unknown payments and event types it doesn't handle", async () => {

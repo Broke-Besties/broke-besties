@@ -93,11 +93,13 @@ function paymentEmail(payment: {
   };
 }
 
-/** The parts of a webhook resource (order, capture or refund) used to find our payment. */
+/** The parts of a webhook resource (order, capture or refund) used to find and handle our payment. */
 type WebhookResource = PaypalCapture & {
   purchase_units?: { custom_id?: string }[];
   supplementary_data?: { related_ids?: { order_id?: string; capture_id?: string } };
   links?: { rel?: string; href?: string }[];
+  /** On a refund: everything refunded from the capture so far, this refund included. */
+  seller_payable_breakdown?: { total_refunded_amount?: { value?: string } };
 };
 
 const WEBHOOK_EVENTS = [
@@ -862,16 +864,34 @@ export class PaypalService {
   }
 
   /**
-   * Refund/reversal path (spec P.8 `markRefunded`). Idempotent.
-   * ponytail: a partial refund counts as a full one (payment REFUNDED, debt reopened). Compare
-   * the refunded amount with amountCents if partial refunds ever matter.
+   * Refund/reversal path (spec P.8 `markRefunded`). Idempotent. A full refund or reversal marks
+   * the payment REFUNDED and reopens the debt if this capture settled it. With `partialCents` (a
+   * partial refund of that many cents), the payment and the debt stay as they are: both people
+   * are told how much was refunded, and change the debt themselves if the amount owed changed.
    */
-  async markRefunded(paymentId: string): Promise<void> {
+  async markRefunded(paymentId: string, partialCents?: number): Promise<void> {
     const payment = await prisma.paypalPayment.findUnique({
       where: { id: paymentId },
       include: paymentWithPartiesInclude,
     });
     if (!payment || payment.status === "REFUNDED") return;
+
+    const emailBoth = (debtReopened: boolean) =>
+      Promise.all(
+        [payment.payee, payment.payer].map((person) =>
+          emailService.sendPaypalPaymentRefunded({
+            to: person.email,
+            recipientName: person.name || person.email,
+            ...paymentEmail(payment),
+            debtReopened,
+            refundedAmount: partialCents === undefined ? undefined : partialCents / 100,
+          }),
+        ),
+      );
+    if (partialCents !== undefined) {
+      await emailBoth(false);
+      return;
+    }
 
     const debtReopened = await prisma.$transaction(async (tx) => {
       const claimed = await tx.paypalPayment.updateMany({
@@ -914,17 +934,7 @@ export class PaypalService {
       return true;
     });
 
-    if (debtReopened === null) return;
-    await Promise.all(
-      [payment.payee, payment.payer].map((person) =>
-        emailService.sendPaypalPaymentRefunded({
-          to: person.email,
-          recipientName: person.name || person.email,
-          ...paymentEmail(payment),
-          debtReopened,
-        }),
-      ),
-    );
+    if (debtReopened !== null) await emailBoth(debtReopened);
   }
 
   /**
@@ -1064,7 +1074,17 @@ export class PaypalService {
     } else if (type === "PAYMENT.CAPTURE.DENIED") {
       await this.markFailed(payment.id, `PayPal denied capture ${resource.id}`);
     } else {
-      await this.markRefunded(payment.id);
+      // A refund below the paid amount (counting earlier ones) is partial; unreadable amounts
+      // and reversals take the whole payment back.
+      const refunded = amountToCents(resource.amount?.value);
+      const total =
+        type === "PAYMENT.CAPTURE.REFUNDED"
+          ? (amountToCents(resource.seller_payable_breakdown?.total_refunded_amount?.value) ?? refunded)
+          : null;
+      await this.markRefunded(
+        payment.id,
+        total !== null && total < payment.amountCents ? (refunded ?? total) : undefined,
+      );
     }
     return { handled: true };
   }

@@ -796,12 +796,17 @@ export class EmailService {
     description: string | null;
     debtLink: string;
     debtReopened: boolean;
+    /** A partial refund of this many dollars (the payment and the debt didn't change). */
+    refundedAmount?: number;
   }): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await resend.emails.send({
         from: EmailService.FROM_EMAIL,
         to: params.to,
-        subject: `PayPal payment of $${params.amount.toFixed(2)} was refunded`,
+        subject:
+          params.refundedAmount === undefined
+            ? `PayPal payment of $${params.amount.toFixed(2)} was refunded`
+            : `$${params.refundedAmount.toFixed(2)} of a $${params.amount.toFixed(2)} PayPal payment was refunded`,
         react: PaypalPaymentRefundedEmail(params),
       });
 

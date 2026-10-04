@@ -19,6 +19,8 @@ interface PaypalPaymentRefundedEmailProps {
   debtLink?: string;
   /** The refund put the debt back to pending. */
   debtReopened?: boolean;
+  /** A partial refund of this many dollars: the payment and the debt didn't change. */
+  refundedAmount?: number;
 }
 
 export const PaypalPaymentRefundedEmail = ({
@@ -29,33 +31,45 @@ export const PaypalPaymentRefundedEmail = ({
   description = null,
   debtLink = "#",
   debtReopened = false,
+  refundedAmount,
 }: PaypalPaymentRefundedEmailProps) => {
   const amountText = `$${amount.toFixed(2)}`;
   const forText = description ? ` for ${description}` : "";
+  const partialText = refundedAmount === undefined ? null : `$${refundedAmount.toFixed(2)}`;
 
   return (
     <Html>
       <Head />
       <Body style={main}>
-        <Preview>{`A PayPal payment of ${amountText} was refunded`}</Preview>
+        <Preview>
+          {partialText
+            ? `${partialText} of a ${amountText} PayPal payment was refunded`
+            : `A PayPal payment of ${amountText} was refunded`}
+        </Preview>
         <Container style={container}>
-          <Heading style={h1}>PayPal Payment Refunded</Heading>
+          <Heading style={h1}>
+            {partialText ? "PayPal Payment Partly Refunded" : "PayPal Payment Refunded"}
+          </Heading>
 
           <Text style={text}>Hi {recipientName},</Text>
 
           <Text style={text}>
-            {`The PayPal payment of ${amountText} from ${borrowerName} to ${lenderName}${forText} was refunded or reversed in PayPal.`}
+            {partialText
+              ? `${lenderName} refunded ${partialText} of the ${amountText} PayPal payment from ${borrowerName}${forText}.`
+              : `The PayPal payment of ${amountText} from ${borrowerName} to ${lenderName}${forText} was refunded or reversed in PayPal.`}
           </Text>
 
           <Text style={text}>
-            {debtReopened
-              ? "The debt is pending again, so it still needs to be paid."
-              : "The debt's status didn't change."}
+            {partialText
+              ? "The debt didn't change: if it was marked paid, it still is. If the amount owed changed, update the debt in Broke Besties."
+              : debtReopened
+                ? "The debt is pending again, so it still needs to be paid."
+                : "The debt's status didn't change."}
           </Text>
 
           <Section style={detailsContainer}>
-            <Text style={statusBadge}>↩ Refunded</Text>
-            <Text style={amountStyle}>{amountText}</Text>
+            <Text style={statusBadge}>{partialText ? "↩ Partly refunded" : "↩ Refunded"}</Text>
+            <Text style={amountStyle}>{partialText ?? amountText}</Text>
             {description && <Text style={descriptionStyle}>{description}</Text>}
           </Section>
 
