@@ -550,38 +550,46 @@ describe("createDebtOrder", () => {
     expect(paypalRequests).toHaveLength(0);
   });
 
-  it("applies the 3-hour window to CREATED payments only; APPROVED blocks at any age", async () => {
+  it("blocks on CREATED orders for 3 hours, CREATED rows without an order for 2 minutes, APPROVED always", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-04T12:00:00Z"));
-    const fiveHoursAgo = new Date("2026-10-04T07:00:00Z");
-    let rows: { id: string; status: string; orderId: string; createdAt: Date }[] = [];
+    const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+    type Row = { id: string; status: string; orderId: string | null; createdAt: Date };
+    type Condition = { status: string; orderId?: null | { not: null }; createdAt?: { gt: Date } };
+    let rows: Row[] = [];
     // Evaluates the in-progress query like Postgres would (checked against a real DB too).
-    db.paypalPayment.findFirst.mockImplementation(
-      async ({ where }: { where: { OR: { status: string; createdAt?: { gt: Date } }[] } }) =>
-        rows.find((row) =>
-          where.OR.some(
-            (c) => row.status === c.status && (!c.createdAt || row.createdAt > c.createdAt.gt),
-          ),
-        ) ?? null,
+    db.paypalPayment.findFirst.mockImplementation(async ({ where }: { where: { OR: Condition[] } }) =>
+      rows.find((row) =>
+        where.OR.some(
+          (c) =>
+            row.status === c.status &&
+            (c.orderId === undefined || (c.orderId === null ? row.orderId === null : row.orderId !== null)) &&
+            (!c.createdAt || row.createdAt > c.createdAt.gt),
+        ),
+      ) ?? null,
     );
+    const blocked = async (row: Row) => {
+      rows = [row];
+      db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+      db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
+      onPaypal("POST", "/v2/checkout/orders", json(201, { id: "ORDER-NEW", links: [{ rel: "payer-action", href: "https://pp.example/x" }] }));
+      const result = await order().catch((error: unknown) => error);
+      paypalRoutes.clear();
+      return result instanceof PaypalFlowError && result.status === 409;
+    };
 
-    rows = [{ id: "pay_old", status: "APPROVED", orderId: "ORDER-OLD", createdAt: fiveHoursAgo }];
-    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
-    flowError(409, "A PayPal payment is already in progress for this debt", {
-      paymentId: "pay_old",
-      approveUrl: null,
-    }).check(await rejection(order()));
-
-    rows = [{ id: "pay_old", status: "CREATED", orderId: "ORDER-OLD", createdAt: fiveHoursAgo }];
-    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
-    mockOrderCreated();
-    expect(await order()).toMatchObject({ paymentId: "pay_new" });
+    expect(await blocked({ id: "p", status: "APPROVED", orderId: "O", createdAt: ago(300) })).toBe(true);
+    expect(await blocked({ id: "p", status: "CREATED", orderId: "O", createdAt: ago(179) })).toBe(true);
+    expect(await blocked({ id: "p", status: "CREATED", orderId: "O", createdAt: ago(181) })).toBe(false);
+    expect(await blocked({ id: "p", status: "CREATED", orderId: null, createdAt: ago(1) })).toBe(true);
+    expect(await blocked({ id: "p", status: "CREATED", orderId: null, createdAt: ago(3) })).toBe(false);
 
     expect(db.paypalPayment.findFirst).toHaveBeenLastCalledWith({
       where: {
         debtId: 42,
         OR: [
-          { status: "CREATED", createdAt: { gt: new Date("2026-10-04T09:00:00Z") } },
+          { status: "CREATED", orderId: { not: null }, createdAt: { gt: new Date("2026-10-04T09:00:00Z") } },
+          { status: "CREATED", orderId: null, createdAt: { gt: new Date("2026-10-04T11:58:00Z") } },
           { status: "APPROVED" },
         ],
       },

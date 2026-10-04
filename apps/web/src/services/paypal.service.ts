@@ -26,6 +26,7 @@ import { emailService } from "./email.service";
 
 const CONNECT_SCOPES = "openid email https://uri.paypal.com/services/paypalattributes";
 const ORDER_RESUMABLE_MS = 3 * 60 * 60 * 1000;
+const ORDER_CREATION_MS = 2 * 60 * 1000;
 
 /** The parts of a PayPal order (Orders v2) we read. */
 type PaypalOrder = {
@@ -414,7 +415,18 @@ export class PaypalService {
         where: {
           debtId,
           OR: [
-            { status: "CREATED", createdAt: { gt: new Date(Date.now() - ORDER_RESUMABLE_MS) } },
+            {
+              status: "CREATED",
+              orderId: { not: null },
+              createdAt: { gt: new Date(Date.now() - ORDER_RESUMABLE_MS) },
+            },
+            // No order id yet: creating it is still running, or the function died before saving
+            // it (maxDuration can be shorter than our 30 s PayPal timeout). Nobody can pay it.
+            {
+              status: "CREATED",
+              orderId: null,
+              createdAt: { gt: new Date(Date.now() - ORDER_CREATION_MS) },
+            },
             // APPROVED = PayPal returned a PENDING capture (e.g. an eCheck can take days): money
             // is in flight, so it blocks at any age. ponytail: if that capture never resolves
             // (missed webhooks), PayPal stays blocked for this debt; the borrower can still
