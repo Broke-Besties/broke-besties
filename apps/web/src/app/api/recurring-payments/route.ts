@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
       description,
       frequency,
       lenderId: user.id,
-      borrowers,
+      // Each borrower is { userId } or { email }, plus splitPercentage
+      borrowers: await recurringPaymentService.resolveBorrowerInputs(borrowers),
     });
 
     return NextResponse.json(
@@ -35,6 +36,7 @@ export async function POST(request: NextRequest) {
       message === "Valid amount is required" ||
       message === "Frequency must be at least 1 day" ||
       message === "At least one borrower is required" ||
+      message === "Each borrower needs an email or userId" ||
       message === "Split percentages must sum to 100%" ||
       message === "All split percentages must be positive" ||
       message === "Cannot add the same borrower multiple times"

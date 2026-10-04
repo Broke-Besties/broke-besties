@@ -108,6 +108,59 @@ describe("recurringPaymentService", () => {
     });
   });
 
+  describe("resolveBorrowerInputs", () => {
+    it("passes userIds through and looks emails up trimmed and lowercased", async () => {
+      db.user.findUnique.mockResolvedValueOnce({ id: "user-bob" });
+
+      const borrowers = await recurringPaymentService.resolveBorrowerInputs([
+        { userId: BORROWER_ID, splitPercentage: 60 },
+        { email: "  Bob@X.com ", splitPercentage: 40 },
+      ]);
+
+      expect(borrowers).toEqual([
+        { userId: BORROWER_ID, splitPercentage: 60 },
+        { userId: "user-bob", splitPercentage: 40 },
+      ]);
+      expect(db.user.findUnique).toHaveBeenCalledTimes(1);
+      expect(db.user.findUnique).toHaveBeenCalledWith({
+        where: { email: "bob@x.com" },
+        select: { id: true },
+      });
+    });
+
+    it("rejects an email nobody signed up with", async () => {
+      db.user.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        recurringPaymentService.resolveBorrowerInputs([{ email: "Bob@x.com", splitPercentage: 100 }]),
+      ).rejects.toThrow("User with email bob@x.com not found");
+    });
+
+    it("requires an email or userId on every borrower", async () => {
+      for (const borrower of [
+        { splitPercentage: 100 },
+        { email: "  ", userId: "", splitPercentage: 100 },
+        { email: 5, splitPercentage: 100 },
+        null,
+      ]) {
+        await expect(recurringPaymentService.resolveBorrowerInputs([borrower])).rejects.toThrow(
+          "Each borrower needs an email or userId",
+        );
+      }
+    });
+
+    it("rejects a non-array borrower list and non-numeric splits", async () => {
+      for (const inputs of [undefined, {}, "bob@x.com"]) {
+        await expect(recurringPaymentService.resolveBorrowerInputs(inputs)).rejects.toThrow(
+          "At least one borrower is required",
+        );
+      }
+      await expect(
+        recurringPaymentService.resolveBorrowerInputs([{ userId: BORROWER_ID, splitPercentage: "100" }]),
+      ).rejects.toThrow("All split percentages must be positive");
+    });
+  });
+
   describe("getUserRecurringPayments", () => {
     it("builds the where clause from type and status filters", async () => {
       db.recurringPayment.findMany.mockResolvedValueOnce([]);
