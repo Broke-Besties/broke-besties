@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PaypalConfigError } from "@/lib/paypal-errors";
 import { paypalErrorResponse } from "@/lib/paypal-http";
 import { paypalService, type PaypalWebhookEvent } from "@/services/paypal.service";
 
@@ -18,9 +17,8 @@ export async function POST(request: NextRequest) {
   try {
     verified = await paypalService.verifyWebhookSignature(request.headers, rawBody);
   } catch (error) {
-    if (!(error instanceof PaypalConfigError)) return paypalErrorResponse(error);
-    console.error("PayPal webhook is not configured:", error.message);
-    return NextResponse.json({ error: "PayPal webhook is not configured" }, { status: 500 });
+    // Missing config is a 500, never an unverified pass-through
+    return paypalErrorResponse(error, { configStatus: 500 });
   }
   if (!verified) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -29,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     await paypalService.handleWebhook(event);
   } catch (error) {
-    // A 5xx makes PayPal redeliver the event later; handling is idempotent.
+    // Any non-2xx makes PayPal redeliver the event later; handling is idempotent.
     return paypalErrorResponse(error, { configStatus: 500 });
   }
 

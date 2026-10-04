@@ -81,7 +81,7 @@ describe("POST /api/paypal/webhook (public)", () => {
   });
 
   it.each([
-    [new PaypalConfigError("PAYPAL_WEBHOOK_ID is not set"), "PayPal webhook is not configured"],
+    [new PaypalConfigError("PAYPAL_WEBHOOK_ID is not set"), "PayPal is not configured"],
     [new Error("getaddrinfo ENOTFOUND api-m.sandbox.paypal.com"), "Internal server error"],
   ])("answers 500 when verification throws %s", async (error, message) => {
     vi.mocked(paypalService.verifyWebhookSignature).mockRejectedValue(error);

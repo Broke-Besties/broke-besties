@@ -260,7 +260,7 @@ describe("POST /api/debts/[id]/paypal/order", () => {
     expect(paypalService.createDebtOrder).not.toHaveBeenCalled();
   });
 
-  it.each(["abc", "1.5", "12abc", "0", "-3", "99999999999"])(
+  it.each(["abc", "1.5", "12abc", "0", "-3", "99999999999", "1e2", "0x10", "+5", "5.0", " 7 "])(
     "returns 400 for debt id %j",
     async (id) => {
       signIn();
@@ -494,5 +494,16 @@ describe("GET /paypal/return (public)", () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe(location);
+  });
+});
+
+describe("paypalErrorResponse", () => {
+  it("always answers { error: message }, even if a flow error's body has an error key", async () => {
+    const { paypalErrorResponse } = await import("@/lib/paypal-http");
+
+    const res = paypalErrorResponse(new PaypalFlowError(409, "Busy", { error: "spoofed", paymentId: "p1" }));
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "Busy", paymentId: "p1" });
   });
 });
