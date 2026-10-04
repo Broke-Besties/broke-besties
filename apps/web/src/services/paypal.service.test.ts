@@ -1755,7 +1755,7 @@ describe("handleWebhook", () => {
   };
 
   it("rethrows an unknown capture outcome so PayPal redelivers the event (same key)", async () => {
-    for (const status of ["CREATED", "APPROVED"]) {
+    for (const status of ["CREATED", "APPROVED", "CANCELLED"]) {
       db.paypalPayment.findUnique
         .mockResolvedValueOnce(paymentRow({ status }))
         .mockResolvedValueOnce({ status }); // re-read: the row is untouched

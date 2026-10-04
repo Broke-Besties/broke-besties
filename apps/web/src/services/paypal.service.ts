@@ -977,7 +977,7 @@ export class PaypalService {
             where: { id: payment.id },
             select: { status: true },
           });
-          if (current?.status === "CREATED" || current?.status === "APPROVED") throw error;
+          if (["CREATED", "APPROVED", "CANCELLED"].includes(current?.status ?? "")) throw error;
         }
         console.error("[PaypalService] Webhook capture failed:", { paymentId: payment.id, error: error.message });
       }
