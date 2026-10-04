@@ -460,8 +460,19 @@ describe("createDebtOrder", () => {
     transactions: [],
     ...overrides,
   });
-  const order = (params: Partial<Parameters<typeof paypalService.createDebtOrder>[0]> = {}) =>
+  type OrderParams = Partial<Parameters<typeof paypalService.createDebtOrder>[0]>;
+  const order = (params: OrderParams = {}) =>
     paypalService.createDebtOrder({ debtId: 42, userId: BORROWER_ID, platform: "web", ...params });
+  /** The in-progress lookup's row: by default a web order for the lender's current account. */
+  const inProgressRow = (overrides: Record<string, unknown> = {}) => ({
+    id: "pay_old",
+    status: "CREATED",
+    orderId: "ORDER-OLD",
+    platform: "web",
+    returnScheme: null,
+    payeePayerId: "LENDER-PAYER",
+    ...overrides,
+  });
 
   function mockOrderCreated(links = [{ rel: "payer-action", href: "https://pp.example/checkout?token=ORDER-NEW" }]) {
     db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
@@ -578,6 +589,9 @@ describe("createDebtOrder", () => {
       createdAt: Date;
       captureId?: string | null;
       failureReason?: string | null;
+      platform?: string;
+      returnScheme?: string | null;
+      payeePayerId?: string;
     };
     type Condition = {
       status: string;
@@ -601,7 +615,7 @@ describe("createDebtOrder", () => {
       ) ?? null,
     );
     const blocked = async (row: Row) => {
-      rows = [row];
+      rows = [{ ...inProgressRow(), ...row }];
       db.debt.findUnique.mockResolvedValueOnce(payableDebt());
       db.paypalPayment.create.mockResolvedValueOnce({ id: "pay_new" });
       onPaypal("POST", "/v2/checkout/orders", json(201, { id: "ORDER-NEW", links: [{ rel: "payer-action", href: "https://pp.example/x" }] }));
@@ -637,25 +651,84 @@ describe("createDebtOrder", () => {
         ],
       },
       orderBy: { createdAt: "desc" },
-      select: { id: true, status: true, orderId: true },
+      select: { id: true, status: true, orderId: true, platform: true, returnScheme: true, payeePayerId: true },
     });
   });
 
-  it("returns the in-progress payment so the client can resume it", async () => {
+  it.each<[string, Record<string, unknown>, OrderParams]>([
+    ["web order", {}, {}],
+    [
+      "iOS order from the same app variant",
+      { platform: "ios", returnScheme: "brokebesties-preview" },
+      { platform: "ios", appVariant: "preview" },
+    ],
+  ])("returns an in-progress %s for the same payee so the client can resume it", async (_label, row, params) => {
     db.debt.findUnique.mockResolvedValueOnce(payableDebt());
-    db.paypalPayment.findFirst.mockResolvedValueOnce({ id: "pay_old", status: "CREATED", orderId: "ORDER-OLD" });
+    db.paypalPayment.findFirst.mockResolvedValueOnce(inProgressRow(row));
 
     flowError(409, "A PayPal payment is already in progress for this debt", {
       paymentId: "pay_old",
       approveUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-OLD",
-    }).check(await rejection(order()));
+    }).check(await rejection(order(params)));
+    expect(db.paypalPayment.updateMany).not.toHaveBeenCalled();
     expect(db.paypalPayment.create).not.toHaveBeenCalled();
   });
 
+  it.each<[string, Record<string, unknown>, OrderParams]>([
+    ["an iOS order when paying on the web", { platform: "ios", returnScheme: "brokebesties" }, {}],
+    ["a web order when paying in the app", {}, { platform: "ios" }],
+    [
+      "an order from another iOS app variant",
+      { platform: "ios", returnScheme: "brokebesties-preview" },
+      { platform: "ios", appVariant: "development" },
+    ],
+    ["an order paying the lender's previous PayPal account", { payeePayerId: "OLD-PAYER" }, {}],
+  ])("replaces %s with a new order", async (_label, row, params) => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    db.paypalPayment.findFirst.mockResolvedValueOnce(inProgressRow(row));
+    let replacedInTransaction: boolean | undefined;
+    db.paypalPayment.updateMany.mockImplementationOnce(async () => {
+      replacedInTransaction = inTransaction;
+      return { count: 1 };
+    });
+    mockOrderCreated();
+
+    expect(await order(params)).toEqual({
+      paymentId: "pay_new",
+      approveUrl: "https://pp.example/checkout?token=ORDER-NEW",
+    });
+    // Under the debt row lock, guarded on CREATED: FAILED is terminal for capture, so approving
+    // the old order later moves no money.
+    expect(db.paypalPayment.updateMany).toHaveBeenCalledWith({
+      where: { id: "pay_old", status: "CREATED" },
+      data: { status: "FAILED", failureReason: "Replaced by a new PayPal payment" },
+    });
+    expect(replacedInTransaction).toBe(true);
+    expect(db.paypalPayment.create.mock.calls[0][0].data).toMatchObject({
+      payeePayerId: "LENDER-PAYER",
+      platform: params.platform ?? "web",
+    });
+  });
+
+  it("still answers in progress when the order to replace changed meanwhile", async () => {
+    db.debt.findUnique.mockResolvedValueOnce(payableDebt());
+    db.paypalPayment.findFirst.mockResolvedValueOnce(inProgressRow({ platform: "ios", returnScheme: "brokebesties" }));
+    db.paypalPayment.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    flowError(409, "A PayPal payment is already in progress for this debt", {
+      paymentId: "pay_old",
+      approveUrl: null,
+    }).check(await rejection(order()));
+    expect(db.paypalPayment.create).not.toHaveBeenCalled();
+    expect(paypalRequests).toHaveLength(0);
+  });
+
   it("blocks without a resume link while a capture is pending or the order isn't created yet", async () => {
+    // Never replaced, even from another platform or for another payee: only a CREATED order is.
+    const elsewhere = { platform: "ios", returnScheme: "brokebesties", payeePayerId: "OLD-PAYER" };
     for (const inProgress of [
-      { id: "pay_old", status: "APPROVED", orderId: "ORDER-OLD" },
-      { id: "pay_old", status: "CREATED", orderId: null },
+      inProgressRow({ status: "APPROVED", ...elsewhere }),
+      inProgressRow({ orderId: null, ...elsewhere }),
     ]) {
       db.debt.findUnique.mockResolvedValueOnce(payableDebt());
       db.paypalPayment.findFirst.mockResolvedValueOnce(inProgress);
@@ -664,6 +737,7 @@ describe("createDebtOrder", () => {
         approveUrl: null,
       }).check(await rejection(order()));
     }
+    expect(db.paypalPayment.updateMany).not.toHaveBeenCalled();
     expect(db.paypalPayment.create).not.toHaveBeenCalled();
   });
 

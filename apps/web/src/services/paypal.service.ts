@@ -346,7 +346,10 @@ export class PaypalService {
         orderBy: { createdAt: "desc" },
         select: { id: true, status: true, amountCents: true, createdAt: true, completedAt: true },
       }),
-      prisma.paypalPayment.findFirst({ where: { debtId: debt.id, ...UNMATCHED_CAPTURE }, select: { id: true } }),
+      prisma.paypalPayment.findFirst({
+        where: { debtId: debt.id, ...UNMATCHED_CAPTURE },
+        select: { id: true },
+      }),
     ]);
     return {
       lenderConnected: !!lenderAccount,
@@ -372,7 +375,9 @@ export class PaypalService {
    *     payment with an order id from the last 3 hours, a CREATED one without an order id from
    *     the last 2 minutes, or an APPROVED one of any age (body `{ paymentId, approveUrl }`;
    *     approveUrl is null unless the in-progress payment is CREATED with an order id, i.e.
-   *     resumable);
+   *     resumable). A resumable payment whose platform, return scheme or payee (the lender's
+   *     current payer id) differs from this request is instead marked FAILED ("Replaced by a new
+   *     PayPal payment") and a new order is created;
    * 409 `A PayPal payment for this debt couldn't be matched. Check your email before paying again.`
    *     while a FAILED payment holds a capture that didn't match it (money moved), at any age
    *     until it's refunded (body `{ paymentId, approveUrl: null }`);
@@ -415,6 +420,7 @@ export class PaypalService {
       throw new PaypalFlowError(400, "This debt amount can't be paid with PayPal");
     }
 
+    const returnScheme = platform === "ios" ? schemeForVariant(appVariant) : null;
     // The debt row lock makes the in-progress check and the insert atomic per debt, so two
     // concurrent requests can't both start an order. PayPal is called after the commit.
     const payment = await prisma.$transaction(async (tx) => {
@@ -446,7 +452,14 @@ export class PaypalService {
           ],
         },
         orderBy: { createdAt: "desc" },
-        select: { id: true, status: true, orderId: true },
+        select: {
+          id: true,
+          status: true,
+          orderId: true,
+          platform: true,
+          returnScheme: true,
+          payeePayerId: true,
+        },
       });
       if (inProgress?.status === "FAILED") {
         throw new PaypalFlowError(
@@ -456,13 +469,30 @@ export class PaypalService {
         );
       }
       if (inProgress) {
-        throw new PaypalFlowError(409, "A PayPal payment is already in progress for this debt", {
-          paymentId: inProgress.id,
-          approveUrl:
-            inProgress.status === "CREATED" && inProgress.orderId
-              ? checkoutUrl(inProgress.orderId)
-              : null,
-        });
+        const resumeUrl =
+          inProgress.status === "CREATED" && inProgress.orderId ? checkoutUrl(inProgress.orderId) : null;
+        // An order started on another platform or app variant returns there after approval, and
+        // one for the lender's old PayPal account pays it: replace it instead of resuming it.
+        // FAILED is terminal for capture, so approving the old order later moves no money.
+        const stale =
+          resumeUrl !== null &&
+          (inProgress.platform !== platform ||
+            inProgress.returnScheme !== returnScheme ||
+            inProgress.payeePayerId !== payeePayerId);
+        const replaced =
+          stale &&
+          (
+            await tx.paypalPayment.updateMany({
+              where: { id: inProgress.id, status: "CREATED" },
+              data: { status: "FAILED", failureReason: "Replaced by a new PayPal payment" },
+            })
+          ).count > 0;
+        if (!replaced) {
+          throw new PaypalFlowError(409, "A PayPal payment is already in progress for this debt", {
+            paymentId: inProgress.id,
+            approveUrl: stale ? null : resumeUrl,
+          });
+        }
       }
 
       // The row exists before the order: its id is the order's PayPal-Request-Id and custom_id.
@@ -475,7 +505,7 @@ export class PaypalService {
           amountCents,
           currency: "USD",
           platform,
-          returnScheme: platform === "ios" ? schemeForVariant(appVariant) : null,
+          returnScheme,
         },
       });
     });
