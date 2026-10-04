@@ -257,7 +257,7 @@ export default function DebtDetailClient({
                   </p>
                 )}
 
-              {isBorrower && canAct && !paypal.lenderConnected && (
+              {paypal.enabled && isBorrower && canAct && !paypal.lenderConnected && (
                 <p className="max-w-sm text-sm text-muted-foreground">
                   {lenderName} hasn&apos;t connected PayPal
                 </p>

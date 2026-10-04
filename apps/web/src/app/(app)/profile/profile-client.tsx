@@ -56,6 +56,8 @@ type User = {
 
 type ProfilePageClientProps = {
   user: User
+  /** The server has a full PayPal configuration; without it the PayPal card stays hidden. */
+  paypalEnabled: boolean
   paypalAccount: PaypalAccountInfo | null
   paypalStatus?: string
   paypalReason?: string
@@ -77,6 +79,7 @@ function formatDate(date: Date | string) {
 
 export default function ProfilePageClient({
   user,
+  paypalEnabled,
   paypalAccount,
   paypalStatus,
   paypalReason,
@@ -286,68 +289,70 @@ export default function ProfilePageClient({
         </CardContent>
       </Card>
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>PayPal</CardTitle>
-          {paypalAccount ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <CardDescription className="min-w-0 break-words">
-                Connected as {paypalAccount.email}
+      {paypalEnabled && (
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <CardTitle>PayPal</CardTitle>
+            {paypalAccount ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <CardDescription className="min-w-0 break-words">
+                  Connected as {paypalAccount.email}
+                </CardDescription>
+                {paypalAccount.emailVerified && (
+                  <Badge variant="secondary">Verified</Badge>
+                )}
+              </div>
+            ) : (
+              <CardDescription>
+                Connect PayPal so friends can pay you back in one tap.
               </CardDescription>
-              {paypalAccount.emailVerified && (
-                <Badge variant="secondary">Verified</Badge>
-              )}
-            </div>
-          ) : (
-            <CardDescription>
-              Connect PayPal so friends can pay you back in one tap.
-            </CardDescription>
-          )}
-        </CardHeader>
-        <CardContent>
-          {paypalAccount ? (
-            <Button
-              variant="outline"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setConfirmDisconnect(true)}
-              aria-label="Disconnect PayPal"
-            >
-              Disconnect
-            </Button>
-          ) : (
-            <Button onClick={handleConnectPaypal} disabled={paypalPending}>
-              {paypalPending && <Spinner />}
-              Connect PayPal
-            </Button>
-          )}
-        </CardContent>
-
-        <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Disconnect PayPal?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Friends won&apos;t be able to pay you with PayPal until you
-                connect again.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={paypalPending}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={paypalPending}
-                onClick={(e) => {
-                  e.preventDefault()
-                  handleDisconnectPaypal()
-                }}
+            )}
+          </CardHeader>
+          <CardContent>
+            {paypalAccount ? (
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmDisconnect(true)}
+                aria-label="Disconnect PayPal"
               >
-                {paypalPending && <Spinner />}
                 Disconnect
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </Card>
+              </Button>
+            ) : (
+              <Button onClick={handleConnectPaypal} disabled={paypalPending}>
+                {paypalPending && <Spinner />}
+                Connect PayPal
+              </Button>
+            )}
+          </CardContent>
+
+          <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Disconnect PayPal?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Friends won&apos;t be able to pay you with PayPal until you
+                  connect again.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={paypalPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  disabled={paypalPending}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleDisconnectPaypal()
+                  }}
+                >
+                  {paypalPending && <Spinner />}
+                  Disconnect
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </Card>
+      )}
 
       <Card className="max-w-2xl">
         <CardHeader>

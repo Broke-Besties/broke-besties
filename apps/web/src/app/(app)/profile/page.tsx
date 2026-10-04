@@ -1,3 +1,4 @@
+import { isPaypalConfigured } from '@/lib/paypal'
 import { getUser } from '@/lib/supabase'
 import { paypalService } from '@/services/paypal.service'
 import { userService } from '@/services/user.service'
@@ -24,6 +25,7 @@ export default async function ProfilePage({
   return (
     <ProfilePageClient
       user={userData}
+      paypalEnabled={isPaypalConfigured()}
       paypalAccount={paypalAccount}
       paypalStatus={paypal}
       paypalReason={reason}
