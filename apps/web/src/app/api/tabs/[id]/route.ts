@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api-error";
 import { getUser } from "@/lib/supabase";
 import { tabService } from "@/services/tab.service";
 
@@ -19,15 +20,6 @@ function parseId(value: string) {
 
 function badRequest(error: string) {
   return NextResponse.json({ error }, { status: 400 });
-}
-
-function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  const status = ERROR_STATUS.get(message);
-  return NextResponse.json(
-    { error: status ? message : "Internal server error" },
-    { status: status ?? 500 }
-  );
 }
 
 // PATCH /api/tabs/[id] - Update a tab (amount, description, personName, status)
@@ -80,7 +72,7 @@ export async function PATCH(
     return NextResponse.json({ tab });
   } catch (error) {
     console.error("Error updating tab:", error);
-    return errorResponse(error);
+    return errorResponse(error, ERROR_STATUS);
   }
 }
 
@@ -105,6 +97,6 @@ export async function DELETE(
     return NextResponse.json({ message: "Tab deleted successfully" });
   } catch (error) {
     console.error("Error deleting tab:", error);
-    return errorResponse(error);
+    return errorResponse(error, ERROR_STATUS);
   }
 }

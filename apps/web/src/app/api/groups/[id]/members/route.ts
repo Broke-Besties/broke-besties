@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api-error";
 import { getUser } from "@/lib/supabase";
 import { inviteService } from "@/services/invite.service";
 
@@ -45,11 +46,6 @@ export async function POST(
     return NextResponse.json({ member }, { status: 201 });
   } catch (error) {
     console.error("Add group member error:", error);
-    const message = error instanceof Error ? error.message : "";
-    const status = ERROR_STATUS.get(message);
-    return NextResponse.json(
-      { error: status ? message : "Internal server error" },
-      { status: status ?? 500 }
-    );
+    return errorResponse(error, ERROR_STATUS);
   }
 }

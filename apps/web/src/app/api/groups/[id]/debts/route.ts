@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api-error";
 import { getUser } from "@/lib/supabase";
 import { debtService } from "@/services/debt.service";
 
-const NOT_A_MEMBER = "You must be a member of the group to view its debts";
+const ERROR_STATUS = new Map([
+  ["You must be a member of the group to view its debts", 403],
+]);
 
 // GET /api/groups/[id]/debts - List a group's debts (members only)
 export async function GET(
@@ -26,10 +29,6 @@ export async function GET(
     return NextResponse.json({ debts });
   } catch (error) {
     console.error("Get group debts error:", error);
-    const forbidden = error instanceof Error && error.message === NOT_A_MEMBER;
-    return NextResponse.json(
-      { error: forbidden ? NOT_A_MEMBER : "Internal server error" },
-      { status: forbidden ? 403 : 500 }
-    );
+    return errorResponse(error, ERROR_STATUS);
   }
 }

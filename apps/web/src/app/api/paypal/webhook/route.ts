@@ -13,21 +13,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  let verified: boolean;
   try {
-    verified = await paypalService.verifyWebhookSignature(request.headers, rawBody);
-  } catch (error) {
-    // Missing config is a 500, never an unverified pass-through
-    return paypalErrorResponse(error, { configStatus: 500 });
-  }
-  if (!verified) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-  }
-
-  try {
+    if (!(await paypalService.verifyWebhookSignature(request.headers, rawBody))) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+    }
     await paypalService.handleWebhook(event);
   } catch (error) {
-    // Any non-2xx makes PayPal redeliver the event later; handling is idempotent.
+    // Missing config is a 500, never an unverified pass-through. Any non-2xx makes
+    // PayPal redeliver the event later; handling is idempotent.
     return paypalErrorResponse(error, { configStatus: 500 });
   }
 
