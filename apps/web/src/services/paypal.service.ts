@@ -285,12 +285,6 @@ export class PaypalService {
       const emailVerified = isTrue(primary ? primary.confirmed : info.email_verified);
       if (typeof email !== "string" || !email) return redirect("no_email");
 
-      const linked = await prisma.paypalAccount.findUnique({
-        where: { payerId },
-        select: { userId: true },
-      });
-      if (linked && linked.userId !== userId) return redirect("in_use");
-
       await prisma.paypalAccount.upsert({
         where: { userId },
         create: { userId, payerId, email, emailVerified },
@@ -299,7 +293,7 @@ export class PaypalService {
       return redirect();
     } catch (e) {
       if (e instanceof PaypalConfigError) return redirect("config");
-      // Unique payerId: another user linked this PayPal account at the same moment.
+      // Unique payerId: this PayPal account is already linked to another user.
       if ((e as { code?: unknown })?.code === "P2002") return redirect("in_use");
       console.error("[PaypalService] PayPal connect failed:", e);
       return redirect("error");

@@ -17,7 +17,6 @@ import { PaypalConfigError, PaypalFlowError } from "@/lib/paypal-errors";
 import {
   BORROWER_ID,
   LENDER_ID,
-  OUTSIDER_ID,
   createMockPrisma,
   makeDebt,
   type MockEmailService,
@@ -164,10 +163,8 @@ describe("handleOAuthCallback", () => {
     expect(exchange.body).toBe("grant_type=authorization_code&code=auth-code");
     const [userinfo] = paypalCalls("GET", "/v1/identity/oauth2/userinfo");
     expect(userinfo.headers.get("authorization")).toBe("Bearer user-token");
-    expect(db.paypalAccount.findUnique).toHaveBeenCalledWith({
-      where: { payerId: "PAYER-B" },
-      select: { userId: true },
-    });
+    // No pre-check read: the unique payerId constraint decides (see the in_use test).
+    expect(db.paypalAccount.findUnique).not.toHaveBeenCalled();
     expect(db.paypalAccount.upsert).toHaveBeenCalledWith({
       where: { userId: BORROWER_ID },
       create: {
@@ -189,7 +186,6 @@ describe("handleOAuthCallback", () => {
 
   it("re-connecting your own PayPal account updates it", async () => {
     mockPaypalLogin();
-    db.paypalAccount.findUnique.mockResolvedValueOnce({ userId: BORROWER_ID });
 
     expect(await callback({ code: "auth-code", state: webState() })).toBe(
       "https://app.test/profile?paypal=connected",
@@ -278,22 +274,20 @@ describe("handleOAuthCallback", () => {
     expect(db.paypalAccount.upsert).not.toHaveBeenCalled();
   });
 
-  it("refuses a PayPal account already linked to another user", async () => {
-    mockPaypalLogin();
-    db.paypalAccount.findUnique.mockResolvedValueOnce({ userId: OUTSIDER_ID });
+  it("refuses a PayPal account linked to another user (unique payerId → P2002)", async () => {
+    const linkedElsewhere = () =>
+      db.paypalAccount.upsert.mockRejectedValueOnce(
+        Object.assign(new Error("Unique constraint failed on the fields: (`payerId`)"), { code: "P2002" }),
+      );
 
+    mockPaypalLogin();
+    linkedElsewhere();
     expect(await callback({ code: "c", state: iosState() })).toBe(
       "brokebesties-dev://paypal/connected?status=error&reason=in_use",
     );
-    expect(db.paypalAccount.upsert).not.toHaveBeenCalled();
-  });
 
-  it("reports in_use when another user links the same account concurrently (P2002)", async () => {
     mockPaypalLogin();
-    db.paypalAccount.upsert.mockRejectedValueOnce(
-      Object.assign(new Error("Unique constraint failed"), { code: "P2002" }),
-    );
-
+    linkedElsewhere();
     expect(await callback({ code: "c", state: webState() })).toBe(
       "https://app.test/profile?paypal=error&reason=in_use",
     );
