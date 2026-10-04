@@ -1,11 +1,5 @@
 import { getUser } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
-import { debtService } from '@/services/debt.service'
-import { groupService } from '@/services/group.service'
-import { tabService } from '@/services/tab.service'
-import { recurringPaymentService } from '@/services/recurring-payment.service'
-import { alertService } from '@/services/alert.service'
-import { debtTransactionService } from '@/services/debt-transaction.service'
+import { getDashboardData } from '@/lib/dashboard-data'
 import { redirect } from 'next/navigation'
 import DashboardPageClient from './dashboard-client'
 
@@ -16,31 +10,22 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const [debts, groups, tabs, dbUser, recurringPayments, alerts, pendingTransactions] = await Promise.all([
-    debtService.getUserDebts(user.id, { status: 'pending' }),
-    groupService.getUserGroups(user.id),
-    tabService.getUserTabs(user.id),
-    prisma.user.findUnique({ where: { id: user.id }, select: { name: true } }),
-    recurringPaymentService.getUserRecurringPayments(user.id, { status: 'active' }),
-    alertService.getActiveAlertsForBorrower(user.id),
-    debtTransactionService.getUserPendingTransactions(user.id),
-  ])
-
-  // Filter pending transactions where current user is the lender (needs to approve)
-  const pendingApprovals = pendingTransactions.filter(
-    (transaction) => transaction.debt.lenderId === user.id && !transaction.lenderApproved
-  )
+  // ponytail: the shared loader also runs the nav-count queries, which this
+  // page ignores (the layout renders the badges). Three indexed COUNTs per
+  // load keep page and API on one code path; wrap getNavCounts in React
+  // cache() if that ever matters.
+  const data = await getDashboardData(user)
 
   return (
     <DashboardPageClient
-      initialDebts={debts}
-      initialGroups={groups}
-      initialTabs={tabs}
+      initialDebts={data.debts}
+      initialGroups={data.groups}
+      initialTabs={data.tabs}
       currentUser={user}
-      userName={dbUser?.name || user.email || 'User'}
-      initialRecurringPayments={recurringPayments}
-      initialAlerts={alerts}
-      initialPendingTransactions={pendingApprovals}
+      userName={data.user.name || user.email || 'User'}
+      initialRecurringPayments={data.recurringPayments}
+      initialAlerts={data.alerts}
+      initialPendingTransactions={data.pendingApprovals}
     />
   )
 }
