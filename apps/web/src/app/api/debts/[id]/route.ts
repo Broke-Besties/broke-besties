@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { debtService } from "@/services/debt.service";
+import { debtTransactionService } from "@/services/debt-transaction.service";
+import { receiptService } from "@/services/receipt.service";
+import { paypalService } from "@/services/paypal.service";
 
 // GET /api/debts/[id] - Get a specific debt
 export async function GET(
@@ -21,8 +24,20 @@ export async function GET(
     }
 
     const debt = await debtService.getDebtById(debtId, user.id);
+    const transactions = await debtTransactionService.getDebtTransactions(
+      debtId,
+      user.id
+    );
+    const [receiptImageUrls, paypal] = await Promise.all([
+      receiptService.getSignedImageUrls(debt.receipts.map((r) => r.id)),
+      paypalService.getDebtPaypalInfo(
+        debt,
+        user.id,
+        transactions.some((t) => t.status === "pending")
+      ),
+    ]);
 
-    return NextResponse.json({ debt });
+    return NextResponse.json({ debt, transactions, receiptImageUrls, paypal });
   } catch (error) {
     console.error("Error fetching debt:", error);
     const message = error instanceof Error ? error.message : "Internal server error";
