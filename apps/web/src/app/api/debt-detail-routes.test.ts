@@ -30,6 +30,7 @@ function getDebt() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.spyOn(console, "error").mockImplementation(() => {});
   vi.mocked(getUser).mockResolvedValue({ id: BORROWER_ID } as never);
 });
 
@@ -89,5 +90,19 @@ describe("GET /api/debts/[id]", () => {
     expect(res.status).toBe(status);
     expect(await res.json()).toEqual({ error: message });
     expect(debtTransactionService.getDebtTransactions).not.toHaveBeenCalled();
+  });
+
+  it("answers 500 without leaking an unexpected error", async () => {
+    vi.mocked(debtService.getDebtById).mockResolvedValue(debt as never);
+    vi.mocked(debtTransactionService.getDebtTransactions).mockResolvedValue([] as never);
+    vi.mocked(receiptService.getSignedImageUrls).mockResolvedValue([]);
+    vi.mocked(paypalService.getDebtPaypalInfo).mockRejectedValue(
+      new Error("Can't reach database server at db.internal:5432"),
+    );
+
+    const res = await getDebt();
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal server error" });
   });
 });

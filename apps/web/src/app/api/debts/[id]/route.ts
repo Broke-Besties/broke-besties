@@ -44,7 +44,10 @@ export async function GET(
     let status = 500;
     if (message === "Debt not found") status = 404;
     if (message === "You don't have permission to view this debt") status = 403;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      { error: status === 500 ? "Internal server error" : message },
+      { status }
+    );
   }
 }
 
