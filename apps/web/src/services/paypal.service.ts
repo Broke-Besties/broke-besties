@@ -537,11 +537,8 @@ export class PaypalService {
     amountCents: number;
     updatedAt: Date;
   }) {
-    if (payment.status === "COMPLETED") return this.captureResult(payment.id);
-    if (payment.status === "REFUNDED") throw new PaypalFlowError(409, "This PayPal payment was refunded");
-    if (payment.status === "FAILED") {
-      throw new PaypalFlowError(409, "This PayPal payment failed. Start a new payment.");
-    }
+    // Already settled: captureResult answers 200 (COMPLETED) or the refunded/failed 409.
+    if (["COMPLETED", "REFUNDED", "FAILED"].includes(payment.status)) return this.captureResult(payment.id);
     if (!payment.orderId) throw new PaypalFlowError(409, "Payment wasn't approved in PayPal");
 
     if (payment.status === "CREATED" || payment.status === "CANCELLED") {

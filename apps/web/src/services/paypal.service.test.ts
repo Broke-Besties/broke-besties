@@ -934,16 +934,22 @@ describe("capturePayment", () => {
   });
 
   it("refuses refunded, failed and never-ordered payments without calling PayPal", async () => {
-    db.paypalPayment.findUnique.mockResolvedValueOnce(paymentRow({ status: "REFUNDED" }));
+    // Settled payments answer from a fresh read of the row (captureResult).
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow({ status: "REFUNDED" }))
+      .mockResolvedValueOnce(paymentRow({ status: "REFUNDED" }));
     flowError(409, "This PayPal payment was refunded").check(await rejection(capture()));
 
-    db.paypalPayment.findUnique.mockResolvedValueOnce(paymentRow({ status: "FAILED" }));
+    db.paypalPayment.findUnique
+      .mockResolvedValueOnce(paymentRow({ status: "FAILED" }))
+      .mockResolvedValueOnce(paymentRow({ status: "FAILED" }));
     flowError(409, "This PayPal payment failed. Start a new payment.").check(await rejection(capture()));
 
     db.paypalPayment.findUnique.mockResolvedValueOnce(paymentRow({ orderId: null }));
     flowError(409, "Payment wasn't approved in PayPal").check(await rejection(capture()));
 
     expect(paypalRequests).toHaveLength(0);
+    expect(db.debt.findUnique).not.toHaveBeenCalled();
   });
 
   it("captures and settles the debt: paid, audit record, alert off, requests cancelled, lender emailed", async () => {
