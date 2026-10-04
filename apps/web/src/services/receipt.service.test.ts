@@ -252,6 +252,53 @@ describe("receiptService", () => {
     });
   });
 
+  describe("getSignedImageUrls", () => {
+    it("returns [] for no ids without creating a client", async () => {
+      await expect(receiptService.getSignedImageUrls([])).resolves.toEqual([]);
+      expect(createClient).not.toHaveBeenCalled();
+    });
+
+    it("signs receipts/{id} for an hour and keeps the input order", async () => {
+      // The first URL comes back last
+      storage.createSignedUrl.mockImplementation(async (path: string) => {
+        if (path === "receipts/a") await new Promise((resolve) => setTimeout(resolve, 5));
+        return { data: { signedUrl: `https://storage.test/${path}` }, error: null };
+      });
+
+      await expect(receiptService.getSignedImageUrls(["a", "b", "c"])).resolves.toEqual([
+        { id: "a", url: "https://storage.test/receipts/a" },
+        { id: "b", url: "https://storage.test/receipts/b" },
+        { id: "c", url: "https://storage.test/receipts/c" },
+      ]);
+      expect(storage.from).toHaveBeenCalledWith("receipts");
+      expect(storage.createSignedUrl).toHaveBeenCalledWith("receipts/a", 3600);
+    });
+
+    it("skips and logs the URLs that fail", async () => {
+      storage.createSignedUrl.mockImplementation(async (path: string) => {
+        if (path === "receipts/missing") {
+          return { data: null, error: new Error("Object not found") };
+        }
+        if (path === "receipts/boom") throw new Error("socket hang up");
+        return { data: { signedUrl: `https://storage.test/${path}` }, error: null };
+      });
+
+      await expect(
+        receiptService.getSignedImageUrls(["missing", "ok", "boom"]),
+      ).resolves.toEqual([{ id: "ok", url: "https://storage.test/receipts/ok" }]);
+      expect(console.error).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns [] and logs when the storage client can't be created", async () => {
+      vi.mocked(createClient).mockImplementationOnce(() => {
+        throw new Error("supabaseUrl is required.");
+      });
+
+      await expect(receiptService.getSignedImageUrls(["a"])).resolves.toEqual([]);
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("throws 'Receipt not found' for a missing receipt", async () => {
     await expect(receiptService.getReceiptItems("missing", USER_A)).rejects.toThrow(
       "Receipt not found",

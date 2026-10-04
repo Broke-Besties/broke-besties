@@ -271,15 +271,42 @@ export class ReceiptService {
   }
 
   /**
-   * Signed (1-hour) URLs for receipt images stored at `receipts/{id}`.
-   * Receipts whose URL can't be created are skipped (and logged).
-   * CONTRACT STUB (Phase 0): replaced by the real implementation (spec B7).
+   * Signed (1-hour) URLs for receipt images stored at `receipts/{id}`, in input
+   * order. Receipts whose URL can't be created are skipped (and logged); never throws.
    */
   async getSignedImageUrls(
     receiptIds: string[]
   ): Promise<{ id: string; url: string }[]> {
-    void receiptIds;
-    throw new Error("Not implemented");
+    if (receiptIds.length === 0) {
+      return [];
+    }
+
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const urls = await Promise.all(
+        receiptIds.map(async (id) => {
+          const { data, error } = await supabase.storage
+            .from("receipts")
+            .createSignedUrl(`receipts/${id}`, 3600)
+            .catch((error) => ({ data: null, error }));
+
+          if (error || !data) {
+            console.error(`[Receipt URLs] Error signing receipts/${id}:`, error);
+            return [];
+          }
+          return [{ id, url: data.signedUrl }];
+        })
+      );
+
+      return urls.flat();
+    } catch (error) {
+      console.error("[Receipt URLs] Error creating storage client:", error);
+      return [];
+    }
   }
 
   /**
