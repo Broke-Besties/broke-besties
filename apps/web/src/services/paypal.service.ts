@@ -80,13 +80,6 @@ function paymentEmail(payment: {
   };
 }
 
-/** Sends after commit; a failed email is logged and never fails the PayPal flow. */
-async function sendEmails(sends: Promise<unknown>[]) {
-  for (const result of await Promise.allSettled(sends)) {
-    if (result.status === "rejected") console.error("[PaypalService] Email failed:", result.reason);
-  }
-}
-
 /** The parts of a webhook resource (order, capture or refund) used to find our payment. */
 type WebhookResource = PaypalCapture & {
   purchase_units?: { custom_id?: string }[];
@@ -755,7 +748,8 @@ export class PaypalService {
     if (outcome !== "already_completed") {
       const alreadySettled = outcome === "already_settled";
       const recipients = alreadySettled ? [payment.payee, payment.payer] : [payment.payee];
-      await sendEmails(
+      // After commit; emailService never throws (a failed send resolves { success: false }).
+      await Promise.all(
         recipients.map((person) =>
           emailService.sendPaypalPaymentReceived({
             to: person.email,
@@ -832,7 +826,7 @@ export class PaypalService {
     });
 
     if (debtReopened === null) return;
-    await sendEmails(
+    await Promise.all(
       [payment.payee, payment.payer].map((person) =>
         emailService.sendPaypalPaymentRefunded({
           to: person.email,

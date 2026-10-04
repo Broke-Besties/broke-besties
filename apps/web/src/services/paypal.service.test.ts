@@ -1365,7 +1365,7 @@ describe("completeFromCapture", () => {
 
     db.paypalPayment.findUnique.mockResolvedValueOnce(paymentWithParties());
     mockSettlement();
-    email.sendPaypalPaymentReceived.mockRejectedValueOnce(new Error("Resend down"));
+    email.sendPaypalPaymentReceived.mockResolvedValueOnce({ success: false, error: "Resend down" });
     expect(await complete()).toBe("completed");
   });
 
