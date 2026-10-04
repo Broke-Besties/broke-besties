@@ -172,6 +172,8 @@ describe("GET /api/paypal/callback (public)", () => {
 });
 
 describe("GET /api/paypal/account", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("returns 401 when unauthenticated", async () => {
     signOut();
 
@@ -200,9 +202,25 @@ describe("GET /api/paypal/account", () => {
         emailVerified: true,
         connectedAt: "2026-10-01T12:00:00.000Z",
       },
+      enabled: false,
     });
-    expect(await unlinked.json()).toEqual({ account: null });
+    expect(await unlinked.json()).toEqual({ account: null, enabled: false });
     expect(paypalService.getAccount).toHaveBeenCalledWith(BORROWER_ID);
+  });
+
+  it("says whether PayPal is configured, so clients can hide the PayPal card", async () => {
+    signIn();
+    vi.mocked(paypalService.getAccount).mockResolvedValue(null);
+    vi.stubEnv("PAYPAL_CLIENT_ID", "client-id");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example");
+    vi.stubEnv("PAYPAL_STATE_SECRET", "s".repeat(32));
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "WH-1");
+
+    expect(await (await getAccountRoute()).json()).toEqual({ account: null, enabled: true });
+
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
+    expect(await (await getAccountRoute()).json()).toEqual({ account: null, enabled: false });
   });
 });
 

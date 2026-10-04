@@ -437,7 +437,7 @@ PayPal login + consent ──► GET /api/paypal/callback?code&state            
 
 1. **`GET /api/paypal/connect?platform=ios|web`** (authenticated). Returns `{ url }`, where `url` = authorize page + `?flowEntry=static&client_id=…&response_type=code&scope=openid%20email%20https%3A%2F%2Furi.paypal.com%2Fservices%2Fpaypalattributes&redirect_uri={APP_URL}/api/paypal/callback&state={signState({ userId, platform, scheme, exp })}`. `scheme` is chosen server-side from an allow-list (`brokebesties`, `brokebesties-preview`, `brokebesties-dev`) based on the `X-App-Variant` header the app sends. It's never a free-form redirect.
 2. **`GET /api/paypal/callback`** (public). `verifyState` (bad or expired → redirect with `reason=state`) → `POST /v1/oauth2/token` with `grant_type=authorization_code&code=…` (Basic auth with client id/secret) → `GET /v1/identity/oauth2/userinfo?schema=paypalv1.1` with the user's access token → read `payer_id` and the primary email with its `confirmed` flag → upsert `PaypalAccount` for `state.userId`. If that `payer_id` is already linked to a different user → redirect with `reason=in_use`. The user's PayPal access token is thrown away; we don't need ongoing access.
-3. **`GET /api/paypal/account`** → `{ account: { email, emailVerified, connectedAt } | null }`.
+3. **`GET /api/paypal/account`** → `{ account: { email, emailVerified, connectedAt } | null, enabled }`. `enabled` is `false` when the server has no PayPal configuration, so clients hide the PayPal card.
 4. **`DELETE /api/paypal/account`** → deletes the row → `{ message: 'PayPal disconnected' }`. Payments already created keep their `payeePayerId`.
 
 #### Pay a debt
@@ -683,7 +683,7 @@ Vercel limits serverless request bodies to **4.5 MB**. The app resizes and compr
 
 | # | Method | Path | Body / query | 2xx response | Notable errors |
 |---|---|---|---|---|---|
-| 52 | GET | `/api/paypal/account` **NEW** | – | `{ account: PaypalAccountInfo \| null }` | 401 |
+| 52 | GET | `/api/paypal/account` **NEW** | – | `{ account: PaypalAccountInfo \| null; enabled: boolean }` | 401 |
 | 53 | GET | `/api/paypal/connect` **NEW** | `?platform=ios` + header `X-App-Variant` | `{ url }` (open it in the auth browser) | 401 |
 | 54 | DELETE | `/api/paypal/account` **NEW** | – | `{ message }` | 401 |
 | 55 | POST | `/api/debts/:id/paypal/order` **NEW** | `{ platform: 'ios' }` | `{ paymentId, approveUrl }` | 403 not the borrower / debt not payable; 409 lender not connected / payment in progress (body includes `approveUrl` to resume); 502 PayPal error |
@@ -895,7 +895,7 @@ export const recurringApi = {
 };
 
 export const paypalApi = {
-  account: () => api.get<{ account: PaypalAccountInfo | null }>('/api/paypal/account').then(r => r.account),
+  account: () => api.get<{ account: PaypalAccountInfo | null; enabled: boolean }>('/api/paypal/account'),
   connectUrl: () => api.get<{ url: string }>('/api/paypal/connect?platform=ios').then(r => r.url),
   disconnect: () => api.del('/api/paypal/account'),
   createOrder: (debtId: number) =>
