@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { debtService } from "@/services/debt.service";
+import { debtTransactionService } from "@/services/debt-transaction.service";
+import { receiptService } from "@/services/receipt.service";
 
 // GET /api/debts/[id] - Get a specific debt
 export async function GET(
@@ -21,15 +23,25 @@ export async function GET(
     }
 
     const debt = await debtService.getDebtById(debtId, user.id);
+    const transactions = await debtTransactionService.getDebtTransactions(
+      debtId,
+      user.id
+    );
+    const receiptImageUrls = await receiptService.getSignedImageUrls(
+      debt.receipts.map((r) => r.id)
+    );
 
-    return NextResponse.json({ debt });
+    return NextResponse.json({ debt, transactions, receiptImageUrls });
   } catch (error) {
     console.error("Error fetching debt:", error);
     const message = error instanceof Error ? error.message : "Internal server error";
     let status = 500;
     if (message === "Debt not found") status = 404;
     if (message === "You don't have permission to view this debt") status = 403;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      { error: status === 500 ? "Internal server error" : message },
+      { status }
+    );
   }
 }
 

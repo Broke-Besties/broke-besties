@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { alertService } from "@/services/alert.service";
 
-// GET /api/alerts - Get all active alerts for the current user (as borrower)
-export async function GET() {
+// GET /api/alerts - Active alerts for the current user as borrower (default) or ?role=lender
+export async function GET(request: NextRequest) {
   try {
     const user = await getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const alerts = await alertService.getActiveAlertsForBorrower(user.id);
+    const { searchParams } = new URL(request.url);
+    const alerts =
+      searchParams.get("role") === "lender"
+        ? await alertService.getActiveAlertsForLender(user.id)
+        : await alertService.getActiveAlertsForBorrower(user.id);
     return NextResponse.json({ alerts });
   } catch (error) {
     console.error("Error fetching alerts:", error);

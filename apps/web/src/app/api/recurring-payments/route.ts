@@ -10,14 +10,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { amount, description, frequency, borrowers } = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { amount, description, frequency, borrowers } = body;
 
     const recurringPayment = await recurringPaymentService.createRecurringPayment({
       amount,
       description,
       frequency,
       lenderId: user.id,
-      borrowers,
+      // Each borrower is { userId } or { email }, plus splitPercentage
+      borrowers: await recurringPaymentService.resolveBorrowerInputs(borrowers),
     });
 
     return NextResponse.json(
@@ -35,6 +40,7 @@ export async function POST(request: NextRequest) {
       message === "Valid amount is required" ||
       message === "Frequency must be at least 1 day" ||
       message === "At least one borrower is required" ||
+      message === "Each borrower needs an email or userId" ||
       message === "Split percentages must sum to 100%" ||
       message === "All split percentages must be positive" ||
       message === "Cannot add the same borrower multiple times"

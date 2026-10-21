@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { errorResponse } from '@/lib/api-error'
 import { getUser } from '@/lib/supabase'
 import { debtTransactionService } from '@/services/debt-transaction.service'
+
+// PATCH and DELETE: the known service messages keep their status, anything else is a 500.
+const ERROR_STATUS = new Map([
+  ['Transaction not found', 404],
+  ['You are not authorized to respond to this transaction', 403],
+  ['Only the requester can cancel this transaction', 403],
+  ['This transaction has already been processed', 400],
+])
 
 // GET /api/debt-transactions/[id] - Get a specific transaction
 export async function GET(
@@ -62,7 +71,7 @@ export async function PATCH(
       )
     }
 
-    const { approve } = await request.json()
+    const { approve } = (await request.json().catch(() => null)) ?? {}
 
     if (typeof approve !== 'boolean') {
       return NextResponse.json(
@@ -80,14 +89,7 @@ export async function PATCH(
     return NextResponse.json(result)
   } catch (error) {
     console.error('Error responding to transaction:', error)
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-    const status = message.includes('not found')
-      ? 404
-      : message.includes('not authorized')
-        ? 403
-        : 400
-    return NextResponse.json({ error: message }, { status })
+    return errorResponse(error, ERROR_STATUS)
   }
 }
 
@@ -116,13 +118,6 @@ export async function DELETE(
     return NextResponse.json({ message: 'Transaction cancelled' })
   } catch (error) {
     console.error('Error cancelling transaction:', error)
-    const message =
-      error instanceof Error ? error.message : 'Internal server error'
-    const status = message.includes('not found')
-      ? 404
-      : message.includes('Only the requester')
-        ? 403
-        : 400
-    return NextResponse.json({ error: message }, { status })
+    return errorResponse(error, ERROR_STATUS)
   }
 }

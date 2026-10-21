@@ -5,6 +5,7 @@ vi.mock("@/lib/prisma", async () => {
   return { prisma: createMockPrisma() };
 });
 
+import type { DebtTransaction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   AlertPolicy,
@@ -82,11 +83,20 @@ describe("DebtPolicy", () => {
 
 describe("DebtTransactionPolicy (pure)", () => {
   const debt = { lenderId: "u1", borrowerId: "u2" };
-  const pending = {
+  const pending: DebtTransaction & { debt: typeof debt } = {
+    id: 1,
+    debtId: 1,
+    type: "confirm_paid",
     status: "pending",
     requesterId: "u2",
     lenderApproved: false,
     borrowerApproved: false,
+    proposedAmount: null,
+    proposedDescription: null,
+    reason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    resolvedAt: null,
     debt,
   };
 

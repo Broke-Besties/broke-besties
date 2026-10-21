@@ -34,7 +34,7 @@ export async function GET(
     const message = error instanceof Error ? error.message : 'Internal server error'
     let status = 500
     if (message === 'You are not a member of this group') status = 403
-    if (message === 'Group not found') status = 404
+    if (message.startsWith('Group not found')) status = 404
     return NextResponse.json(
       { error: message },
       { status }
