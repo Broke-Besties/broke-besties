@@ -1,189 +1,124 @@
-import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-} from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { useAuth } from '@/hooks/use-auth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Mail } from 'lucide-react-native';
+
+import { PageHeader } from '@/components/page-header';
+import { SignedOut } from '@/components/signed-out';
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Text } from '@/components/ui/text';
+import { useAuth } from '@/hooks/use-auth';
+import { useColors } from '@/hooks/use-colors';
 import { apiClient } from '@/lib/api';
 import { Invite } from '@/lib/types';
 
 export default function InvitesScreen() {
-  const [invites, setInvites] = useState<Invite[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { session } = useAuth();
+  const colors = useColors();
+  const [invites, setInvites] = useState<Invite[] | null>(null);
   const [error, setError] = useState('');
-  const [processingId, setProcessingId] = useState<number | null>(null);
-  const { isAuthenticated, session } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async (token: string) => {
+    try {
+      apiClient.setAuthToken(token);
+      setInvites(await apiClient.getInvites());
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load invites');
+    }
+  }, []);
 
   useEffect(() => {
-    if (isAuthenticated && session) {
-      apiClient.setAuthToken(session.access_token);
-      loadInvites();
-    }
-  }, [isAuthenticated, session]);
+    if (session) load(session.access_token);
+  }, [session, load]);
 
-  const loadInvites = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getInvites();
-      setInvites(data);
-      setError('');
-    } catch (err: any) {
-      setError(err instanceof Error ? err.message : 'Failed to load invites');
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!session) return <SignedOut message="Log in to see your invitations." />;
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadInvites();
-    setRefreshing(false);
-  };
-
-  const handleAccept = async (inviteId: number) => {
-    setProcessingId(inviteId);
+  const respond = async (invite: Invite, accept: boolean) => {
+    setBusyId(invite.id);
     setError('');
-
     try {
-      const result = await apiClient.acceptInvite(inviteId);
-
-      // Remove the accepted invite from the list
-      setInvites(prevInvites => prevInvites.filter(inv => inv.id !== inviteId));
-
-      Alert.alert('Success', 'Invite accepted successfully', [
-        {
-          text: 'OK',
-          onPress: () => {
-            // Navigate to the group if we have the group ID
-            if (result.groupId) {
-              router.push(`/groups/${result.groupId}`);
-            }
-          },
-        },
-      ]);
-    } catch (err: any) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to accept invite';
-      setError(errorMessage);
-      Alert.alert('Error', errorMessage);
+      if (accept) {
+        const { group } = await apiClient.acceptInvite(invite.id);
+        router.replace(`/groups/${group.id}`);
+      } else {
+        await apiClient.rejectInvite(invite.id);
+        setInvites((current) => current?.filter((item) => item.id !== invite.id) ?? null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
-      setProcessingId(null);
+      setBusyId(null);
     }
   };
-
-  if (!isAuthenticated) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
-        <Text className="text-xl font-semibold text-foreground mb-4">
-          Please log in to view invitations
-        </Text>
-        <Button onPress={() => router.push('/login')}>
-          <Text>Go to Login</Text>
-        </Button>
-      </View>
-    );
-  }
 
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="p-6"
+      contentContainerClassName="gap-5 p-4 pb-8"
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load(session.access_token);
+            setRefreshing(false);
+          }}
+        />
       }
     >
-      {/* Back Button */}
-      <Pressable onPress={() => router.push('/groups')} className="mb-4">
-        <Text className="text-sm text-primary">← Back to groups</Text>
-      </Pressable>
+      <PageHeader title="Invitations" description="Groups you've been invited to join." />
 
-      {/* Header Section */}
-      <View className="mb-6">
-        <Text className="text-3xl font-semibold text-foreground mb-2">
-          Invitations
-        </Text>
-        <Text className="text-sm text-muted-foreground">
-          You have {invites.length} pending {invites.length === 1 ? 'invitation' : 'invitations'}
-        </Text>
-      </View>
+      {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 
-      {/* Error Message */}
-      {error && (
-        <View className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 mb-4">
-          <Text className="text-sm text-destructive">{error}</Text>
+      {invites === null ? (
+        <View className="py-12">
+          <ActivityIndicator color={colors.mutedForeground} />
         </View>
-      )}
-
-      {/* Loading State */}
-      {loading && (
-        <View className="flex-1 items-center justify-center py-12">
-          <ActivityIndicator size="large" />
-          <Text className="text-sm text-muted-foreground mt-2">Loading invitations...</Text>
+      ) : invites.length === 0 ? (
+        <View className="items-center gap-3 rounded-xl border border-dashed border-border p-8">
+          <View className="h-10 w-10 items-center justify-center rounded-lg bg-muted">
+            <Mail color={colors.foreground} size={20} />
+          </View>
+          <Text className="font-medium">No pending invites</Text>
+          <Text className="text-center text-sm text-muted-foreground">
+            When someone invites you to a group, it shows up here.
+          </Text>
         </View>
-      )}
-
-      {/* Empty State */}
-      {!loading && invites.length === 0 && (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>No pending invites</CardTitle>
-            <CardDescription>
-              When someone invites you to a group, it will show up here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onPress={() => router.push('/groups')}>
-              <Text>View my groups</Text>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Invites List */}
-      {!loading && invites.length > 0 && (
-        <View className="gap-4">
-          {invites.map((invite) => (
+      ) : (
+        invites.map((invite) => {
+          const members = invite.group.members?.length ?? 0;
+          return (
             <Card key={invite.id}>
-              <CardHeader>
-                <View className="flex-row items-start justify-between">
-                  <View className="flex-1 min-w-0">
-                    <CardTitle className="text-lg">{invite.group.name}</CardTitle>
-                    <CardDescription>
-                      Invited by{' '}
-                      <Text className="font-medium text-foreground">
-                        {invite.sender?.email || 'Unknown'}
-                      </Text>
-                    </CardDescription>
-                  </View>
-                  <Badge variant="secondary">
-                    {invite.group.members?.length || 0}{' '}
-                    {(invite.group.members?.length || 0) === 1 ? 'member' : 'members'}
-                  </Badge>
+              <CardHeader className="flex-row items-center gap-3">
+                <Avatar name={invite.group.name} className="h-10 w-10" />
+                <View className="flex-1 gap-1">
+                  <CardTitle className="text-base">{invite.group.name}</CardTitle>
+                  <CardDescription>
+                    {`Invited by ${invite.sender?.name || invite.sender?.email || 'a member'} · ${members} ${members === 1 ? 'member' : 'members'}`}
+                  </CardDescription>
                 </View>
               </CardHeader>
-              <CardContent className="gap-3">
-                <Text className="text-sm text-muted-foreground">
-                  Invited {new Date(invite.createdAt).toLocaleDateString()}
-                </Text>
+              <CardContent className="flex-row gap-2">
+                <Button className="flex-1" onPress={() => respond(invite, true)} disabled={busyId === invite.id}>
+                  Accept
+                </Button>
                 <Button
-                  onPress={() => handleAccept(invite.id)}
-                  disabled={processingId === invite.id}
+                  className="flex-1"
+                  variant="outline"
+                  onPress={() => respond(invite, false)}
+                  disabled={busyId === invite.id}
                 >
-                  <Text>{processingId === invite.id ? 'Accepting...' : 'Accept invite'}</Text>
+                  Decline
                 </Button>
               </CardContent>
             </Card>
-          ))}
-        </View>
+          );
+        })
       )}
     </ScrollView>
   );

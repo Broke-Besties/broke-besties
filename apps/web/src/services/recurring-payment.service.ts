@@ -114,6 +114,47 @@ export class RecurringPaymentService {
   }
 
   /**
+   * Turn API borrowers ({ userId } or { email }, each with a splitPercentage)
+   * into the list createRecurringPayment takes. Emails are trimmed and
+   * lowercased before the lookup; a userId wins when both are given.
+   */
+  async resolveBorrowerInputs(inputs: unknown) {
+    if (!Array.isArray(inputs)) {
+      throw new Error('At least one borrower is required')
+    }
+
+    const borrowers: CreateRecurringPaymentParams['borrowers'] = []
+    // ponytail: one lookup per email, fine for a handful of borrowers;
+    // batch with findMany({ where: { email: { in } } }) if lists grow
+    for (const input of inputs) {
+      const { userId, email, splitPercentage } = input ?? {}
+      let id = typeof userId === 'string' ? userId : ''
+
+      if (!id && typeof email === 'string' && email.trim()) {
+        const normalized = email.trim().toLowerCase()
+        const user = await prisma.user.findUnique({
+          where: { email: normalized },
+          select: { id: true },
+        })
+        if (!user) {
+          throw new Error(`User with email ${normalized} not found`)
+        }
+        id = user.id
+      }
+
+      if (!id) {
+        throw new Error('Each borrower needs an email or userId')
+      }
+      if (typeof splitPercentage !== 'number') {
+        throw new Error('All split percentages must be positive')
+      }
+      borrowers.push({ userId: id, splitPercentage })
+    }
+
+    return borrowers
+  }
+
+  /**
    * Get all recurring payments for a user with optional filters
    */
   async getUserRecurringPayments(userId: string, filters: GetRecurringPaymentsFilters = {}) {

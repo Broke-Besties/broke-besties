@@ -48,13 +48,13 @@ export type Invite = {
   status: string;
   createdAt: string | Date;
   group: Group & {
-    members?: Array<{
+    members?: {
       id: number;
       userId: string;
       groupId: number;
       createdAt: string | Date;
       user: User;
-    }>;
+    }[];
   };
   sender?: User;
 };
@@ -67,13 +67,49 @@ export type Receipt = {
   debts?: Debt[];
 };
 
-export type ApiResponse<T> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-};
-
 export type AuthTokens = {
   accessToken: string;
   refreshToken?: string;
+};
+
+type Person = { id: string; email: string; name: string | null };
+
+/** GET /api/dashboard (apps/web/src/lib/dashboard-data.ts). Debts are the pending ones. */
+export type DashboardData = {
+  user: Person;
+  debts: (Omit<Debt, 'lender' | 'borrower'> & { lender: Person; borrower: Person })[];
+  groups: (Group & { _count: { members: number } })[];
+  recurringPayments: { id: number; amount: number; frequency: number; createdAt: string }[];
+  alerts: {
+    id: number;
+    message: string | null;
+    deadline: string | null;
+    lender: Person;
+    debt: { id: number; amount: number; description: string | null } | null;
+  }[];
+  pendingApprovals: {
+    id: number;
+    type: string;
+    reason: string | null;
+    proposedAmount: number | null;
+    requester: Person;
+    debt: { id: number; amount: number; description: string | null };
+  }[];
+};
+
+export type DebtTransaction = {
+  id: number;
+  type: string;
+  status: string;
+  reason: string | null;
+  proposedAmount: number | null;
+  createdAt: string;
+  requester: Person;
+};
+
+/** GET /api/debts/:id */
+export type DebtDetail = {
+  debt: Omit<Debt, 'lender' | 'borrower'> & { lender: Person; borrower: Person };
+  transactions: DebtTransaction[];
+  receiptImageUrls: { id: string; url: string }[];
 };

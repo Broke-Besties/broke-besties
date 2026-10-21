@@ -1,13 +1,14 @@
 import React from 'react';
-import { View, Text, ViewProps } from 'react-native';
+import { View, ViewProps } from 'react-native';
 import { cn } from '@/lib/utils';
+import { Text, TextClassContext } from '@/components/ui/text';
 
 type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive';
 
 const variants: Record<BadgeVariant, string> = {
   default: 'border-transparent bg-primary',
   secondary: 'border-transparent bg-secondary',
-  outline: 'border-border bg-transparent',
+  outline: 'border-border',
   destructive: 'border-transparent bg-destructive',
 };
 
@@ -24,33 +25,23 @@ export type BadgeProps = ViewProps & {
   className?: string;
 };
 
-export function Badge({
-  variant = 'default',
-  children,
-  className,
-  ...props
-}: BadgeProps) {
-  const renderedChildren = React.Children.toArray(children).map((child, index) => {
-    if (typeof child === 'string' || typeof child === 'number') {
-      return (
-        <Text key={`badge-text-${index}`} className={cn('text-xs font-medium', textVariants[variant])}>
-          {child}
-        </Text>
-      );
-    }
-    return child;
-  });
-
+export function Badge({ variant = 'default', children, className, ...props }: BadgeProps) {
   return (
-    <View
-      className={cn(
-        'inline-flex items-center rounded-full border px-2.5 py-0.5',
-        variants[variant],
-        className
-      )}
-      {...props}
-    >
-      {renderedChildren}
-    </View>
+    <TextClassContext.Provider value={cn('text-xs font-medium', textVariants[variant])}>
+      <View
+        className={cn(
+          'flex-row items-center rounded-full border px-2.5 py-0.5',
+          variants[variant],
+          className
+        )}
+        {...props}
+      >
+        {typeof children === 'string' || typeof children === 'number' ? (
+          <Text>{children}</Text>
+        ) : (
+          children
+        )}
+      </View>
+    </TextClassContext.Provider>
   );
 }

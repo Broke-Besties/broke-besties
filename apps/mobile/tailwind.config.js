@@ -1,51 +1,43 @@
 /** @type {import('tailwindcss').Config} */
+const color = (name) => `hsl(var(--${name}) / <alpha-value>)`;
+
 module.exports = {
-  content: [
-    './app/**/*.{js,jsx,ts,tsx}',
-    './components/**/*.{js,jsx,ts,tsx}',
-  ],
+  content: ['./app/**/*.{js,jsx,ts,tsx}', './components/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
+  // Custom fonts need one family per weight on native, so `font-semibold` etc.
+  // pick an Overpass family (below) instead of setting fontWeight.
+  corePlugins: { fontWeight: false },
   theme: {
     extend: {
       colors: {
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+        background: color('background'),
+        foreground: color('foreground'),
+        card: { DEFAULT: color('card'), foreground: color('card-foreground') },
+        popover: { DEFAULT: color('popover'), foreground: color('popover-foreground') },
+        primary: { DEFAULT: color('primary'), foreground: color('primary-foreground') },
+        secondary: { DEFAULT: color('secondary'), foreground: color('secondary-foreground') },
+        muted: { DEFAULT: color('muted'), foreground: color('muted-foreground') },
+        accent: { DEFAULT: color('accent'), foreground: color('accent-foreground') },
+        destructive: { DEFAULT: color('destructive'), foreground: color('destructive-foreground') },
+        border: color('border'),
+        input: color('input'),
+        ring: color('ring'),
+        chart: {
+          1: color('chart-1'),
+          2: color('chart-2'),
+          3: color('chart-3'),
+          4: color('chart-4'),
+          5: color('chart-5'),
         },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
-        },
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
-        },
-        accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
-        },
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
       },
-      borderRadius: {
-        lg: 'var(--radius-lg)',
-        md: 'var(--radius-md)',
-        sm: 'var(--radius-sm)',
+      // The web's --radius is 0.625rem (10px).
+      borderRadius: { xl: '14px', lg: '10px', md: '8px', sm: '6px' },
+      fontFamily: {
+        sans: ['Overpass_400Regular'],
+        normal: ['Overpass_400Regular'],
+        medium: ['Overpass_500Medium'],
+        semibold: ['Overpass_600SemiBold'],
+        bold: ['Overpass_700Bold'],
       },
     },
   },

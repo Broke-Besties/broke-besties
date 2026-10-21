@@ -1,21 +1,23 @@
 import React from 'react';
-import { TextInput, TextInputProps, Platform } from 'react-native';
+import { TextInput, TextInputProps } from 'react-native';
 import { cn } from '@/lib/utils';
+import { useColors } from '@/hooks/use-colors';
 
 export type InputProps = TextInputProps & {
   className?: string;
 };
 
-export function Input({ className, ...props }: InputProps) {
+export function Input({ className, editable, ...props }: InputProps) {
+  const colors = useColors();
   return (
     <TextInput
       className={cn(
-        'h-10 rounded-md border border-input bg-background px-4 text-base text-foreground',
-        'focus:border-ring focus:ring-2 focus:ring-ring focus:ring-offset-2',
-        Platform.OS === 'ios' && 'py-2',
+        'h-11 rounded-md border border-input bg-transparent px-3 font-sans text-base text-foreground dark:bg-input/30',
+        editable === false && 'opacity-50',
         className
       )}
-      placeholderTextColor="hsl(215.4, 16.3%, 46.9%)"
+      placeholderTextColor={colors.mutedForeground}
+      editable={editable}
       {...props}
     />
   );
