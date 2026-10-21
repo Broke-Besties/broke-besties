@@ -1,14 +1,7 @@
 import React from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  Pressable,
-  ModalProps,
-  ViewProps,
-  TextProps,
-} from 'react-native';
+import { Modal, View, Pressable, ModalProps, ViewProps } from 'react-native';
 import { cn } from '@/lib/utils';
+import { Text, TextProps } from '@/components/ui/text';
 
 export type DialogProps = ModalProps & {
   open?: boolean;
@@ -59,10 +52,10 @@ export type DialogContentProps = ViewProps & {
 
 export function DialogContent({ className, ...props }: DialogContentProps) {
   return (
-    <View className="flex-1 items-center justify-center p-4">
+    <View className="flex-1 items-center justify-center bg-black/50 p-4">
       <View
         className={cn(
-          'w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg',
+          'w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-lg',
           className
         )}
         {...props}
@@ -76,18 +69,16 @@ export type DialogHeaderProps = ViewProps & {
 };
 
 export function DialogHeader({ className, ...props }: DialogHeaderProps) {
-  return <View className={cn('mb-4 space-y-1.5', className)} {...props} />;
+  return <View className={cn('mb-4 gap-1.5', className)} {...props} />;
 }
 
-export type DialogTitleProps = TextProps & {
-  className?: string;
-};
+export type DialogTitleProps = TextProps;
 
 export function DialogTitle({ className, ...props }: DialogTitleProps) {
   return (
     <Text
       className={cn(
-        'text-lg font-semibold leading-none tracking-tight text-card-foreground',
+        'text-lg font-semibold leading-tight text-card-foreground',
         className
       )}
       {...props}
@@ -95,9 +86,7 @@ export function DialogTitle({ className, ...props }: DialogTitleProps) {
   );
 }
 
-export type DialogDescriptionProps = TextProps & {
-  className?: string;
-};
+export type DialogDescriptionProps = TextProps;
 
 export function DialogDescription({
   className,
@@ -118,7 +107,7 @@ export type DialogFooterProps = ViewProps & {
 export function DialogFooter({ className, ...props }: DialogFooterProps) {
   return (
     <View
-      className={cn('mt-6 flex flex-row justify-end space-x-2', className)}
+      className={cn('mt-6 flex-row justify-end gap-2', className)}
       {...props}
     />
   );

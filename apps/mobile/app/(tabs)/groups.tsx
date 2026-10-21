@@ -1,257 +1,168 @@
-import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-} from 'react-native';
-import { router, Href } from 'expo-router';
-import { useAuth } from '@/hooks/use-auth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { router, type Href } from 'expo-router';
+import { ChevronRight, Mail, Plus, Users } from 'lucide-react-native';
+
+import { PageHeader } from '@/components/page-header';
+import { SignedOut } from '@/components/signed-out';
+import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
+import { Text } from '@/components/ui/text';
+import { useAuth } from '@/hooks/use-auth';
+import { useColors } from '@/hooks/use-colors';
 import { apiClient } from '@/lib/api';
 import { Group } from '@/lib/types';
-import { supabase } from '@/lib/supabase';
 
 export default function GroupsScreen() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { session } = useAuth();
+  const colors = useColors();
+  const [groups, setGroups] = useState<Group[] | null>(null);
+  const [inviteCount, setInviteCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
-  const [inviteCount, setInviteCount] = useState(0);
-  const { isAuthenticated, session } = useAuth();
+
+  const load = useCallback(async (token: string) => {
+    apiClient.setAuthToken(token);
+    try {
+      setGroups(await apiClient.getGroups());
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load groups');
+    }
+    apiClient
+      .getInvites()
+      .then((invites) => setInviteCount(invites.length))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    if (isAuthenticated && session) {
-      // Set the auth token from Supabase session
-      apiClient.setAuthToken(session.access_token);
-      loadGroups();
-      loadInviteCount();
-    }
-  }, [isAuthenticated, session]);
+    if (session) load(session.access_token);
+  }, [session, load]);
 
-  const loadGroups = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getGroups();
-      setGroups(data);
-      setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load groups');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadInviteCount = async () => {
-    try {
-      const invites = await apiClient.getInvites();
-      setInviteCount(invites.length);
-    } catch (err) {
-      // Silently fail for invite count
-      console.error('Failed to load invite count:', err);
-    }
-  };
+  if (!session) return <SignedOut message="Log in to see your groups." />;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadGroups(), loadInviteCount()]);
+    await load(session.access_token);
     setRefreshing(false);
   };
 
-  const handleCreateGroup = async () => {
-    if (!newGroupName.trim()) {
-      Alert.alert('Error', 'Please enter a group name');
-      return;
-    }
-
+  const create = async () => {
+    if (!newName.trim()) return;
     setCreating(true);
-    setError('');
-
     try {
-      await apiClient.createGroup(newGroupName.trim());
-      setShowCreateModal(false);
-      setNewGroupName('');
-      await loadGroups();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create group');
-      Alert.alert('Error', err.message || 'Failed to create group');
+      await apiClient.createGroup(newName.trim());
+      setShowCreate(false);
+      setNewName('');
+      await load(session.access_token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create group');
     } finally {
       setCreating(false);
     }
   };
 
-  const handleGroupPress = (groupId: number) => {
-    console.log('=== GROUP CLICK DEBUG ===');
-    console.log('Group ID clicked:', groupId);
-    console.log('Group ID type:', typeof groupId);
-    console.log('Navigation path:', `/groups/${groupId}`);
-    console.log('========================');
-    router.push(`/groups/${groupId}` as Href);
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
-        <Text className="text-xl font-semibold text-foreground mb-4">
-          Please log in to view groups
-        </Text>
-        <Button onPress={() => router.push('/login')}>
-          <Text>Go to Login</Text>
-        </Button>
-      </View>
-    );
-  }
-
   return (
     <>
       <ScrollView
         className="flex-1 bg-background"
-        contentContainerClassName="p-6"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        contentContainerClassName="gap-5 p-4 pb-8"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Header Section */}
-        <View className="mb-6">
-          <Text className="text-3xl font-semibold text-foreground mb-2">
-            My groups
-          </Text>
-          <Text className="text-sm text-muted-foreground">
-            Manage your groups and invitations.
-          </Text>
-        </View>
-
-        {/* Action Buttons */}
-        <View className="flex-row flex-wrap gap-2 mb-6">
-          <Button variant="secondary" onPress={() => router.push('/')}>
-            <Text>Dashboard</Text>
-          </Button>
-          <View className="relative">
-            <Button variant="secondary" onPress={() => router.push('/invites')}>
-              <Text>Invites</Text>
-            </Button>
-            {inviteCount > 0 && (
-              <View className="absolute -top-2 -right-2">
-                <Badge variant="destructive">
-                  {inviteCount}
-                </Badge>
-              </View>
-            )}
-          </View>
-          <Button onPress={() => setShowCreateModal(true)}>
-            <Text>Create group</Text>
-          </Button>
-        </View>
-
-        {/* Error Message */}
-        {error && (
-          <View className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 mb-4">
-            <Text className="text-sm text-destructive">{error}</Text>
-          </View>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <View className="flex-1 items-center justify-center py-12">
-            <ActivityIndicator size="large" />
-            <Text className="text-sm text-muted-foreground mt-2">Loading groups...</Text>
-          </View>
-        )}
-
-        {/* Empty State */}
-        {!loading && groups.length === 0 && (
-          <Card className="border-dashed">
-            <CardHeader>
-              <CardTitle>No groups yet</CardTitle>
-              <CardDescription>
-                You haven't joined any groups. Create one to get started.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onPress={() => setShowCreateModal(true)}>
-                <Text>Create your first group</Text>
+        <PageHeader
+          title="Groups"
+          description="Split expenses with the people you share costs with."
+          actions={
+            <>
+              <Button variant="outline" onPress={() => router.push('/invites')}>
+                <Mail color={colors.foreground} size={16} />
+                <Text>Invites</Text>
+                {inviteCount > 0 && <Badge variant="secondary">{inviteCount}</Badge>}
               </Button>
-            </CardContent>
-          </Card>
-        )}
+              <Button onPress={() => setShowCreate(true)}>
+                <Plus color={colors.primaryForeground} size={16} />
+                <Text>Create group</Text>
+              </Button>
+            </>
+          }
+        />
 
-        {/* Groups Grid */}
-        {!loading && groups.length > 0 && (
-          <View className="gap-4">
-            {groups.map((group) => (
-              <TouchableOpacity
-                key={group.id}
-                onPress={() => handleGroupPress(group.id)}
-                activeOpacity={0.7}
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{group.name}</CardTitle>
-                    <CardDescription>
-                      {group._count?.members || 0}{' '}
-                      {(group._count?.members || 0) === 1 ? 'member' : 'members'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Text className="text-sm text-muted-foreground">
-                      Created {new Date(group.createdAt).toLocaleDateString()}
-                    </Text>
-                  </CardContent>
-                </Card>
-              </TouchableOpacity>
-            ))}
+        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+
+        {groups === null ? (
+          <View className="py-12">
+            <ActivityIndicator color={colors.mutedForeground} />
+          </View>
+        ) : groups.length === 0 ? (
+          <View className="items-center gap-3 rounded-xl border border-dashed border-border p-8">
+            <View className="h-10 w-10 items-center justify-center rounded-lg bg-muted">
+              <Users color={colors.foreground} size={20} />
+            </View>
+            <Text className="font-medium">No groups yet</Text>
+            <Text className="text-center text-sm text-muted-foreground">
+              You haven&apos;t joined any groups. Create one to get started.
+            </Text>
+            <Button onPress={() => setShowCreate(true)}>
+              <Plus color={colors.primaryForeground} size={16} />
+              <Text>Create your first group</Text>
+            </Button>
+          </View>
+        ) : (
+          <View className="gap-3">
+            {groups.map((group) => {
+              const members = group._count?.members ?? 0;
+              return (
+                <Pressable key={group.id} onPress={() => router.push(`/groups/${group.id}` as Href)}>
+                  {({ pressed }) => (
+                    <Card className={pressed ? 'bg-accent' : undefined}>
+                      <View className="flex-row items-center gap-3 p-4">
+                        <Avatar name={group.name} className="h-10 w-10" />
+                        <View className="flex-1 gap-0.5">
+                          <Text className="font-semibold" numberOfLines={1}>
+                            {group.name}
+                          </Text>
+                          <Text className="text-sm text-muted-foreground">
+                            {members} {members === 1 ? 'member' : 'members'}
+                          </Text>
+                        </View>
+                        <ChevronRight color={colors.mutedForeground} size={16} />
+                      </View>
+                    </Card>
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </ScrollView>
 
-      {/* Create Group Modal */}
-      {showCreateModal && (
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create new group</DialogTitle>
-            </DialogHeader>
-            <View className="gap-4 px-6 pb-6">
-              <View className="gap-2">
-                <Label>Group name</Label>
-                <Input
-                  value={newGroupName}
-                  onChangeText={setNewGroupName}
-                  placeholder="e.g. Roommates"
-                  autoFocus
-                />
-              </View>
-              <DialogFooter>
-                <Button
-                  variant="secondary"
-                  onPress={() => {
-                    setShowCreateModal(false);
-                    setNewGroupName('');
-                    setError('');
-                  }}
-                  disabled={creating}
-                >
-                  <Text>Cancel</Text>
-                </Button>
-                <Button onPress={handleCreateGroup} disabled={creating}>
-                  <Text>{creating ? 'Creating...' : 'Create group'}</Text>
-                </Button>
-              </DialogFooter>
-            </View>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create group</DialogTitle>
+          </DialogHeader>
+          <View className="gap-2">
+            <Label>Group name</Label>
+            <Input value={newName} onChangeText={setNewName} placeholder="e.g. Roommates" autoFocus />
+          </View>
+          <DialogFooter>
+            <Button variant="outline" onPress={() => setShowCreate(false)} disabled={creating}>
+              Cancel
+            </Button>
+            <Button onPress={create} disabled={creating || !newName.trim()}>
+              {creating ? 'Creating…' : 'Create group'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

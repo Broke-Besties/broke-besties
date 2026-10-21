@@ -1,258 +1,179 @@
-import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useAuth } from '@/hooks/use-auth';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { Stack, useLocalSearchParams } from 'expo-router';
+import { Image } from 'expo-image';
+import { History } from 'lucide-react-native';
+
+import { InfoRow } from '@/components/info-row';
+import { PageHeader } from '@/components/page-header';
+import { SignedOut } from '@/components/signed-out';
+import { StatusBadge } from '@/components/status-badge';
+import { Avatar } from '@/components/ui/avatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Text } from '@/components/ui/text';
+import { useAuth } from '@/hooks/use-auth';
+import { useColors } from '@/hooks/use-colors';
 import { apiClient } from '@/lib/api';
-import { Debt, Receipt } from '@/lib/types';
+import type { DebtDetail } from '@/lib/types';
+
+const money = (amount: number) =>
+  amount.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+
+const TRANSACTION_LABELS: Record<string, string> = {
+  confirm_paid: 'Payment confirmation',
+  modify: 'Modification',
+  drop: 'Deletion',
+};
 
 export default function DebtDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const debtId = parseInt(id as string, 10);
-
-  const [debt, setDebt] = useState<Debt | null>(null);
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { session, user } = useAuth();
+  const colors = useColors();
+  const [detail, setDetail] = useState<DebtDetail | null>(null);
   const [error, setError] = useState('');
-  const { user, session, isAuthenticated } = useAuth();
+
+  const load = useCallback(
+    async (token: string) => {
+      try {
+        apiClient.setAuthToken(token);
+        setDetail(await apiClient.getDebt(Number(id)));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load debt');
+      }
+    },
+    [id]
+  );
 
   useEffect(() => {
-    if (isAuthenticated && session) {
-      apiClient.setAuthToken(session.access_token);
-      loadData();
-    }
-  }, [isAuthenticated, session, debtId]);
+    if (session) load(session.access_token);
+  }, [session, load]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const debtData = await apiClient.getDebt(debtId);
-      setDebt(debtData);
+  if (!session) return <SignedOut message="Log in to see this debt." />;
 
-      // Load receipts if debt has a group
-      if (debtData.group) {
-        try {
-          const receiptsData = await apiClient.getReceipts(debtData.group.id);
-          setReceipts(receiptsData);
-        } catch (err) {
-          // Silently fail for receipts
-          console.error('Failed to load receipts:', err);
-        }
-      }
-
-      setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load debt');
-      Alert.alert('Error', err.message || 'Failed to load debt');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700';
-      case 'paid':
-        return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700';
-      case 'not_paying':
-        return 'border-rose-500/30 bg-rose-500/10 text-rose-700';
-      default:
-        return '';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    return status === 'not_paying' ? 'Not paying' : status.charAt(0).toUpperCase() + status.slice(1);
-  };
-
-  if (!isAuthenticated) {
+  if (!detail) {
     return (
       <View className="flex-1 items-center justify-center bg-background p-6">
-        <Text className="text-xl font-semibold text-foreground mb-4">
-          Please log in to view debt details
-        </Text>
-        <Button onPress={() => router.push('/login')}>
-          <Text>Go to Login</Text>
-        </Button>
+        {error ? (
+          <Text className="text-center text-sm text-destructive">{error}</Text>
+        ) : (
+          <ActivityIndicator color={colors.mutedForeground} />
+        )}
       </View>
     );
   }
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" />
-        <Text className="text-sm text-muted-foreground mt-2">Loading debt...</Text>
-      </View>
-    );
-  }
-
-  if (!debt) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
-        <Text className="text-xl font-semibold text-foreground mb-4">
-          Debt not found
-        </Text>
-        <Button onPress={() => router.back()}>
-          <Text>Go Back</Text>
-        </Button>
-      </View>
-    );
-  }
-
-  const isLender = user?.id === debt.lender.id;
+  const { debt, transactions, receiptImageUrls } = detail;
+  const isLender = debt.lender.id === user?.id;
+  const other = isLender ? debt.borrower : debt.lender;
+  const otherName = other.name || other.email;
+  const headline = isLender ? `${otherName} owes you` : `You owe ${otherName}`;
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-6">
-      {/* Header */}
-      <View className="mb-6">
-        <Pressable onPress={() => router.back()} className="mb-4">
-          <Text className="text-sm text-primary">← Back</Text>
-        </Pressable>
-        <View className="flex-row items-start justify-between mb-2">
-          <View className="flex-1">
-            <Text className="text-3xl font-semibold text-foreground">
-              Debt details
-            </Text>
-            <Text className="text-sm text-muted-foreground mt-1">
-              View and manage debt information
-            </Text>
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-5 p-4 pb-8">
+      <Stack.Screen options={{ title: otherName }} />
+      <PageHeader
+        title={`${headline} ${money(debt.amount)}`}
+        description={[debt.description, `Created ${new Date(debt.createdAt).toLocaleDateString()}`]
+          .filter(Boolean)
+          .join(' · ')}
+      />
+
+      <Card>
+        <View className="items-center gap-3 p-6">
+          <View className="flex-row">
+            <Avatar name={debt.borrower.name || debt.borrower.email} className="h-11 w-11 border-2 border-card" />
+            <Avatar name={debt.lender.name || debt.lender.email} className="-ml-3 h-11 w-11 border-2 border-card" />
           </View>
-          <Button variant="secondary" size="sm" onPress={() => router.push('/')}>
-            <Text className="text-xs">Dashboard</Text>
-          </Button>
+          <Text className="text-sm text-muted-foreground">{headline}</Text>
+          <Text className="text-4xl font-semibold">{money(debt.amount)}</Text>
+          <StatusBadge status={debt.status} />
         </View>
-      </View>
+      </Card>
 
-      {/* Error Message */}
-      {error && (
-        <View className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 mb-4">
-          <Text className="text-sm text-destructive">{error}</Text>
-        </View>
-      )}
-
-      {/* Debt Info Card */}
-      <Card className="mb-6">
+      <Card>
         <CardHeader>
-          <View className="flex-row items-start justify-between">
-            <View className="flex-1">
-              <CardTitle className="text-2xl">${debt.amount.toFixed(2)}</CardTitle>
-              <CardDescription className="mt-2">
-                {isLender ? (
-                  <>
-                    Lending to <Text className="font-semibold text-foreground">{debt.borrower.email}</Text>
-                  </>
-                ) : (
-                  <>
-                    Borrowing from <Text className="font-semibold text-foreground">{debt.lender.email}</Text>
-                  </>
-                )}
-              </CardDescription>
-            </View>
-            <Badge variant="outline" className={getStatusColor(debt.status)}>
-              {getStatusLabel(debt.status)}
-            </Badge>
-          </View>
+          <CardTitle>Activity</CardTitle>
+          <CardDescription>All change requests for this debt</CardDescription>
         </CardHeader>
-        <CardContent className="gap-4">
-          {debt.description && (
-            <>
-              <View className="gap-1">
-                <Label className="text-muted-foreground">Description</Label>
-                <Text className="text-base text-foreground">{debt.description}</Text>
+        <CardContent className="gap-2">
+          {transactions.length === 0 ? (
+            <View className="items-center gap-2 py-6">
+              <History color={colors.mutedForeground} size={20} />
+              <Text className="font-medium">No activity yet</Text>
+              <Text className="text-center text-sm text-muted-foreground">
+                Change requests and payment confirmations will appear here.
+              </Text>
+            </View>
+          ) : (
+            transactions.map((transaction) => (
+              <View key={transaction.id} className="flex-row gap-3 rounded-lg border border-border p-3">
+                <Avatar name={transaction.requester.name || transaction.requester.email} />
+                <View className="flex-1 gap-1">
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <Text className="text-sm font-medium">
+                      {TRANSACTION_LABELS[transaction.type] ?? transaction.type}
+                    </Text>
+                    <StatusBadge status={transaction.status} />
+                  </View>
+                  <Text className="text-sm text-muted-foreground">
+                    {[
+                      transaction.requester.name || transaction.requester.email,
+                      transaction.proposedAmount !== null && `→ ${money(transaction.proposedAmount)}`,
+                      transaction.reason,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                  <Text className="text-xs text-muted-foreground">
+                    {new Date(transaction.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
               </View>
-              <Separator />
-            </>
+            ))
           )}
-
-          {debt.group && (
-            <>
-              <View className="gap-1">
-                <Label className="text-muted-foreground">Group</Label>
-                <Text className="text-base text-foreground">{debt.group.name}</Text>
-              </View>
-              <Separator />
-            </>
-          )}
-
-          <View className="gap-1">
-            <Label className="text-muted-foreground">Created</Label>
-            <Text className="text-base text-foreground">
-              {new Date(debt.createdAt).toLocaleDateString()}
-            </Text>
-          </View>
         </CardContent>
       </Card>
 
-      {/* Receipts Section */}
-      {debt.group && (
-        <View className="gap-6">
-          {/* Upload Receipt Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload receipt</CardTitle>
-              <CardDescription>
-                Receipt upload coming soon
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" disabled>
-                <Text>Coming Soon</Text>
-              </Button>
-              <Text className="text-xs text-muted-foreground mt-2">
-                Receipt upload will be available in a future update
-              </Text>
-            </CardContent>
-          </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <InfoRow label="Lender" value={debt.lender.name || debt.lender.email} />
+          <Separator />
+          <InfoRow label="Borrower" value={debt.borrower.name || debt.borrower.email} />
+          {debt.group && (
+            <>
+              <Separator />
+              <InfoRow label="Group" value={debt.group.name} />
+            </>
+          )}
+          <Separator />
+          <InfoRow label="Created" value={new Date(debt.createdAt).toLocaleDateString()} />
+        </CardContent>
+      </Card>
 
-          {/* Receipts List Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Receipts ({receipts.length})</CardTitle>
-              <CardDescription>
-                All uploaded receipts for this group
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {receipts.length === 0 ? (
-                <View className="flex items-center justify-center rounded-md border border-dashed border-border p-12">
-                  <Text className="text-sm text-muted-foreground text-center">
-                    No receipts uploaded yet
-                  </Text>
-                </View>
-              ) : (
-                <View className="gap-3">
-                  {receipts.map((receipt) => (
-                    <View key={receipt.id} className="rounded-lg border border-border bg-muted/50 p-3">
-                      <Text className="text-xs text-muted-foreground mb-2">
-                        {new Date(receipt.createdAt).toLocaleString()}
-                      </Text>
-                      {receipt.rawText && (
-                        <Text className="text-xs text-foreground font-mono">
-                          {receipt.rawText.substring(0, 150)}
-                          {receipt.rawText.length > 150 ? '...' : ''}
-                        </Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
-            </CardContent>
-          </Card>
-        </View>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Receipts</CardTitle>
+          <CardDescription>Receipt images attached to this debt</CardDescription>
+        </CardHeader>
+        <CardContent className="gap-3">
+          {receiptImageUrls.length === 0 ? (
+            <Text className="text-sm text-muted-foreground">No receipts attached.</Text>
+          ) : (
+            receiptImageUrls.map((receipt) => (
+              <Image
+                key={receipt.id}
+                source={{ uri: receipt.url }}
+                style={{ width: '100%', aspectRatio: 3 / 4, borderRadius: 8 }}
+                contentFit="cover"
+              />
+            ))
+          )}
+        </CardContent>
+      </Card>
     </ScrollView>
   );
 }

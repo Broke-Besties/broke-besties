@@ -1,16 +1,7 @@
 import React from 'react';
-import { Text, TextProps } from 'react-native';
 import { cn } from '@/lib/utils';
+import { Text, TextProps } from '@/components/ui/text';
 
-export type LabelProps = TextProps & {
-  className?: string;
-};
-
-export function Label({ className, ...props }: LabelProps) {
-  return (
-    <Text
-      className={cn('text-sm font-medium text-foreground', className)}
-      {...props}
-    />
-  );
+export function Label({ className, ...props }: TextProps) {
+  return <Text className={cn('text-sm font-medium', className)} {...props} />;
 }

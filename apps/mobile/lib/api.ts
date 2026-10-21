@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import { ApiResponse } from './types';
+import { DashboardData, DebtDetail } from './types';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://localhost:3000';
 
@@ -96,6 +96,23 @@ export class ApiClient {
     });
   }
 
+  // Everything the home screen shows, in one request
+  async getDashboard() {
+    return this.request<DashboardData>('/api/dashboard');
+  }
+
+  async getUser() {
+    const response = await this.request<{ user: { id: string; email: string; name: string | null; createdAt: string; updatedAt: string } }>('/api/user');
+    return response.user;
+  }
+
+  async updateProfile(name: string) {
+    return this.request<{ user: { id: string; email: string; name: string } }>('/api/user', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   async getMe() {
     return this.request<{ id: string; email: string; name?: string }>('/api/auth/me');
   }
@@ -119,8 +136,7 @@ export class ApiClient {
   }
 
   async getGroupDebts(groupId: number) {
-    // Web API supports group filtering via /api/debts?groupId=...
-    const response = await this.request<{ debts: any[] }>(`/api/debts?groupId=${groupId}`);
+    const response = await this.request<{ debts: any[] }>(`/api/groups/${groupId}/debts`);
     return response.debts;
   }
 
@@ -131,13 +147,11 @@ export class ApiClient {
   }
 
   async getDebt(id: number) {
-    return this.request<any>(`/api/debts/${id}`);
+    return this.request<DebtDetail>(`/api/debts/${id}`);
   }
 
   async createDebt(data: {
-    lenderId?: string;
-    borrowerId?: string;
-    borrowerEmail?: string;
+    borrowerId: string;
     amount: number;
     description?: string;
     groupId?: number;
@@ -145,13 +159,6 @@ export class ApiClient {
     return this.request<any>('/api/debts', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
-  }
-
-  async updateDebtStatus(id: number, status: string) {
-    return this.request<ApiResponse<any>>(`/api/debts/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
     });
   }
 
@@ -169,10 +176,14 @@ export class ApiClient {
   }
 
   async acceptInvite(id: number) {
-    return this.request<any>('/api/invites/accept', {
+    return this.request<{ group: { id: number } }>('/api/invites/accept', {
       method: 'POST',
       body: JSON.stringify({ inviteId: id }),
     });
+  }
+
+  async rejectInvite(id: number) {
+    return this.request<{ message: string }>(`/api/invites/${id}/reject`, { method: 'POST' });
   }
 
   // Receipts endpoints
