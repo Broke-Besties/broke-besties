@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, type ScrollViewInstance, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { SendHorizontal } from 'lucide-react-native';
@@ -26,11 +26,10 @@ export default function AIScreen() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   const loadGroups = useCallback(async (token: string) => {
     try {
-      apiClient.setAuthToken(token);
       const data = await apiClient.getGroups();
       setGroups(data);
       setGroupId((current) => current ?? data[0]?.id ?? null);
