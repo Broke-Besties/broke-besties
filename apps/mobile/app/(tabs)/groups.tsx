@@ -30,7 +30,6 @@ export default function GroupsScreen() {
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async (token: string) => {
-    apiClient.setAuthToken(token);
     try {
       setGroups(await apiClient.getGroups());
       setError('');

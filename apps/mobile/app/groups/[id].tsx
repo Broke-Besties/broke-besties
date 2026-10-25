@@ -51,7 +51,6 @@ export default function GroupDetailScreen() {
   const load = useCallback(
     async (token: string) => {
       try {
-        apiClient.setAuthToken(token);
         const [groupData, debtData] = await Promise.all([
           apiClient.getGroup(groupId),
           apiClient.getGroupDebts(groupId),

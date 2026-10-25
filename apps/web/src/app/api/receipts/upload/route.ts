@@ -10,10 +10,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // A non-multipart body makes formData() throw; treat it as "no file"
-    const formData = await request.formData().catch(() => null);
-    const file = formData?.get("file") as File | null;
-    const debtIdsStr = (formData?.get("debtIds") ?? null) as string | null;
+    const formData = await request.formData();
+    const file = formData.get("file") as File;
+    const debtIdsStr = formData.get("debtIds") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -79,7 +78,6 @@ export async function POST(request: NextRequest) {
     console.error("Error uploading receipt:", error);
     const message =
       error instanceof Error ? error.message : "Internal server error";
-    const status = message.startsWith("Access denied") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

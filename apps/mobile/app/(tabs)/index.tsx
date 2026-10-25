@@ -115,7 +115,6 @@ function Dashboard({ token }: { token: string }) {
 
   const load = useCallback(async () => {
     try {
-      apiClient.setAuthToken(token);
       setData(await apiClient.getDashboard());
       setError('');
     } catch (err) {

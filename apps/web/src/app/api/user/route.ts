@@ -29,11 +29,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => null);
-    const name = body?.name;
+    const body = await request.json();
+    const { name } = body;
 
     // Validate input
-    if (typeof name !== "string" || name.trim() === "") {
+    if (!name || name.trim() === "") {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
@@ -47,22 +47,5 @@ export async function PATCH(request: Request) {
     console.error("Error updating user:", error);
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-// DELETE /api/user - Delete the current user's account
-export async function DELETE() {
-  try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    await userService.deleteAccount(user.id);
-
-    return NextResponse.json({ message: "Account deleted" });
-  } catch (error) {
-    console.error("Error deleting account:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

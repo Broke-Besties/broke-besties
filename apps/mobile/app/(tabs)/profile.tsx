@@ -32,7 +32,6 @@ export default function ProfileScreen() {
 
   const load = useCallback(async (token: string) => {
     try {
-      apiClient.setAuthToken(token);
       const user = await apiClient.getUser();
       setProfile(user);
       setName(user.name ?? '');

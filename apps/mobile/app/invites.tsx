@@ -24,7 +24,6 @@ export default function InvitesScreen() {
 
   const load = useCallback(async (token: string) => {
     try {
-      apiClient.setAuthToken(token);
       setInvites(await apiClient.getInvites());
       setError('');
     } catch (err) {
@@ -38,17 +37,13 @@ export default function InvitesScreen() {
 
   if (!session) return <SignedOut message="Log in to see your invitations." />;
 
-  const respond = async (invite: Invite, accept: boolean) => {
+  // No decline: the website's API only exposes accept (decline is a web-only server action)
+  const accept = async (invite: Invite) => {
     setBusyId(invite.id);
     setError('');
     try {
-      if (accept) {
-        const { group } = await apiClient.acceptInvite(invite.id);
-        router.replace(`/groups/${group.id}`);
-      } else {
-        await apiClient.rejectInvite(invite.id);
-        setInvites((current) => current?.filter((item) => item.id !== invite.id) ?? null);
-      }
+      const { group } = await apiClient.acceptInvite(invite.id);
+      router.replace(`/groups/${group.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -103,17 +98,9 @@ export default function InvitesScreen() {
                   </CardDescription>
                 </View>
               </CardHeader>
-              <CardContent className="flex-row gap-2">
-                <Button className="flex-1" onPress={() => respond(invite, true)} disabled={busyId === invite.id}>
+              <CardContent>
+                <Button onPress={() => accept(invite)} disabled={busyId === invite.id}>
                   Accept
-                </Button>
-                <Button
-                  className="flex-1"
-                  variant="outline"
-                  onPress={() => respond(invite, false)}
-                  disabled={busyId === invite.id}
-                >
-                  Decline
                 </Button>
               </CardContent>
             </Card>

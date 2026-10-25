@@ -6,12 +6,6 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-function errorStatus(message: string) {
-  if (message === "Receipt not found") return 404;
-  if (message.startsWith("Access denied")) return 403;
-  return 500;
-}
-
 // PATCH /api/receipts/[id] - Link receipt to debts
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
@@ -21,18 +15,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const body = await request.json().catch(() => null);
-    const debtIds = body?.debtIds;
+    const { debtIds } = await request.json();
 
     if (!debtIds || !Array.isArray(debtIds) || debtIds.length === 0) {
       return NextResponse.json(
         { error: "debtIds array is required" },
         { status: 400 }
       );
-    }
-
-    if (!debtIds.every(Number.isInteger)) {
-      return NextResponse.json({ error: "Invalid debt ID" }, { status: 400 });
     }
 
     await receiptService.linkReceiptToDebts(id, debtIds, user.id);
@@ -44,7 +33,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     console.error("Error linking receipt to debts:", error);
     const message =
       error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -67,6 +56,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     console.error("Error deleting receipt:", error);
     const message =
       error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

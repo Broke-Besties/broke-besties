@@ -36,7 +36,6 @@ export default function DebtDetailScreen() {
   const load = useCallback(
     async (token: string) => {
       try {
-        apiClient.setAuthToken(token);
         setDetail(await apiClient.getDebt(Number(id)));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load debt');
@@ -94,7 +93,7 @@ export default function DebtDetailScreen() {
       <Card>
         <CardHeader>
           <CardTitle>Activity</CardTitle>
-          <CardDescription>All change requests for this debt</CardDescription>
+          <CardDescription>Pending change requests for this debt</CardDescription>
         </CardHeader>
         <CardContent className="gap-2">
           {transactions.length === 0 ? (
@@ -161,7 +160,11 @@ export default function DebtDetailScreen() {
         </CardHeader>
         <CardContent className="gap-3">
           {receiptImageUrls.length === 0 ? (
-            <Text className="text-sm text-muted-foreground">No receipts attached.</Text>
+            <Text className="text-sm text-muted-foreground">
+              {debt.receipts?.length
+                ? `${debt.receipts.length} attached. Open this debt on brokebesties.ca to see the images.`
+                : 'No receipts attached.'}
+            </Text>
           ) : (
             receiptImageUrls.map((receipt) => (
               <Image

@@ -28,15 +28,12 @@ export class ReceiptService {
       }
     }
 
-    // Record the uploader up front: a receipt with no uploader and no debts is
-    // readable by anyone (legacy rule), even for the length of the upload.
+    // Create receipt record, optionally linking to debts
     const receipt = await prisma.receipt.create({
-      data: {
-        uploaderId: userId,
-        ...(debtIds && debtIds.length > 0
+      data:
+        debtIds && debtIds.length > 0
           ? { debts: { connect: debtIds.map((id) => ({ id })) } }
-          : {}),
-      },
+          : {},
     });
 
     try {
@@ -67,6 +64,13 @@ export class ReceiptService {
       console.log("[Receipt Upload] Successfully uploaded to Supabase");
       console.log("[Receipt Upload] Presigned URL:", signedUrlData.signedUrl);
 
+      // Track the uploader so pending receipts (no debts yet) are only
+      // accessible to whoever uploaded them
+      await prisma.receipt.update({
+        where: { id: receipt.id },
+        data: { uploaderId: userId },
+      });
+
       return {
         id: receipt.id,
         signedUrl: signedUrlData.signedUrl,
@@ -87,27 +91,13 @@ export class ReceiptService {
     debtIds: number[],
     userId: string
   ) {
+    // Verify receipt exists
     const receipt = await prisma.receipt.findUnique({
       where: { id: receiptId },
-      include: {
-        debts: {
-          select: {
-            id: true,
-            lenderId: true,
-            borrowerId: true,
-          },
-        },
-      },
     });
 
     if (!receipt) {
       throw new Error("Receipt not found");
-    }
-
-    // Only the uploader or a party on an already-linked debt may link; otherwise
-    // anyone could attach someone else's receipt to their own debt and read it
-    if (receipt.uploaderId !== userId && !ReceiptPolicy.canView(userId, receipt)) {
-      throw new Error("Access denied");
     }
 
     // Verify user has access to all debts
@@ -158,7 +148,7 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    if (!(await this.canAccessReceipt(userId, receipt))) {
+    if (!this.canAccessReceipt(userId, receipt)) {
       throw new Error("Access denied");
     }
 
@@ -188,7 +178,7 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    if (!(await this.canAccessReceipt(userId, receipt))) {
+    if (!this.canAccessReceipt(userId, receipt)) {
       throw new Error("Access denied");
     }
 
@@ -267,43 +257,6 @@ export class ReceiptService {
   }
 
   /**
-   * Signed (1-hour) URLs for receipt images stored at `receipts/{id}`, in input
-   * order. Receipts whose URL can't be created are skipped (and logged); never throws.
-   */
-  async getSignedImageUrls(
-    receiptIds: string[]
-  ): Promise<{ id: string; url: string }[]> {
-    if (receiptIds.length === 0) {
-      return [];
-    }
-
-    try {
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
-
-      const { data, error } = await supabase.storage
-        .from("receipts")
-        .createSignedUrls(receiptIds.map((id) => `receipts/${id}`), 3600);
-      if (error) throw error;
-
-      const signed = new Map(data.map((item) => [item.path, item]));
-      return receiptIds.flatMap((id) => {
-        const item = signed.get(`receipts/${id}`);
-        if (!item?.signedUrl || item.error) {
-          console.error(`[Receipt URLs] Error signing receipts/${id}:`, item?.error);
-          return [];
-        }
-        return [{ id, url: item.signedUrl }];
-      });
-    } catch (error) {
-      console.error("[Receipt URLs] Error signing receipt images:", error);
-      return [];
-    }
-  }
-
-  /**
    * Get all receipts for a specific debt
    */
   async getReceiptsForDebt(debtId: number, userId: string) {
@@ -346,15 +299,7 @@ export class ReceiptService {
       throw new Error("Receipt not found");
     }
 
-    // Pending receipts (no debts yet) belong to whoever uploaded them
-    if (
-      receipt.debts.length === 0 &&
-      receipt.uploaderId &&
-      receipt.uploaderId !== userId
-    ) {
-      throw new Error("Access denied");
-    }
-
+    // For pending receipts or receipts the user has access to
     if (receipt.debts.length > 0 && !ReceiptPolicy.canDelete(userId, receipt)) {
       throw new Error("Access denied");
     }

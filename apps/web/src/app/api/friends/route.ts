@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase";
 import { friendService } from "@/services/friend.service";
-import { userService } from "@/services/user.service";
 
 // Get accepted friends list
 export async function GET() {
@@ -33,19 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Either { recipientId } or { email } (the mobile app's add-by-email form).
-    const body = await request.json().catch(() => null);
-    if (!body) {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-    const { recipientId, email } = body;
-
-    if (email !== undefined && (typeof email !== "string" || !email.trim())) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
-    }
-    if (email === undefined && typeof recipientId !== "string") {
-      return NextResponse.json({ error: "Recipient ID is required" }, { status: 400 });
-    }
+    const { recipientId } = await request.json();
 
     console.log("[Friend API] POST /friends - Sending friend request", {
       senderId: user.id,
@@ -53,12 +40,7 @@ export async function POST(request: NextRequest) {
       recipientIdType: typeof recipientId,
     });
 
-    const result = await friendService.sendFriendRequest(
-      user.id,
-      email === undefined
-        ? recipientId
-        : (await userService.searchUserByEmail(email.trim().toLowerCase())).id,
-    );
+    const result = await friendService.sendFriendRequest(user.id, recipientId);
 
     const message = result.autoAccepted
       ? "Friend request accepted! You are now friends."
