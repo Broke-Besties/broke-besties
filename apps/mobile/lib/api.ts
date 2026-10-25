@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
-import { ApiResponse } from './types';
+import { sessionCookie } from './session-cookie';
+import { supabase } from './supabase';
+import { DashboardData, DebtDetail } from './types';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://localhost:3000';
 
@@ -16,18 +18,8 @@ export class ApiError extends Error {
 
 export class ApiClient {
   private baseURL: string;
-  private authToken: string | null = null;
-
   constructor(baseURL: string = API_BASE_URL) {
     this.baseURL = baseURL;
-  }
-
-  setAuthToken(token: string | null) {
-    this.authToken = token;
-  }
-
-  getAuthToken(): string | null {
-    return this.authToken;
   }
 
   private async request<T>(
@@ -40,14 +32,17 @@ export class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      headers['Cookie'] = sessionCookie(process.env.EXPO_PUBLIC_SUPABASE_URL!, session);
     }
 
     try {
+      // 'omit' keeps iOS from swapping our Cookie header for its own cookie jar
       const response = await fetch(url, {
         ...options,
         headers,
+        credentials: 'omit',
       });
 
       const rawText = await response.text();
@@ -96,8 +91,37 @@ export class ApiClient {
     });
   }
 
-  async getMe() {
-    return this.request<{ id: string; email: string; name?: string }>('/api/auth/me');
+  // Everything the home screen shows, from the website's existing endpoints
+  async getDashboard(): Promise<DashboardData> {
+    const [user, { debts }, groups, { recurringPayments }, { alerts }, { transactions }] = await Promise.all([
+      this.getUser(),
+      this.request<{ debts: any[] }>('/api/debts?status=pending'),
+      this.getGroups(),
+      this.request<{ recurringPayments: any[] }>('/api/recurring-payments?status=active'),
+      this.request<{ alerts: any[] }>('/api/alerts'),
+      this.request<{ transactions: any[] }>('/api/debt-transactions'),
+    ]);
+    return {
+      user,
+      debts,
+      groups,
+      recurringPayments,
+      alerts,
+      // Requests waiting on the user's approval as the lender
+      pendingApprovals: transactions.filter((t) => t.debt.lenderId === user.id && !t.lenderApproved),
+    };
+  }
+
+  async getUser() {
+    const response = await this.request<{ user: { id: string; email: string; name: string | null; createdAt: string; updatedAt: string } }>('/api/user');
+    return response.user;
+  }
+
+  async updateProfile(name: string) {
+    return this.request<{ user: { id: string; email: string; name: string } }>('/api/user', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
   }
 
   // Groups endpoints
@@ -118,10 +142,9 @@ export class ApiClient {
     });
   }
 
+  // shortcut: only the group's debts the user lends or borrows in; the website's API has no whole-group list
   async getGroupDebts(groupId: number) {
-    // Web API supports group filtering via /api/debts?groupId=...
-    const response = await this.request<{ debts: any[] }>(`/api/debts?groupId=${groupId}`);
-    return response.debts;
+    return (await this.getDebts()).filter((debt) => debt.groupId === groupId);
   }
 
   // Debts endpoints
@@ -130,14 +153,17 @@ export class ApiClient {
     return response.debts;
   }
 
-  async getDebt(id: number) {
-    return this.request<any>(`/api/debts/${id}`);
+  // The website's API has no transaction history or receipt images per debt: show its pending requests only
+  async getDebt(id: number): Promise<DebtDetail> {
+    const [{ debt }, { transactions }] = await Promise.all([
+      this.request<{ debt: DebtDetail['debt'] }>(`/api/debts/${id}`),
+      this.request<{ transactions: any[] }>('/api/debt-transactions'),
+    ]);
+    return { debt, transactions: transactions.filter((t) => t.debtId === id), receiptImageUrls: [] };
   }
 
   async createDebt(data: {
-    lenderId?: string;
-    borrowerId?: string;
-    borrowerEmail?: string;
+    borrowerId: string;
     amount: number;
     description?: string;
     groupId?: number;
@@ -145,13 +171,6 @@ export class ApiClient {
     return this.request<any>('/api/debts', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
-  }
-
-  async updateDebtStatus(id: number, status: string) {
-    return this.request<ApiResponse<any>>(`/api/debts/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
     });
   }
 
@@ -169,42 +188,10 @@ export class ApiClient {
   }
 
   async acceptInvite(id: number) {
-    return this.request<any>('/api/invites/accept', {
+    return this.request<{ group: { id: number } }>('/api/invites/accept', {
       method: 'POST',
       body: JSON.stringify({ inviteId: id }),
     });
-  }
-
-  // Receipts endpoints
-  async getReceipts(groupId: number) {
-    return this.request<any[]>(`/api/receipts?groupId=${groupId}`);
-  }
-
-  async uploadReceipt(formData: FormData) {
-    const url = `${this.baseURL}/api/receipts/upload`;
-    const headers: Record<string, string> = {};
-
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new ApiError(
-        data.error || `HTTP ${response.status}: ${response.statusText}`,
-        response.status,
-        data
-      );
-    }
-
-    return data;
   }
 
   // AI Agent endpoint

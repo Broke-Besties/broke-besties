@@ -1,167 +1,171 @@
 import { useState } from 'react';
-import { Alert, Platform, Pressable, View, ScrollView } from 'react-native';
-import { router } from 'expo-router';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
+
+import { Brand } from '@/components/brand';
+import { GoogleIcon } from '@/components/google-icon';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Text } from '@/components/ui/text';
+import { useColors } from '@/hooks/use-colors';
+import { signInWithGoogle } from '@/lib/google-sign-in';
 import { supabase } from '@/lib/supabase';
-import { ThemedText } from '@/components/themed-text';
+
+// Same copy as the web's auth form.
+const COPY = {
+  login: {
+    title: 'Welcome back',
+    description: 'Log in to manage groups, invites, and debts.',
+    submit: 'Log in',
+    footer: "Don't have an account?",
+    switchLabel: 'Sign up',
+  },
+  signup: {
+    title: 'Create your account',
+    description: 'Start creating groups and tracking debts in minutes.',
+    submit: 'Create account',
+    footer: 'Already have an account?',
+    switchLabel: 'Log in',
+  },
+};
 
 export default function LoginScreen() {
+  const colors = useColors();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<'login' | 'signup'>(params.mode === 'signup' ? 'signup' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'email' | 'google' | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const copy = COPY[mode];
 
-  async function handleLogin() {
+  async function handleSubmit() {
     if (!email || !password) {
-      setError('Please enter email and password');
-      Alert.alert('Error', 'Please enter email and password');
+      setError('Please enter your email and password');
       return;
     }
-
-    setLoading(true);
+    setLoading('email');
     setError('');
-
+    setNotice('');
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { data, error } =
+        mode === 'login'
+          ? await supabase.auth.signInWithPassword({ email, password })
+          : await supabase.auth.signUp({ email, password });
       if (error) {
         setError(error.message);
-        Alert.alert('Error', error.message);
-        return;
+      } else if (data.session) {
+        router.replace('/');
+      } else {
+        setNotice(`Check ${email} to confirm your account.`);
       }
-
-      router.replace('/');
-    } catch (error) {
-      const errorMessage = 'Could not connect to server';
-      setError(errorMessage);
-      Alert.alert('Error', errorMessage);
+    } catch {
+      setError('Could not connect to the server');
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   }
 
-  async function handleSignup() {
-    if (!email || !password) {
-      setError('Please enter email and password');
-      Alert.alert('Error', 'Please enter email and password');
-      return;
-    }
-
-    setLoading(true);
+  async function handleGoogle() {
+    setLoading('google');
     setError('');
-
+    setNotice('');
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) {
-        setError(error.message);
-        Alert.alert('Error', error.message);
-        return;
-      }
-
-      Alert.alert('Success', `Check your email (${email}) to confirm your account!`);
-      router.replace('/');
-    } catch (error) {
-      const errorMessage = 'Could not connect to server';
-      setError(errorMessage);
-      Alert.alert('Error', errorMessage);
+      if (await signInWithGoogle()) router.replace('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed');
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   }
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-6">
-      <View className="flex-1 justify-center gap-8">
-        {/* Back Button */}
-        <Pressable onPress={() => router.back()} className="absolute top-[60px] left-0">
-          <ThemedText className="text-sm text-primary">← Back</ThemedText>
+    <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerClassName="flex-grow justify-center gap-6 p-6" keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => router.back()} className="absolute left-4 top-14 h-10 w-10 items-center justify-center">
+          <ArrowLeft color={colors.foreground} size={20} />
         </Pressable>
 
-        {/* Header */}
-        <View className="gap-3 mt-20">
-          <ThemedText type="title" className="text-[32px] leading-[38px] tracking-tight">
-            Welcome back
-          </ThemedText>
-          <ThemedText className="text-base leading-6 text-muted-foreground">
-            Sign in to manage your shared expenses
-          </ThemedText>
+        <View className="items-center">
+          <Brand />
         </View>
 
-        {/* Login Form Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Sign in to your account</CardTitle>
-            <CardDescription>
-              Enter your credentials to continue
-            </CardDescription>
+            <CardTitle>{copy.title}</CardTitle>
+            <CardDescription>{copy.description}</CardDescription>
           </CardHeader>
           <CardContent className="gap-4">
-            {/* Error Message */}
-            {error && (
-              <View className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                <ThemedText className="text-sm text-destructive">{error}</ThemedText>
+            {error ? (
+              <View className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
+                <Text className="text-sm text-destructive">{error}</Text>
               </View>
-            )}
+            ) : null}
+            {notice ? (
+              <View className="rounded-md border border-border bg-muted p-3">
+                <Text className="text-sm">{notice}</Text>
+              </View>
+            ) : null}
 
-            {/* Email Field */}
+            <Button variant="outline" onPress={handleGoogle} disabled={loading !== null}>
+              {loading === 'google' ? <ActivityIndicator size="small" color={colors.foreground} /> : <GoogleIcon />}
+              <Text>Continue with Google</Text>
+            </Button>
+
+            <View className="flex-row items-center gap-3">
+              <View className="h-px flex-1 bg-border" />
+              <Text className="text-sm text-muted-foreground">Or continue with</Text>
+              <View className="h-px flex-1 bg-border" />
+            </View>
+
             <View className="gap-2">
               <Label>Email</Label>
               <Input
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Email"
+                placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                editable={!loading}
+                autoComplete="email"
+                editable={loading === null}
               />
             </View>
-
-            {/* Password Field */}
             <View className="gap-2">
               <Label>Password</Label>
               <Input
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Password"
                 secureTextEntry
-                editable={!loading}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                editable={loading === null}
+                onSubmitEditing={handleSubmit}
               />
             </View>
 
-            {/* Action Buttons */}
-            <View className="gap-3 mt-2">
-              <Button onPress={handleLogin} disabled={loading}>
-                <ThemedText className="text-base font-semibold">
-                  {loading ? 'Loading...' : 'Log in'}
-                </ThemedText>
-              </Button>
-              <Button variant="outline" onPress={handleSignup} disabled={loading}>
-                <ThemedText className="text-base font-semibold">
-                  Create account
-                </ThemedText>
-              </Button>
+            <Button onPress={handleSubmit} disabled={loading !== null} className="mt-2">
+              {loading === 'email' ? 'Please wait…' : copy.submit}
+            </Button>
+
+            <View className="flex-row justify-center gap-1">
+              <Text className="text-sm text-muted-foreground">{copy.footer}</Text>
+              <Pressable
+                onPress={() => {
+                  setMode(mode === 'login' ? 'signup' : 'login');
+                  setError('');
+                  setNotice('');
+                }}
+              >
+                <Text className="text-sm font-medium underline">{copy.switchLabel}</Text>
+              </Pressable>
             </View>
           </CardContent>
         </Card>
-
-        {/* Alternative Options */}
-        <View className="items-center gap-2">
-          <ThemedText className="text-xs text-muted-foreground text-center">
-            By continuing, you agree to our Terms of Service and Privacy Policy
-          </ThemedText>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

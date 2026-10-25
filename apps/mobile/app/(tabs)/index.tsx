@@ -1,367 +1,304 @@
-import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
-import { router, Href } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { router } from 'expo-router';
+import { Image } from 'expo-image';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CalendarClock,
+  FileClock,
+  Repeat,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from 'lucide-react-native';
 
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { useAuth } from '@/hooks/use-auth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { IconMedia, ListRow } from '@/components/list-row';
+import { PageHeader } from '@/components/page-header';
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Text } from '@/components/ui/text';
+import { useAuth } from '@/hooks/use-auth';
+import { useColors } from '@/hooks/use-colors';
 import { apiClient } from '@/lib/api';
-import { Debt } from '@/lib/types';
+import type { DashboardData } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-function LandingPage() {
-  const iconColor = useThemeColor({}, 'icon');
-  const tint = useThemeColor({}, 'tint');
-  const background = useThemeColor({}, 'background');
-  const text = useThemeColor({}, 'text');
+const money = (amount: number) =>
+  amount.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chart.bar.fill"
-          style={{ position: 'absolute', bottom: -90, left: -35 }}
-        />
-      }>
-      <ThemedView className="flex-row gap-2">
-        <ThemedText type="title">
-          Split expenses with your groups, without the chaos.
-        </ThemedText>
-      </ThemedView>
+const personName = (person: { name: string | null; email: string }) => person.name || person.email;
 
-      <ThemedText style={{ color: iconColor }}>
-        Create groups, invite members, and track who owes who what.
-      </ThemedText>
-
-      <View className="gap-3 mt-6">
-        <Pressable
-          onPress={() => router.push('/login' as Href)}
-          className="items-center px-5 py-3.5 rounded-[10px] border"
-          style={{ backgroundColor: tint, borderColor: tint }}
-        >
-          <Text className="text-base font-semibold" style={{ color: background }}>
-            Get started
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/login' as Href)}
-          className="items-center px-5 py-3.5 rounded-[10px] border"
-          style={{ backgroundColor: background, borderColor: text }}
-        >
-          <Text className="text-base font-semibold" style={{ color: text }}>
-            Log in
-          </Text>
-        </Pressable>
-      </View>
-    </ParallaxScrollView>
-  );
+// Same rule as the web dashboard (apps/web/src/app/(app)/dashboard/format.ts).
+function nextRenewal(payment: { createdAt: string; frequency: number }): Date {
+  const created = new Date(payment.createdAt);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysSince = Math.floor((today.getTime() - created.getTime()) / 86_400_000);
+  const next = new Date(created);
+  next.setDate(created.getDate() + Math.max(0, Math.ceil(daysSince / payment.frequency)) * payment.frequency);
+  if (next <= today) next.setDate(next.getDate() + payment.frequency);
+  return next;
 }
 
-function DashboardContent() {
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const { user, session, isAuthenticated } = useAuth();
+const REQUEST_LABELS: Record<string, string> = {
+  confirm_paid: 'Payment confirmation',
+  modify: 'Modification',
+  drop: 'Deletion',
+};
 
-  useEffect(() => {
-    if (isAuthenticated && session) {
-      apiClient.setAuthToken(session.access_token);
-      loadDebts();
-    }
-  }, [isAuthenticated, session]);
-
-  const loadDebts = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getDebts();
-      setDebts(Array.isArray(data) ? data : []);
-      setError('');
-    } catch (err: any) {
-      setError(err instanceof Error ? err.message : 'Failed to load debts');
-      setDebts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadDebts();
-    setRefreshing(false);
-  };
-
-  const handleUpdateStatus = async (debtId: number, newStatus: string) => {
-    const oldStatus = debts.find(d => d.id === debtId)?.status;
-
-    if (newStatus !== 'pending' && newStatus !== 'paid' && newStatus !== 'not_paying') {
-      setError('Invalid status');
-      return;
-    }
-
-    setDebts(prevDebts =>
-      prevDebts.map(debt =>
-        debt.id === debtId ? { ...debt, status: newStatus as 'pending' | 'paid' | 'not_paying' } : debt
-      )
-    );
-
-    try {
-      const result = await apiClient.updateDebtStatus(debtId, newStatus);
-
-      if (!result.success) {
-        setError(result.error || 'Failed to update status');
-        if (oldStatus) {
-          setDebts(prevDebts =>
-            prevDebts.map(debt =>
-              debt.id === debtId ? { ...debt, status: oldStatus } : debt
-            )
-          );
-        }
-      }
-    } catch (err: any) {
-      setError(err instanceof Error ? err.message : 'An error occurred while updating the status');
-      if (oldStatus) {
-        setDebts(prevDebts =>
-          prevDebts.map(debt =>
-            debt.id === debtId ? { ...debt, status: oldStatus } : debt
-          )
-        );
-      }
-    }
-  };
-
-  const lendingDebts = (debts || []).filter((debt) => debt.lender.id === user?.id);
-  const borrowingDebts = (debts || []).filter((debt) => debt.borrower.id === user?.id);
-
-  const calculateTotal = (debtList: Debt[]) => {
-    return debtList.reduce((sum, debt) => sum + debt.amount, 0);
-  };
-
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
+function Landing() {
+  const colors = useColors();
   return (
-    <ScrollView
-      className="flex-1 bg-background"
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View className="p-4">
-        <View className="mb-6">
-          <Text className="text-3xl font-semibold text-foreground">Dashboard</Text>
-          <Text className="text-sm text-muted-foreground mt-1">Manage your debts and loans.</Text>
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow justify-center gap-8 p-6">
+      <Image
+        source={require('@/assets/images/mascot/mascot.png')}
+        style={{ width: 170, height: 205, alignSelf: 'center' }}
+        contentFit="contain"
+      />
+      <View className="gap-4">
+        <Text className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          Shared expenses, settled
+        </Text>
+        <Text className="text-4xl font-bold leading-tight">{'Split the bill,\nkeep the friendship.'}</Text>
+        <Text className="leading-6 text-muted-foreground">
+          Broke Besties tracks who paid, who owes, and what&apos;s recurring — across roommates, road
+          trips, and dinner clubs. See every balance at a glance and settle up without the awkward texts.
+        </Text>
+      </View>
+      <View className="gap-3">
+        <Button size="lg" onPress={() => router.push({ pathname: '/login', params: { mode: 'signup' } })}>
+          <Text>Get started</Text>
+          <ArrowRight color={colors.primaryForeground} size={18} />
+        </Button>
+        <Button size="lg" variant="outline" onPress={() => router.push('/login')}>
+          Log in
+        </Button>
+      </View>
+      <View className="flex-row items-center gap-3">
+        <View className="flex-row">
+          {['MA', 'SA', 'BE', 'LI'].map((name, i) => (
+            <Avatar key={name} name={name} className={cn('h-8 w-8 border-2 border-background', i > 0 && '-ml-2')} />
+          ))}
         </View>
-
-        <View className="mb-4">
-          <Button onPress={() => router.push('/groups' as Href)}>
-            View groups
-          </Button>
-        </View>
-
-        {error && (
-          <View className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 mb-4">
-            <Text className="text-sm text-destructive">{error}</Text>
-          </View>
-        )}
-
-        <View className="gap-4">
-          <Card>
-            <CardHeader>
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1">
-                  <CardTitle>You are lending</CardTitle>
-                  <CardDescription>Money owed to you</CardDescription>
-                </View>
-                <View className="items-end">
-                  <Text className="text-2xl font-semibold text-foreground">
-                    ${calculateTotal(lendingDebts).toFixed(2)}
-                  </Text>
-                  <Badge variant="secondary" className="mt-2">
-                    {lendingDebts.length} item{lendingDebts.length === 1 ? '' : 's'}
-                  </Badge>
-                </View>
-              </View>
-            </CardHeader>
-            <CardContent>
-              {lendingDebts.length === 0 ? (
-                <View className="rounded-md border bg-muted/40 p-6 items-center">
-                  <Text className="text-sm text-muted-foreground">No lending records.</Text>
-                </View>
-              ) : (
-                <View className="gap-3">
-                  {lendingDebts.map((debt) => (
-                    <Pressable
-                      key={debt.id}
-                      className="rounded-lg border bg-background p-4 shadow-sm active:opacity-70"
-                      onPress={() => router.push(`/debts/${debt.id}` as Href)}
-                    >
-                      <View className="flex-row items-start justify-between mb-3">
-                        <View className="flex-1">
-                          <Text className="font-medium text-foreground">{debt.borrower.email}</Text>
-                          {debt.description && (
-                            <Text className="mt-0.5 text-sm text-muted-foreground">{debt.description}</Text>
-                          )}
-                          {debt.group && (
-                            <Text className="mt-2 text-xs text-muted-foreground">
-                              Group: <Text className="font-medium text-foreground">{debt.group.name}</Text>
-                            </Text>
-                          )}
-                        </View>
-                        <View className="items-end">
-                          <Text className="text-lg font-semibold text-foreground">
-                            ${debt.amount.toFixed(2)}
-                          </Text>
-                          <Text className="mt-1 text-xs text-muted-foreground">
-                            {new Date(debt.createdAt).toLocaleDateString()}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View className="flex-row items-center justify-between">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700',
-                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
-                            debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
-                          )}
-                        >
-                          {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                        </Badge>
-
-                        <View className="h-9 w-32 rounded-md border bg-background">
-                          <Picker
-                            selectedValue={debt.status}
-                            onValueChange={(value) => handleUpdateStatus(debt.id, value)}
-                            style={{ height: 36 }}
-                          >
-                            <Picker.Item label="Pending" value="pending" />
-                            <Picker.Item label="Paid" value="paid" />
-                            <Picker.Item label="Not Paying" value="not_paying" />
-                          </Picker>
-                        </View>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1">
-                  <CardTitle>You are borrowing</CardTitle>
-                  <CardDescription>Money you owe</CardDescription>
-                </View>
-                <View className="items-end">
-                  <Text className="text-2xl font-semibold text-foreground">
-                    ${calculateTotal(borrowingDebts).toFixed(2)}
-                  </Text>
-                  <Badge variant="secondary" className="mt-2">
-                    {borrowingDebts.length} item{borrowingDebts.length === 1 ? '' : 's'}
-                  </Badge>
-                </View>
-              </View>
-            </CardHeader>
-            <CardContent>
-              {borrowingDebts.length === 0 ? (
-                <View className="rounded-md border bg-muted/40 p-6 items-center">
-                  <Text className="text-sm text-muted-foreground">No borrowing records.</Text>
-                </View>
-              ) : (
-                <View className="gap-3">
-                  {borrowingDebts.map((debt) => (
-                    <Pressable
-                      key={debt.id}
-                      className="rounded-lg border bg-background p-4 shadow-sm active:opacity-70"
-                      onPress={() => router.push(`/debts/${debt.id}` as Href)}
-                    >
-                      <View className="flex-row items-start justify-between mb-3">
-                        <View className="flex-1">
-                          <Text className="font-medium text-foreground">{debt.lender.email}</Text>
-                          {debt.description && (
-                            <Text className="mt-0.5 text-sm text-muted-foreground">{debt.description}</Text>
-                          )}
-                          {debt.group && (
-                            <Text className="mt-2 text-xs text-muted-foreground">
-                              Group: <Text className="font-medium text-foreground">{debt.group.name}</Text>
-                            </Text>
-                          )}
-                        </View>
-                        <View className="items-end">
-                          <Text className="text-lg font-semibold text-foreground">
-                            ${debt.amount.toFixed(2)}
-                          </Text>
-                          <Text className="mt-1 text-xs text-muted-foreground">
-                            {new Date(debt.createdAt).toLocaleDateString()}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View className="flex-row items-center justify-between">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            debt.status === 'pending' && 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700',
-                            debt.status === 'paid' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
-                            debt.status === 'not_paying' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
-                          )}
-                        >
-                          {debt.status === 'not_paying' ? 'Not paying' : debt.status.charAt(0).toUpperCase() + debt.status.slice(1)}
-                        </Badge>
-
-                        <View className="h-9 w-32 rounded-md border bg-background">
-                          <Picker
-                            selectedValue={debt.status}
-                            onValueChange={(value) => handleUpdateStatus(debt.id, value)}
-                            style={{ height: 36 }}
-                          >
-                            <Picker.Item label="Pending" value="pending" />
-                            <Picker.Item label="Paid" value="paid" />
-                            <Picker.Item label="Not Paying" value="not_paying" />
-                          </Picker>
-                        </View>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </CardContent>
-          </Card>
-        </View>
+        <Text className="flex-1 text-sm text-muted-foreground">Built for roommates, trips &amp; dinner clubs.</Text>
       </View>
     </ScrollView>
   );
 }
 
-export default function DashboardScreen() {
-  const { isAuthenticated, isLoading } = useAuth();
+function StatCard({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
+  const colors = useColors();
+  return (
+    <Card className="min-w-[45%] flex-1">
+      <View className="gap-3 p-4">
+        <View className="flex-row items-start justify-between gap-2">
+          <Text className="flex-1 text-sm text-muted-foreground">{label}</Text>
+          <Icon color={colors.mutedForeground} size={16} />
+        </View>
+        <Text className="text-2xl font-semibold" numberOfLines={1} adjustsFontSizeToFit>
+          {value}
+        </Text>
+      </View>
+    </Card>
+  );
+}
 
-  if (isLoading) {
+function Dashboard({ token }: { token: string }) {
+  const colors = useColors();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [view, setView] = useState<'owed' | 'owing'>('owed');
+
+  const load = useCallback(async () => {
+    try {
+      setData(await apiClient.getDashboard());
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load your dashboard');
+    }
+  }, [token]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  if (!data) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" />
+      <View className="flex-1 items-center justify-center gap-4 bg-background p-6">
+        {error ? (
+          <>
+            <Text className="text-center text-sm text-destructive">{error}</Text>
+            <Button variant="outline" onPress={load}>
+              Try again
+            </Button>
+          </>
+        ) : (
+          <ActivityIndicator color={colors.mutedForeground} />
+        )}
       </View>
     );
   }
 
-  return isAuthenticated ? <DashboardContent /> : <LandingPage />;
+  const owed = data.debts.filter((debt) => debt.lender.id === data.user.id);
+  const owing = data.debts.filter((debt) => debt.borrower.id === data.user.id);
+  const total = (list: typeof owed) => list.reduce((sum, debt) => sum + debt.amount, 0);
+  const renewals = data.recurringPayments.map(nextRenewal);
+  const next = renewals.length ? renewals.reduce((min, d) => (d < min ? d : min)) : null;
+  const overdue = data.alerts.filter((alert) => alert.debt);
+  const shown = view === 'owed' ? owed : owing;
+
+  return (
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="gap-5 p-4 pb-8"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      <PageHeader
+        title={`Welcome back, ${data.user.name || data.user.email.split('@')[0]}`}
+        description="An overview of your debts and recurring payments"
+      />
+
+      {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+
+      {(data.pendingApprovals.length > 0 || overdue.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Needs attention</CardTitle>
+            <CardDescription>Requests waiting on your approval and overdue payments</CardDescription>
+          </CardHeader>
+          <CardContent className="gap-2">
+            {data.pendingApprovals.map((request) => (
+              <ListRow
+                key={`request-${request.id}`}
+                media={<IconMedia icon={FileClock} />}
+                title={`${REQUEST_LABELS[request.type] ?? request.type} · ${money(request.debt.amount)}`}
+                description={`Requested by ${personName(request.requester)}${request.reason ? ` · ${request.reason}` : ''}`}
+                href={`/debts/${request.debt.id}`}
+              />
+            ))}
+            {overdue.map((alert) => (
+              <ListRow
+                key={`alert-${alert.id}`}
+                media={<IconMedia icon={AlertTriangle} />}
+                title={`Overdue payment · ${money(alert.debt!.amount)}`}
+                description={`Owed to ${personName(alert.lender)}${alert.message ? ` · ${alert.message}` : ''}`}
+                href={`/debts/${alert.debt!.id}`}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <View className="flex-row flex-wrap gap-3">
+        <StatCard label="You are owed" value={money(total(owed))} icon={TrendingUp} />
+        <StatCard label="You owe" value={money(total(owing))} icon={TrendingDown} />
+        <StatCard label="Active recurring" value={String(data.recurringPayments.length)} icon={Repeat} />
+        <StatCard
+          label="Next renewal"
+          value={next ? next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'None'}
+          icon={CalendarClock}
+        />
+      </View>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Debts</CardTitle>
+          <CardDescription>Pending balances, tap one for details</CardDescription>
+        </CardHeader>
+        <CardContent className="gap-3">
+          <View className="flex-row rounded-lg bg-muted p-1">
+            {(['owed', 'owing'] as const).map((option) => (
+              <Pressable
+                key={option}
+                onPress={() => setView(option)}
+                className={cn('flex-1 items-center rounded-md py-1.5', view === option && 'bg-background shadow-sm')}
+              >
+                <Text className={cn('text-sm font-medium', view !== option && 'text-muted-foreground')}>
+                  {option === 'owed' ? 'Owed to you' : 'You owe'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {shown.length === 0 ? (
+            <View className="items-center gap-1 rounded-lg border border-dashed border-border p-6">
+              <Text className="text-sm font-medium">
+                {view === 'owed' ? 'Nobody owes you' : "You're all square"}
+              </Text>
+              <Text className="text-center text-sm text-muted-foreground">
+                {view === 'owed' ? 'Debts friends owe you show up here.' : 'Debts you owe show up here.'}
+              </Text>
+            </View>
+          ) : (
+            shown.map((debt) => {
+              const other = view === 'owed' ? debt.borrower : debt.lender;
+              return (
+                <ListRow
+                  key={debt.id}
+                  media={<Avatar name={personName(other)} />}
+                  title={personName(other)}
+                  description={[debt.description, debt.group?.name].filter(Boolean).join(' · ') || undefined}
+                  trailing={<Text className="text-sm font-semibold">{money(debt.amount)}</Text>}
+                  href={`/debts/${debt.id}`}
+                />
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between">
+          <View className="flex-1 gap-1.5">
+            <CardTitle>Groups</CardTitle>
+            <CardDescription>Where your shared expenses live</CardDescription>
+          </View>
+          <Button variant="ghost" size="sm" onPress={() => router.push('/groups')}>
+            View all
+          </Button>
+        </CardHeader>
+        <CardContent className="gap-2">
+          {data.groups.length === 0 ? (
+            <Button variant="outline" onPress={() => router.push('/groups')}>
+              Create your first group
+            </Button>
+          ) : (
+            data.groups.slice(0, 4).map((group) => (
+              <ListRow
+                key={group.id}
+                media={<IconMedia icon={Users} />}
+                title={group.name}
+                description={`${group._count.members} ${group._count.members === 1 ? 'member' : 'members'}`}
+                href={`/groups/${group.id}`}
+              />
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </ScrollView>
+  );
+}
+
+export default function HomeScreen() {
+  const { session, isLoading } = useAuth();
+  const colors = useColors();
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator color={colors.mutedForeground} />
+      </View>
+    );
+  }
+
+  return session ? <Dashboard token={session.access_token} /> : <Landing />;
 }
