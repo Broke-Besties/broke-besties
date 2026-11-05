@@ -22,6 +22,7 @@ import { RequestsList } from "./requests-list";
 import type { Friend, FriendRequest, PendingAction } from "./types";
 
 type FriendsPageClientProps = {
+  currentUserId: string;
   initialFriends: Friend[];
   initialPendingRequests: FriendRequest[];
   initialSentRequests: FriendRequest[];
@@ -30,6 +31,7 @@ type FriendsPageClientProps = {
 type Tab = "friends" | "requests";
 
 export default function FriendsPageClient({
+  currentUserId,
   initialFriends,
   initialPendingRequests,
   initialSentRequests,
@@ -162,15 +164,25 @@ export default function FriendsPageClient({
         toast.error(result.error || "Failed to add friend");
         return false;
       }
-      if (result.autoAccepted && result.friend) {
-        setFriends((prev) => [
-          ...prev,
-          { ...result.friend, friend: result.friend.requester },
-        ]);
-        toast.success("You are now friends");
-      } else if (result.friend) {
-        setSentRequests((prev) => [result.friend, ...prev]);
-        toast.success("Friend request sent");
+      if (result.friend) {
+        if (result.autoAccepted) {
+          const otherUser =
+            result.friend.requesterId === currentUserId
+              ? result.friend.recipient
+              : result.friend.requester;
+          setFriends((prev) => [
+            ...prev,
+            { ...result.friend, friend: otherUser },
+          ]);
+          toast.success(
+            result.notSignedUp
+              ? "Friend added — they'll be connected once they sign up"
+              : "You are now friends"
+          );
+        } else {
+          setSentRequests((prev) => [result.friend, ...prev]);
+          toast.success("Friend request sent");
+        }
       }
       return true;
     } catch {

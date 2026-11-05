@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -115,6 +116,11 @@ function FriendRow({
         <ItemContent>
           <ItemTitle>{friendship.friend.name}</ItemTitle>
           <ItemDescription>{friendship.friend.email}</ItemDescription>
+          {friendship.friend.signedUp === false && (
+            <Badge variant="secondary" className="w-fit">
+              Not signed up yet
+            </Badge>
+          )}
         </ItemContent>
         <ItemActions>
           <DropdownMenu>

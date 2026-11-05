@@ -52,8 +52,8 @@ export function AddFriendDialog({
         <DialogHeader>
           <DialogTitle>Add a friend</DialogTitle>
           <DialogDescription>
-            Send a friend request by email. Once they accept, they will show up
-            in your friends list.
+            Add a friend by email. If they have not signed up yet, we will
+            invite them and you can still record debts with them right away.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

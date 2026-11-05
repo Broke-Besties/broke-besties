@@ -1,8 +1,69 @@
 import { prisma } from "@/lib/prisma";
 import { FriendPolicy } from "@/policies/friend.policy";
 import { emailService } from "@/services/email.service";
+import { userService } from "@/services/user.service";
 
 export class FriendService {
+  /**
+   * Add a friend by email. When the email belongs to a signed-up user this is
+   * a normal friend request. When the user hasn't signed up yet we create a
+   * placeholder row (signedUp = false), auto-accept the friendship so debts can
+   * be tracked against them immediately, and email them a sign-up nudge.
+   */
+  async sendFriendRequestByEmail(requesterId: string, email: string) {
+    if (!email?.trim()) {
+      throw new Error("Email is required");
+    }
+
+    const recipient = await userService.findOrCreatePlaceholderByEmail(email);
+
+    if (recipient.id === requesterId) {
+      throw new Error("You cannot send a friend request to yourself");
+    }
+
+    if (recipient.signedUp) {
+      const result = await this.sendFriendRequest(requesterId, recipient.id);
+      return { ...result, notSignedUp: false };
+    }
+
+    // Not signed up yet: check for an existing friendship and auto-accept.
+    const existingFriendship = await prisma.friend.findFirst({
+      where: {
+        OR: [
+          { requesterId, recipientId: recipient.id },
+          { requesterId: recipient.id, recipientId: requesterId },
+        ],
+      },
+    });
+
+    if (existingFriendship) {
+      if (existingFriendship.status === "accepted") {
+        throw new Error("You are already friends with this user");
+      }
+      throw new Error("Friend request already exists");
+    }
+
+    const friend = await prisma.friend.create({
+      data: {
+        requesterId,
+        recipientId: recipient.id,
+        status: "accepted",
+      },
+      include: {
+        requester: true,
+        recipient: true,
+      },
+    });
+
+    await emailService.sendFriendSignupRequest({
+      to: recipient.email,
+      requesterName: friend.requester.name,
+      signupLink: `${process.env.NEXT_PUBLIC_APP_URL}/signup`,
+    });
+
+    return { friend, autoAccepted: true, notSignedUp: true };
+  }
+
   /**
    * Send a friend request (or auto-accept if reverse request exists)
    */

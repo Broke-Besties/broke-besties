@@ -61,6 +61,7 @@ type Friend = {
   id: string
   name: string
   email: string
+  signedUp?: boolean
 }
 
 type Group = {
@@ -363,6 +364,11 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                                   <div className="truncate text-xs text-muted-foreground">
                                     {friend.email}
                                   </div>
+                                  {friend.signedUp === false && (
+                                    <div className="mt-0.5 text-xs text-amber-600">
+                                      Not signed up yet
+                                    </div>
+                                  )}
                                 </div>
                                 <Check
                                   className={cn(

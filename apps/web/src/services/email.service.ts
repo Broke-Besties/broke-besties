@@ -13,8 +13,7 @@ import { DebtRequestCancelledEmail } from "@/components/emails/debt-request-canc
 import { FriendRequestEmail } from "@/components/emails/friend-request";
 import { FriendRequestAcceptedEmail } from "@/components/emails/friend-request-accepted";
 import { FriendRequestRejectedEmail } from "@/components/emails/friend-request-rejected";
-import { TabCreatedEmail } from "@/components/emails/tab-created";
-import { TabMarkedPaidEmail } from "@/components/emails/tab-marked-paid";
+import { FriendSignupRequestEmail } from "@/components/emails/friend-signup-request";
 import { AlertReminderEmail } from "@/components/emails/email";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -329,6 +328,37 @@ export class EmailService {
     }
   }
 
+  async sendFriendSignupRequest(params: {
+    to: string;
+    requesterName: string;
+    signupLink: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await resend.emails.send({
+        from: EmailService.FROM_EMAIL,
+        to: params.to,
+        subject: `${params.requesterName} added you on BrokeBesties`,
+        react: FriendSignupRequestEmail({
+          requesterName: params.requesterName,
+          signupLink: params.signupLink,
+        }),
+      });
+
+      if (error) {
+        console.error("Failed to send friend signup request email:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send friend signup request email:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
   async sendFriendRequestAccepted(params: {
     to: string;
     recipientName: string;
@@ -454,88 +484,6 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error("Failed to send group invite rejected email:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
-
-  async sendTabCreated(params: {
-    to: string;
-    userName: string;
-    personName: string;
-    amount: number;
-    description: string;
-    isLending: boolean;
-    tabsLink: string;
-  }): Promise<{ success: boolean; error?: string }> {
-    try {
-      const { error } = await resend.emails.send({
-        from: EmailService.FROM_EMAIL,
-        to: params.to,
-        subject: params.isLending
-          ? `Tab created: ${params.personName} owes you $${params.amount.toFixed(2)}`
-          : `Tab created: You owe ${params.personName} $${params.amount.toFixed(2)}`,
-        react: TabCreatedEmail({
-          userName: params.userName,
-          personName: params.personName,
-          amount: params.amount,
-          description: params.description,
-          status: params.isLending ? "lending" : "borrowing",
-          tabsLink: params.tabsLink,
-        }),
-      });
-
-      if (error) {
-        console.error("Failed to send tab created email:", error);
-        return { success: false, error: error.message };
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Failed to send tab created email:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
-
-  async sendTabMarkedPaid(params: {
-    to: string;
-    userName: string;
-    personName: string;
-    amount: number;
-    description: string;
-    wasLending: boolean;
-    tabsLink: string;
-  }): Promise<{ success: boolean; error?: string }> {
-    try {
-      const { error } = await resend.emails.send({
-        from: EmailService.FROM_EMAIL,
-        to: params.to,
-        subject: params.wasLending
-          ? `Tab settled: ${params.personName} paid you $${params.amount.toFixed(2)}`
-          : `Tab settled: You paid ${params.personName} $${params.amount.toFixed(2)}`,
-        react: TabMarkedPaidEmail({
-          userName: params.userName,
-          personName: params.personName,
-          amount: params.amount,
-          description: params.description,
-          wasLending: params.wasLending,
-          tabsLink: params.tabsLink,
-        }),
-      });
-
-      if (error) {
-        console.error("Failed to send tab marked paid email:", error);
-        return { success: false, error: error.message };
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Failed to send tab marked paid email:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

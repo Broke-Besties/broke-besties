@@ -2,7 +2,6 @@ import { getUser } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import { debtService } from '@/services/debt.service'
 import { groupService } from '@/services/group.service'
-import { tabService } from '@/services/tab.service'
 import { recurringPaymentService } from '@/services/recurring-payment.service'
 import { alertService } from '@/services/alert.service'
 import { debtTransactionService } from '@/services/debt-transaction.service'
@@ -16,10 +15,9 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const [debts, groups, tabs, dbUser, recurringPayments, alerts, pendingTransactions] = await Promise.all([
+  const [debts, groups, dbUser, recurringPayments, alerts, pendingTransactions] = await Promise.all([
     debtService.getUserDebts(user.id, { status: 'pending' }),
     groupService.getUserGroups(user.id),
-    tabService.getUserTabs(user.id),
     prisma.user.findUnique({ where: { id: user.id }, select: { name: true } }),
     recurringPaymentService.getUserRecurringPayments(user.id, { status: 'active' }),
     alertService.getActiveAlertsForBorrower(user.id),
@@ -35,7 +33,6 @@ export default async function DashboardPage() {
     <DashboardPageClient
       initialDebts={debts}
       initialGroups={groups}
-      initialTabs={tabs}
       currentUser={user}
       userName={dbUser?.name || user.email || 'User'}
       initialRecurringPayments={recurringPayments}
