@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Receipt, Users } from "lucide-react";
+import { CalendarClock, Users } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,7 +29,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { initials } from "./format";
-import type { Group, RecurringPayment, Tab } from "./types";
+import type { Group, RecurringPayment } from "./types";
 
 const LIST_LIMIT = 3;
 
@@ -150,75 +149,4 @@ export function GroupsCard({ groups }: { groups: Group[] }) {
   );
 }
 
-export function TabsCard({
-  tabs,
-  totalActive,
-  onMarkPaid,
-}: {
-  tabs: Tab[];
-  totalActive: number;
-  onMarkPaid: (tabId: number) => void;
-}) {
-  const shown = tabs.slice(0, LIST_LIMIT);
 
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle>Your tabs</CardTitle>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/tabs">{viewAllLabel(totalActive, shown.length)}</Link>
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {tabs.length === 0 ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Receipt />
-              </EmptyMedia>
-              <EmptyTitle>No active tabs</EmptyTitle>
-              <EmptyDescription>
-                Quick IOUs you track yourself show up here.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button size="sm" asChild>
-                <Link href="/tabs?new=1">Add tab</Link>
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <ItemGroup className="gap-2">
-            {shown.map((tab) => (
-              <Item key={tab.id} variant="outline" size="sm">
-                <ItemMedia>
-                  <Avatar className="size-9">
-                    <AvatarFallback>{initials(tab.personName)}</AvatarFallback>
-                  </Avatar>
-                </ItemMedia>
-                <ItemContent>
-                  <ItemTitle>{tab.personName}</ItemTitle>
-                  <Badge variant="secondary" className="w-fit">
-                    {tab.status === "lending" ? "Owes you" : "You owe"}
-                  </Badge>
-                </ItemContent>
-                <ItemActions>
-                  <span className="font-semibold tabular-nums">
-                    ${tab.amount.toFixed(2)}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onMarkPaid(tab.id)}
-                  >
-                    Paid
-                  </Button>
-                </ItemActions>
-              </Item>
-            ))}
-          </ItemGroup>
-        )}
-      </CardContent>
-    </Card>
-  );
-}

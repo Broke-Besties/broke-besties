@@ -2,7 +2,6 @@
 
 import { getUser } from '@/lib/supabase'
 import { debtService } from '@/services/debt.service'
-import { tabService } from '@/services/tab.service'
 import { userService } from '@/services/user.service'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -77,22 +76,4 @@ export async function searchUserByEmail(email: string) {
   }
 }
 
-export async function updateTabStatus(tabId: number, status: string) {
-  const user = await getUser()
 
-  if (!user) {
-    redirect('/login')
-  }
-
-  try {
-    const tab = await tabService.updateTab(tabId, user.id, { status })
-    revalidatePath('/dashboard')
-    return { success: true, tab }
-  } catch (error) {
-    console.error('Update tab error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update tab',
-    }
-  }
-}
