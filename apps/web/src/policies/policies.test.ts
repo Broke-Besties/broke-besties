@@ -15,7 +15,6 @@ import {
   ReceiptPolicy,
 } from "@/policies";
 import { FriendPolicy } from "@/policies/friend.policy";
-import { TabPolicy } from "@/policies/tab.policy";
 import { createMockEmailService, type MockPrisma } from "../test/mocks";
 
 const db = prisma as unknown as MockPrisma;
@@ -259,25 +258,6 @@ describe("ReceiptPolicy", () => {
     db.debt.findMany.mockClear();
     expect(await ReceiptPolicy.canCreate("u1", [])).toBe(false);
     expect(db.debt.findMany).not.toHaveBeenCalled();
-  });
-});
-
-describe("TabPolicy (pure)", () => {
-  const tab = { userId: "u1" };
-
-  it("isOwner/canView/canUpdate/canDelete: owner only", () => {
-    expect(TabPolicy.isOwner("u1", tab)).toBe(true);
-    expect(TabPolicy.isOwner("u2", tab)).toBe(false);
-    expect(TabPolicy.canView("u1", tab)).toBe(true);
-    expect(TabPolicy.canUpdate("u2", tab)).toBe(false);
-    expect(TabPolicy.canDelete("u2", tab)).toBe(false);
-  });
-
-  it("isValidStatus", () => {
-    expect(TabPolicy.isValidStatus("lending")).toBe(true);
-    expect(TabPolicy.isValidStatus("borrowing")).toBe(true);
-    expect(TabPolicy.isValidStatus("paid")).toBe(true);
-    expect(TabPolicy.isValidStatus("settled")).toBe(false);
   });
 });
 

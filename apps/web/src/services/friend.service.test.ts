@@ -135,6 +135,129 @@ describe("friendService", () => {
     });
   });
 
+  describe("sendFriendRequestByEmail", () => {
+    it("requires an email and rejects adding yourself", async () => {
+      await expect(
+        friendService.sendFriendRequestByEmail(LENDER_ID, "  "),
+      ).rejects.toThrow("Email is required");
+
+      db.user.findUnique.mockResolvedValueOnce(
+        makeUser({ id: LENDER_ID, email: "me@x.com" }),
+      );
+      await expect(
+        friendService.sendFriendRequestByEmail(LENDER_ID, "me@x.com"),
+      ).rejects.toThrow("You cannot send a friend request to yourself");
+    });
+
+    it("auto-accepts and emails a sign-up nudge for a not-signed-up user", async () => {
+      const placeholder = makeUser({
+        id: BORROWER_ID,
+        email: "bob@x.com",
+        name: "bob",
+        signedUp: false,
+      });
+      db.user.findUnique.mockResolvedValueOnce(placeholder);
+      db.friend.findFirst.mockResolvedValueOnce(null);
+      const created = {
+        id: 1,
+        requesterId: LENDER_ID,
+        recipientId: BORROWER_ID,
+        status: "accepted",
+        requester,
+        recipient: placeholder,
+      };
+      db.friend.create.mockResolvedValueOnce(created);
+
+      const result = await friendService.sendFriendRequestByEmail(
+        LENDER_ID,
+        "bob@x.com",
+      );
+
+      expect(result.autoAccepted).toBe(true);
+      expect(result.notSignedUp).toBe(true);
+      expect(db.friend.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            requesterId: LENDER_ID,
+            recipientId: BORROWER_ID,
+            status: "accepted",
+          },
+        }),
+      );
+      expect(email.sendFriendSignupRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ to: "bob@x.com" }),
+      );
+      expect(email.sendFriendRequest).not.toHaveBeenCalled();
+    });
+
+    it("creates a placeholder when the email has no user yet", async () => {
+      db.user.findUnique.mockResolvedValueOnce(null);
+      const placeholder = makeUser({
+        id: "placeholder-id",
+        email: "new@x.com",
+        name: "new",
+        signedUp: false,
+      });
+      db.user.create.mockResolvedValueOnce(placeholder);
+      db.friend.findFirst.mockResolvedValueOnce(null);
+      db.friend.create.mockResolvedValueOnce({
+        id: 1,
+        requesterId: LENDER_ID,
+        recipientId: "placeholder-id",
+        status: "accepted",
+        requester,
+        recipient: placeholder,
+      });
+
+      await friendService.sendFriendRequestByEmail(LENDER_ID, "new@x.com");
+
+      expect(db.user.create).toHaveBeenCalledWith({
+        data: { email: "new@x.com", name: "new", signedUp: false },
+      });
+      expect(db.friend.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            requesterId: LENDER_ID,
+            recipientId: "placeholder-id",
+            status: "accepted",
+          },
+        }),
+      );
+    });
+
+    it("delegates to a normal request for a signed-up user", async () => {
+      const existing = makeUser({ id: BORROWER_ID, email: "bob@x.com" });
+      db.user.findUnique.mockResolvedValueOnce(existing);
+      db.user.findUnique.mockResolvedValueOnce(existing);
+      db.friend.findFirst.mockResolvedValueOnce(null);
+      db.friend.create.mockResolvedValueOnce({
+        id: 1,
+        requesterId: LENDER_ID,
+        recipientId: BORROWER_ID,
+        status: "pending",
+        requester,
+        recipient: existing,
+      });
+
+      const result = await friendService.sendFriendRequestByEmail(
+        LENDER_ID,
+        "bob@x.com",
+      );
+
+      expect(result.autoAccepted).toBe(false);
+      expect(result.notSignedUp).toBe(false);
+      expect(db.friend.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { requesterId: LENDER_ID, recipientId: BORROWER_ID },
+        }),
+      );
+      expect(email.sendFriendRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ to: "bob@x.com" }),
+      );
+      expect(email.sendFriendSignupRequest).not.toHaveBeenCalled();
+    });
+  });
+
   describe("acceptFriendRequest", () => {
     it("throws when the request does not exist", async () => {
       db.friend.findUnique.mockResolvedValueOnce(null);

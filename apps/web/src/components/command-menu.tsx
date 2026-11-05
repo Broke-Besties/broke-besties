@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CreditCard,
-  Receipt,
-  Search,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { CreditCard, Search, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   CommandDialog,
@@ -25,7 +19,6 @@ const quickActions = [
   { href: "/debts?new=1", label: "Add debt", icon: CreditCard },
   { href: "/groups?new=1", label: "Create group", icon: Users },
   { href: "/friends?new=1", label: "Add friend", icon: UserPlus },
-  { href: "/tabs?new=1", label: "Add tab", icon: Receipt },
 ];
 
 export function CommandMenu() {
