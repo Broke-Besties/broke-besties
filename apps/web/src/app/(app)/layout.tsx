@@ -40,7 +40,7 @@ export default async function AppLayout({
                 </Button>
               }
             >
-              <NotificationsWrapper />
+              <NotificationsWrapper counts={counts} />
             </Suspense>
           }
         />

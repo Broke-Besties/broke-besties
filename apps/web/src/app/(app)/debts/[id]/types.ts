@@ -44,6 +44,7 @@ export type DebtTransactionRecord = {
   proposedDescription: string | null;
   reason: string | null;
   createdAt: Date | string;
+  resolvedAt?: Date | string | null;
   requester: {
     id: string;
     email: string;

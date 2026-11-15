@@ -162,7 +162,7 @@ export default function DebtDetailClient({
             </CardContent>
           </Card>
 
-          <ActivityCard transactions={transactions} />
+          <ActivityCard transactions={transactions} debtId={debt.id} />
         </div>
 
         {/* Side rail */}

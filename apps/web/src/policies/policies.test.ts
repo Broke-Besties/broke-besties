@@ -82,10 +82,19 @@ describe("DebtPolicy", () => {
 describe("DebtTransactionPolicy (pure)", () => {
   const debt = { lenderId: "u1", borrowerId: "u2" };
   const pending = {
+    id: 1,
+    debtId: 1,
+    type: "modify",
     status: "pending",
     requesterId: "u2",
     lenderApproved: false,
     borrowerApproved: false,
+    proposedAmount: null,
+    proposedDescription: null,
+    reason: null,
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    resolvedAt: null,
     debt,
   };
 

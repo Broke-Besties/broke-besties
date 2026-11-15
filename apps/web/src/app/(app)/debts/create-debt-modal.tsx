@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { Bell, Check, ChevronDown, ChevronsUpDown, CircleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -365,7 +366,7 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
                                     {friend.email}
                                   </div>
                                   {friend.signedUp === false && (
-                                    <div className="mt-0.5 text-xs text-amber-600">
+                                    <div className="mt-0.5 text-xs text-muted-foreground">
                                       Not signed up yet
                                     </div>
                                   )}
@@ -456,9 +457,12 @@ export function CreateDebtModal({ isOpen, onClose, onSuccess, currentUserId }: C
             />
             {receiptPreview && (
               <div className="mt-2 rounded-md border bg-muted/50 p-2">
-                <img
+                <Image
                   src={receiptPreview}
                   alt="Receipt preview"
+                  width={128}
+                  height={128}
+                  unoptimized
                   className="h-32 w-auto object-contain"
                 />
               </div>

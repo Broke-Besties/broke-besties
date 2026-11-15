@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
@@ -20,18 +20,26 @@ import {
   Trash2,
   TrendingDown,
   TrendingUp,
-} from 'lucide-react'
+} from "lucide-react";
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Badge } from "@/components/ui/badge";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationPrevious,
+  PaginationNext,
+} from "@/components/ui/pagination";
+import { pageBounds } from "./pagination";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
 import {
   Empty,
   EmptyContent,
@@ -39,15 +47,16 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty'
-import { Input } from '@/components/ui/input'
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Table,
   TableHeader,
@@ -55,52 +64,52 @@ import {
   TableRow,
   TableHead,
   TableCell,
-} from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PageHeader } from '@/components/page-header'
-import { StatCard } from '@/components/stat-card'
-import { StatusBadge } from '@/components/status-badge'
-import type { User } from '@supabase/supabase-js'
-import { CreateDebtModal } from './create-debt-modal'
-import { ConfirmPaidModal } from './confirm-paid-modal'
-import { ModifyDebtModal } from './modify-debt-modal'
-import { DeleteDebtModal } from './delete-debt-modal'
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
+import { StatusBadge } from "@/components/status-badge";
+import type { User } from "@supabase/supabase-js";
+import { CreateDebtModal } from "./create-debt-modal";
+import { ConfirmPaidModal } from "./confirm-paid-modal";
+import { ModifyDebtModal } from "./modify-debt-modal";
+import { DeleteDebtModal } from "./delete-debt-modal";
 
 type Debt = {
-  id: number
-  amount: number
-  description: string | null
-  status: string
-  createdAt: Date | string
+  id: number;
+  amount: number;
+  description: string | null;
+  status: string;
+  createdAt: Date | string;
   lender: {
-    id: string
-    name: string
-    email: string
-    signedUp?: boolean
-  }
+    id: string;
+    name: string;
+    email: string;
+    signedUp?: boolean;
+  };
   borrower: {
-    id: string
-    name: string
-    email: string
-    signedUp?: boolean
-  }
+    id: string;
+    name: string;
+    email: string;
+    signedUp?: boolean;
+  };
   group: {
-    id: number
-    name: string
-  } | null
-}
+    id: number;
+    name: string;
+  } | null;
+};
 
 type DebtsPageClientProps = {
-  initialDebts: Debt[]
-  currentUser: User
-  pendingTransactionsCount: number
-}
+  initialDebts: Debt[];
+  currentUser: User;
+  pendingTransactionsCount: number;
+};
 
-type ViewFilter = 'all' | 'lending' | 'borrowing'
-type StatusFilter = 'all' | 'pending' | 'paid'
-type ModalType = 'create' | 'paid' | 'modify' | 'delete' | null
-type SortKey = 'date' | 'amount'
-type SortDir = 'desc' | 'asc'
+type ViewFilter = "all" | "lending" | "borrowing";
+type StatusFilter = "all" | "pending" | "paid";
+type ModalType = "create" | "paid" | "modify" | "delete" | null;
+type SortKey = "date" | "amount";
+type SortDir = "desc" | "asc";
 
 function SortHeaderButton({
   label,
@@ -109,11 +118,11 @@ function SortHeaderButton({
   onClick,
   className,
 }: {
-  label: string
-  active: boolean
-  dir: SortDir
-  onClick: () => void
-  className?: string
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  className?: string;
 }) {
   return (
     <Button
@@ -125,7 +134,7 @@ function SortHeaderButton({
     >
       {label}
       {active ? (
-        dir === 'desc' ? (
+        dir === "desc" ? (
           <ArrowDown className="size-3" />
         ) : (
           <ArrowUp className="size-3" />
@@ -134,7 +143,7 @@ function SortHeaderButton({
         <ArrowUpDown className="size-3" />
       )}
     </Button>
-  )
+  );
 }
 
 export default function DebtsPageClient({
@@ -142,102 +151,117 @@ export default function DebtsPageClient({
   currentUser,
   pendingTransactionsCount,
 }: DebtsPageClientProps) {
-  const debts = initialDebts
-  const [viewFilter, setViewFilter] = useState<ViewFilter>('all')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('date')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const [activeModal, setActiveModal] = useState<ModalType>(null)
-  const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const debts = initialDebts;
+  const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [requestedPage, setRequestedPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Command palette entry point: /debts?new=1 opens the create dialog.
-  const wantsCreate = searchParams.get('new') === '1'
-  const [handledCreateParam, setHandledCreateParam] = useState(false)
+  const wantsCreate = searchParams.get("new") === "1";
+  const [handledCreateParam, setHandledCreateParam] = useState(false);
   if (wantsCreate && !handledCreateParam) {
-    setHandledCreateParam(true)
-    setActiveModal('create')
+    setHandledCreateParam(true);
+    setActiveModal("create");
   }
   if (!wantsCreate && handledCreateParam) {
-    setHandledCreateParam(false)
+    setHandledCreateParam(false);
   }
   useEffect(() => {
     if (wantsCreate) {
-      router.replace('/debts', { scroll: false })
+      router.replace("/debts", { scroll: false });
     }
-  }, [wantsCreate, router])
+  }, [wantsCreate, router]);
 
-  const lendingDebts = debts.filter((debt) => debt.lender.id === currentUser.id)
+  const lendingDebts = debts.filter(
+    (debt) => debt.lender.id === currentUser.id,
+  );
   const borrowingDebts = debts.filter(
-    (debt) => debt.borrower.id === currentUser.id
-  )
+    (debt) => debt.borrower.id === currentUser.id,
+  );
 
-  const pendingLending = lendingDebts.filter((d) => d.status === 'pending')
-  const pendingBorrowing = borrowingDebts.filter((d) => d.status === 'pending')
-  const totalLending = pendingLending.reduce((sum, debt) => sum + debt.amount, 0)
+  const pendingLending = lendingDebts.filter((d) => d.status === "pending");
+  const pendingBorrowing = borrowingDebts.filter((d) => d.status === "pending");
+  const totalLending = pendingLending.reduce(
+    (sum, debt) => sum + debt.amount,
+    0,
+  );
   const totalBorrowing = pendingBorrowing.reduce(
     (sum, debt) => sum + debt.amount,
-    0
-  )
-  const netBalance = totalLending - totalBorrowing
+    0,
+  );
+  const netBalance = totalLending - totalBorrowing;
 
-  let filteredDebts = debts
-  if (viewFilter === 'lending') {
-    filteredDebts = lendingDebts
-  } else if (viewFilter === 'borrowing') {
-    filteredDebts = borrowingDebts
+  let filteredDebts = debts;
+  if (viewFilter === "lending") {
+    filteredDebts = lendingDebts;
+  } else if (viewFilter === "borrowing") {
+    filteredDebts = borrowingDebts;
   }
 
-  if (statusFilter !== 'all') {
-    filteredDebts = filteredDebts.filter((d) => d.status === statusFilter)
+  if (statusFilter !== "all") {
+    filteredDebts = filteredDebts.filter((d) => d.status === statusFilter);
   }
 
   if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase()
+    const query = searchQuery.toLowerCase();
     filteredDebts = filteredDebts.filter((debt) => {
       const otherPerson =
-        debt.lender.id === currentUser.id ? debt.borrower : debt.lender
+        debt.lender.id === currentUser.id ? debt.borrower : debt.lender;
       return (
         otherPerson.name?.toLowerCase().includes(query) ||
         otherPerson.email.toLowerCase().includes(query) ||
         debt.description?.toLowerCase().includes(query) ||
         debt.group?.name.toLowerCase().includes(query)
-      )
-    })
+      );
+    });
   }
 
   filteredDebts = [...filteredDebts].sort((a, b) => {
     const valueA =
-      sortKey === 'date' ? new Date(a.createdAt).getTime() : a.amount
+      sortKey === "date" ? new Date(a.createdAt).getTime() : a.amount;
     const valueB =
-      sortKey === 'date' ? new Date(b.createdAt).getTime() : b.amount
-    return sortDir === 'desc' ? valueB - valueA : valueA - valueB
-  })
+      sortKey === "date" ? new Date(b.createdAt).getTime() : b.amount;
+    return sortDir === "desc" ? valueB - valueA : valueA - valueB;
+  });
+
+  const { page, pageCount, start, end } = pageBounds(
+    filteredDebts.length,
+    requestedPage,
+    pageSize,
+  );
+  const visibleDebts = filteredDebts.slice(start, end);
 
   const handleSort = (key: SortKey) => {
+    setRequestedPage(1);
     if (sortKey === key) {
-      setSortDir((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+      setSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
     } else {
-      setSortKey(key)
-      setSortDir('desc')
+      setSortKey(key);
+      setSortDir("desc");
     }
-  }
+  };
 
   const handleAction = (action: ModalType, debt: Debt) => {
-    setSelectedDebt(debt)
-    setActiveModal(action)
-  }
+    setSelectedDebt(debt);
+    setActiveModal(action);
+  };
 
   const handleModalClose = () => {
-    setActiveModal(null)
-    setSelectedDebt(null)
-  }
+    setActiveModal(null);
+    setSelectedDebt(null);
+  };
 
   const handleSuccess = () => {
-    router.refresh()
-  }
+    router.refresh();
+  };
 
   return (
     <div className="space-y-6">
@@ -255,7 +279,7 @@ export default function DebtsPageClient({
                 )}
               </Link>
             </Button>
-            <Button onClick={() => setActiveModal('create')}>
+            <Button onClick={() => setActiveModal("create")}>
               <Plus />
               Add debt
             </Button>
@@ -279,9 +303,9 @@ export default function DebtsPageClient({
         />
         <StatCard
           label="Net balance"
-          value={`${netBalance >= 0 ? '+' : '-'}$${Math.abs(netBalance).toFixed(2)}`}
+          value={`${netBalance >= 0 ? "+" : "-"}$${Math.abs(netBalance).toFixed(2)}`}
           icon={Scale}
-          hint={netBalance >= 0 ? 'in your favor' : 'you owe more'}
+          hint={netBalance >= 0 ? "in your favor" : "you owe more"}
         />
         <StatCard
           label="Pending requests"
@@ -297,7 +321,10 @@ export default function DebtsPageClient({
           <div className="flex flex-wrap items-center gap-3">
             <Tabs
               value={viewFilter}
-              onValueChange={(v) => setViewFilter(v as ViewFilter)}
+              onValueChange={(v) => {
+                setViewFilter(v as ViewFilter);
+                setRequestedPage(1);
+              }}
             >
               <TabsList>
                 <TabsTrigger value="all">All ({debts.length})</TabsTrigger>
@@ -312,15 +339,20 @@ export default function DebtsPageClient({
 
             <Select
               value={statusFilter}
-              onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+              onValueChange={(v) => {
+                setStatusFilter(v as StatusFilter);
+                setRequestedPage(1);
+              }}
             >
               <SelectTrigger className="w-36">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>
@@ -331,7 +363,10 @@ export default function DebtsPageClient({
               type="text"
               placeholder="Search debts…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setRequestedPage(1);
+              }}
               className="pl-9"
             />
           </div>
@@ -345,14 +380,14 @@ export default function DebtsPageClient({
               </EmptyMedia>
               <EmptyTitle>No debts found</EmptyTitle>
               <EmptyDescription>
-                {searchQuery || statusFilter !== 'all' || viewFilter !== 'all'
-                  ? 'Try adjusting your filters or search.'
-                  : 'Add a debt to start tracking.'}
+                {searchQuery || statusFilter !== "all" || viewFilter !== "all"
+                  ? "Try adjusting your filters or search."
+                  : "Add a debt to start tracking."}
               </EmptyDescription>
             </EmptyHeader>
-            {!searchQuery && statusFilter === 'all' && viewFilter === 'all' && (
+            {!searchQuery && statusFilter === "all" && viewFilter === "all" && (
               <EmptyContent>
-                <Button onClick={() => setActiveModal('create')}>
+                <Button onClick={() => setActiveModal("create")}>
                   <Plus />
                   Add debt
                 </Button>
@@ -372,36 +407,36 @@ export default function DebtsPageClient({
                 <TableHead
                   className="hidden sm:table-cell"
                   aria-sort={
-                    sortKey === 'date'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
+                    sortKey === "date"
+                      ? sortDir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
                   }
                 >
                   <SortHeaderButton
                     label="Date"
-                    active={sortKey === 'date'}
+                    active={sortKey === "date"}
                     dir={sortDir}
-                    onClick={() => handleSort('date')}
+                    onClick={() => handleSort("date")}
                     className="-ml-3"
                   />
                 </TableHead>
                 <TableHead
                   className="text-right"
                   aria-sort={
-                    sortKey === 'amount'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
+                    sortKey === "amount"
+                      ? sortDir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
                   }
                 >
                   <SortHeaderButton
                     label="Amount"
-                    active={sortKey === 'amount'}
+                    active={sortKey === "amount"}
                     dir={sortDir}
-                    onClick={() => handleSort('amount')}
+                    onClick={() => handleSort("amount")}
                     className="-mr-3"
                   />
                 </TableHead>
@@ -412,11 +447,11 @@ export default function DebtsPageClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDebts.map((debt) => {
+              {visibleDebts.map((debt) => {
                 const direction =
-                  debt.lender.id === currentUser.id ? 'lending' : 'borrowing'
+                  debt.lender.id === currentUser.id ? "lending" : "borrowing";
                 const otherPerson =
-                  direction === 'lending' ? debt.borrower : debt.lender
+                  direction === "lending" ? debt.borrower : debt.lender;
 
                 return (
                   <TableRow
@@ -427,7 +462,9 @@ export default function DebtsPageClient({
                     <TableCell className="hidden sm:table-cell">
                       <StatusBadge
                         status={direction}
-                        label={direction === 'lending' ? 'Lending' : 'Borrowing'}
+                        label={
+                          direction === "lending" ? "Lending" : "Borrowing"
+                        }
                         className="capitalize"
                       />
                     </TableCell>
@@ -440,22 +477,22 @@ export default function DebtsPageClient({
                         {otherPerson.name || otherPerson.email}
                       </Link>
                       {otherPerson.signedUp === false && (
-                        <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                        <Badge variant="secondary" className="ml-2">
                           Not signed up
-                        </span>
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell className="hidden max-w-[200px] truncate text-muted-foreground md:table-cell">
-                      {debt.description || '-'}
+                      {debt.description || "-"}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground lg:table-cell">
-                      {debt.group?.name || 'No group'}
+                      {debt.group?.name || "No group"}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {new Date(debt.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
-                      {direction === 'lending' ? '+' : '-'}$
+                      {direction === "lending" ? "+" : "-"}$
                       {debt.amount.toFixed(2)}
                     </TableCell>
                     <TableCell>
@@ -483,24 +520,24 @@ export default function DebtsPageClient({
                               View
                             </Link>
                           </DropdownMenuItem>
-                          {debt.status === 'pending' && (
+                          {debt.status === "pending" && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={() => handleAction('paid', debt)}
+                                onClick={() => handleAction("paid", debt)}
                               >
                                 <CheckCircle2 />
                                 Mark as paid
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => handleAction('modify', debt)}
+                                onClick={() => handleAction("modify", debt)}
                               >
                                 <Pencil />
                                 Modify
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 variant="destructive"
-                                onClick={() => handleAction('delete', debt)}
+                                onClick={() => handleAction("delete", debt)}
                               >
                                 <Trash2 />
                                 Delete
@@ -511,23 +548,96 @@ export default function DebtsPageClient({
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                )
+                );
               })}
             </TableBody>
           </Table>
         )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
+          <p className="text-sm text-muted-foreground" role="status">
+            Showing {filteredDebts.length ? start + 1 : 0}-{end} of{" "}
+            {filteredDebts.length} debts
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <label
+              htmlFor="debts-page-size"
+              className="text-sm text-muted-foreground"
+            >
+              Rows per page
+            </label>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => {
+                setPageSize(Number(value));
+                setRequestedPage(1);
+              }}
+            >
+              <SelectTrigger id="debts-page-size" className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {[10, 25, 50].map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Pagination className="mx-0 w-auto" aria-label="Debt pages">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    aria-disabled={page === 1}
+                    tabIndex={page === 1 ? -1 : undefined}
+                    className={
+                      page === 1 ? "pointer-events-none opacity-50" : undefined
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (page > 1) setRequestedPage(page - 1);
+                    }}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="px-2 text-sm">
+                    Page {page} of {pageCount}
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    aria-disabled={page === pageCount}
+                    tabIndex={page === pageCount ? -1 : undefined}
+                    className={
+                      page === pageCount
+                        ? "pointer-events-none opacity-50"
+                        : undefined
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (page < pageCount) setRequestedPage(page + 1);
+                    }}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        </div>
       </Card>
 
       {/* Modals */}
       <CreateDebtModal
-        isOpen={activeModal === 'create'}
+        isOpen={activeModal === "create"}
         onClose={handleModalClose}
         onSuccess={handleSuccess}
         currentUserId={currentUser.id}
       />
 
       <ConfirmPaidModal
-        isOpen={activeModal === 'paid'}
+        isOpen={activeModal === "paid"}
         onClose={handleModalClose}
         onSuccess={handleSuccess}
         debt={selectedDebt}
@@ -535,7 +645,7 @@ export default function DebtsPageClient({
       />
 
       <ModifyDebtModal
-        isOpen={activeModal === 'modify'}
+        isOpen={activeModal === "modify"}
         onClose={handleModalClose}
         onSuccess={handleSuccess}
         debt={selectedDebt}
@@ -543,12 +653,12 @@ export default function DebtsPageClient({
       />
 
       <DeleteDebtModal
-        isOpen={activeModal === 'delete'}
+        isOpen={activeModal === "delete"}
         onClose={handleModalClose}
         onSuccess={handleSuccess}
         debt={selectedDebt}
         isLender={selectedDebt?.lender.id === currentUser.id}
       />
     </div>
-  )
+  );
 }

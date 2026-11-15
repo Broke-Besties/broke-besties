@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -39,15 +40,27 @@ function viewAllLabel(total: number, shown: number) {
 
 export function UpcomingPaymentsCard({
   payments,
+  activeCount,
 }: {
   payments: Array<RecurringPayment & { daysUntil: number }>;
+  activeCount: number;
 }) {
+  const shown = payments.slice(0, LIST_LIMIT);
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle>Upcoming payments</CardTitle>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-2">
+          <CardTitle>Upcoming payments</CardTitle>
+          <CardDescription>
+            Due in the next 7 days. {activeCount} active repeating{" "}
+            {activeCount === 1 ? "payment" : "payments"} in total.
+          </CardDescription>
+        </div>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/recurring-payments">View all</Link>
+          <Link href="/recurring-payments">
+            {viewAllLabel(payments.length, shown.length)}
+          </Link>
         </Button>
       </CardHeader>
       <CardContent>
@@ -65,7 +78,7 @@ export function UpcomingPaymentsCard({
           </Empty>
         ) : (
           <ItemGroup className="gap-2">
-            {payments.map((payment) => (
+            {shown.map((payment) => (
               <Item key={payment.id} variant="outline" size="sm" asChild>
                 <Link href={`/recurring-payments/${payment.id}`}>
                   <ItemContent>
@@ -101,7 +114,9 @@ export function GroupsCard({ groups }: { groups: Group[] }) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle>Your groups</CardTitle>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/groups">{viewAllLabel(groups.length, shown.length)}</Link>
+          <Link href="/groups">
+            {viewAllLabel(groups.length, shown.length)}
+          </Link>
         </Button>
       </CardHeader>
       <CardContent>
@@ -148,5 +163,3 @@ export function GroupsCard({ groups }: { groups: Group[] }) {
     </Card>
   );
 }
-
-

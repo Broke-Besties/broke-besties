@@ -1,4 +1,6 @@
 import { History } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Card,
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/empty";
 import {
   Item,
+  ItemActions,
   ItemContent,
   ItemDescription,
   ItemGroup,
@@ -32,8 +35,10 @@ import {
 
 export function ActivityCard({
   transactions,
+  debtId,
 }: {
   transactions: DebtTransactionRecord[];
+  debtId: number;
 }) {
   return (
     <Card>
@@ -84,6 +89,13 @@ export function ActivityCard({
                 <div className="shrink-0 self-start text-right text-xs text-muted-foreground">
                   {new Date(transaction.createdAt).toLocaleDateString()}
                 </div>
+                <ItemActions>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={`/debts/${debtId}/requests/${transaction.id}`}>
+                      View request
+                    </Link>
+                  </Button>
+                </ItemActions>
               </Item>
             ))}
           </ItemGroup>

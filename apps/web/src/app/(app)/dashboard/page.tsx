@@ -1,43 +1,54 @@
-import { getUser } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
-import { debtService } from '@/services/debt.service'
-import { groupService } from '@/services/group.service'
-import { recurringPaymentService } from '@/services/recurring-payment.service'
-import { alertService } from '@/services/alert.service'
-import { debtTransactionService } from '@/services/debt-transaction.service'
-import { redirect } from 'next/navigation'
-import DashboardPageClient from './dashboard-client'
+import { getUser } from "@/lib/supabase";
+import { prisma } from "@/lib/prisma";
+import { debtService } from "@/services/debt.service";
+import { groupService } from "@/services/group.service";
+import { recurringPaymentService } from "@/services/recurring-payment.service";
+import { alertService } from "@/services/alert.service";
+import { debtTransactionService } from "@/services/debt-transaction.service";
+import { redirect } from "next/navigation";
+import DashboardPageClient from "./dashboard-client";
 
 export default async function DashboardPage() {
-  const user = await getUser()
+  const user = await getUser();
 
   if (!user) {
-    redirect('/login')
+    redirect("/login");
   }
 
-  const [debts, groups, dbUser, recurringPayments, alerts, pendingTransactions] = await Promise.all([
-    debtService.getUserDebts(user.id, { status: 'pending' }),
+  const [
+    debts,
+    groups,
+    dbUser,
+    recurringPayments,
+    alerts,
+    pendingTransactions,
+  ] = await Promise.all([
+    debtService.getUserDebts(user.id, { status: "pending" }),
     groupService.getUserGroups(user.id),
     prisma.user.findUnique({ where: { id: user.id }, select: { name: true } }),
-    recurringPaymentService.getUserRecurringPayments(user.id, { status: 'active' }),
+    recurringPaymentService.getUserRecurringPayments(user.id, {
+      status: "active",
+    }),
     alertService.getActiveAlertsForBorrower(user.id),
     debtTransactionService.getUserPendingTransactions(user.id),
-  ])
+  ]);
 
-  // Filter pending transactions where current user is the lender (needs to approve)
   const pendingApprovals = pendingTransactions.filter(
-    (transaction) => transaction.debt.lenderId === user.id && !transaction.lenderApproved
-  )
+    (transaction) =>
+      (transaction.debt.lenderId === user.id && !transaction.lenderApproved) ||
+      (transaction.debt.borrowerId === user.id && !transaction.borrowerApproved),
+  );
 
   return (
     <DashboardPageClient
+      asOf={new Date().getTime()}
       initialDebts={debts}
       initialGroups={groups}
       currentUser={user}
-      userName={dbUser?.name || user.email || 'User'}
+      userName={dbUser?.name || user.email || "User"}
       initialRecurringPayments={recurringPayments}
       initialAlerts={alerts}
       initialPendingTransactions={pendingApprovals}
     />
-  )
+  );
 }
