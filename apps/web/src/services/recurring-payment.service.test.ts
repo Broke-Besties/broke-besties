@@ -109,6 +109,18 @@ describe("recurringPaymentService", () => {
   });
 
   describe("getUserRecurringPayments", () => {
+    it("loads group identity for list filtering and display", async () => {
+      db.recurringPayment.findMany.mockResolvedValueOnce([]);
+      await recurringPaymentService.getUserRecurringPayments(LENDER_ID);
+      expect(db.recurringPayment.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            group: { select: { id: true, name: true } },
+          }),
+        }),
+      );
+    });
+
     it("builds the where clause from type and status filters", async () => {
       db.recurringPayment.findMany.mockResolvedValueOnce([]);
 

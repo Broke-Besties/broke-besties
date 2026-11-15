@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { MoreHorizontal, UserPlus, Users } from "lucide-react";
 
 import {
@@ -15,11 +15,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -37,6 +38,7 @@ import {
   ItemDescription,
   ItemGroup,
   ItemMedia,
+  ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
@@ -47,7 +49,7 @@ type FriendsListProps = {
   friends: Friend[];
   pending: PendingAction | null;
   onRemove: (friendshipId: number) => void;
-  onAddFriend: () => void;
+  onAddFriend: React.MouseEventHandler<HTMLButtonElement>;
 };
 
 export function FriendsList({
@@ -69,7 +71,7 @@ export function FriendsList({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={onAddFriend}>
+          <Button onClick={onAddFriend} disabled={pending !== null}>
             <UserPlus />
             Add a friend
           </Button>
@@ -79,16 +81,19 @@ export function FriendsList({
   }
 
   return (
-    <ItemGroup className="gap-3">
-      {friends.map((friendship) => (
-        <FriendRow
-          key={friendship.id}
-          friendship={friendship}
-          removing={
-            pending?.action === "remove" && pending.id === friendship.id
-          }
-          onRemove={() => onRemove(friendship.id)}
-        />
+    <ItemGroup className="overflow-hidden rounded-lg border">
+      {friends.map((friendship, index) => (
+        <Fragment key={friendship.id}>
+          {index > 0 && <ItemSeparator />}
+          <FriendRow
+            disabled={pending !== null}
+            friendship={friendship}
+            removing={
+              pending?.action === "remove" && pending.id === friendship.id
+            }
+            onRemove={() => onRemove(friendship.id)}
+          />
+        </Fragment>
       ))}
     </ItemGroup>
   );
@@ -97,27 +102,36 @@ export function FriendsList({
 function FriendRow({
   friendship,
   removing,
+  disabled,
   onRemove,
 }: {
   friendship: Friend;
   removing: boolean;
+  disabled: boolean;
   onRemove: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <>
-      <Item variant="outline">
+      <Item size="sm" role="listitem" className="flex-nowrap rounded-none">
         <ItemMedia>
           <Avatar className="size-10">
             <AvatarFallback>{initials(friendship.friend.name)}</AvatarFallback>
           </Avatar>
         </ItemMedia>
-        <ItemContent>
-          <ItemTitle>{friendship.friend.name}</ItemTitle>
-          <ItemDescription>{friendship.friend.email}</ItemDescription>
+        <ItemContent className="min-w-0">
+          <ItemTitle className="max-w-full [overflow-wrap:anywhere]">
+            {friendship.friend.name}
+          </ItemTitle>
+          <ItemDescription className="line-clamp-none [overflow-wrap:anywhere]">
+            {friendship.friend.email}
+          </ItemDescription>
           {friendship.friend.signedUp === false && (
-            <Badge variant="secondary" className="w-fit">
+            <Badge
+              variant="secondary"
+              className="w-fit max-w-full whitespace-normal"
+            >
               Not signed up yet
             </Badge>
           )}
@@ -128,19 +142,22 @@ function FriendRow({
               <Button
                 variant="ghost"
                 size="icon"
-                disabled={removing}
-                aria-label="Friend actions"
+                disabled={disabled}
+                aria-label={`Actions for ${friendship.friend.name}`}
               >
                 {removing ? <Spinner /> : <MoreHorizontal />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => setConfirmOpen(true)}
-              >
-                Remove friend
-              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={disabled}
+                  onSelect={() => setConfirmOpen(true)}
+                >
+                  Remove friend
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </ItemActions>
@@ -158,7 +175,8 @@ function FriendRow({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className={buttonVariants({ variant: "destructive" })}
+              variant="destructive"
+              disabled={disabled}
               onClick={onRemove}
             >
               Remove friend

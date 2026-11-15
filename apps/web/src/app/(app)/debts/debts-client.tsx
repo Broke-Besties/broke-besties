@@ -65,7 +65,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -319,23 +319,26 @@ export default function DebtsPageClient({
       <Card className="overflow-hidden py-0">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <Tabs
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              aria-label="Debt direction"
               value={viewFilter}
               onValueChange={(v) => {
+                if (!v) return;
                 setViewFilter(v as ViewFilter);
                 setRequestedPage(1);
               }}
             >
-              <TabsList>
-                <TabsTrigger value="all">All ({debts.length})</TabsTrigger>
-                <TabsTrigger value="lending">
-                  Lending ({lendingDebts.length})
-                </TabsTrigger>
-                <TabsTrigger value="borrowing">
-                  Borrowing ({borrowingDebts.length})
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+              <ToggleGroupItem value="all">All ({debts.length})</ToggleGroupItem>
+              <ToggleGroupItem value="lending">
+                Lending ({lendingDebts.length})
+              </ToggleGroupItem>
+              <ToggleGroupItem value="borrowing">
+                Borrowing ({borrowingDebts.length})
+              </ToggleGroupItem>
+            </ToggleGroup>
 
             <Select
               value={statusFilter}

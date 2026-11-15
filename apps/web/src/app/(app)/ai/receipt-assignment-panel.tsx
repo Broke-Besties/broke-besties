@@ -5,7 +5,15 @@ import { Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
@@ -57,7 +65,7 @@ export function ReceiptAssignmentPanel({
 
   const memberNameById = useMemo(
     () => new Map(members.map((member) => [member.id, member.name])),
-    [members]
+    [members],
   )
 
   const setItemMembers = (itemId: string, memberIds: string[]) => {
@@ -66,28 +74,27 @@ export function ReceiptAssignmentPanel({
 
   const editItem = (itemId: string, patch: Partial<AssignableItem>) => {
     setEditedItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId ? { ...item, ...patch } : item
-      )
+      prev.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
     )
   }
 
   const assignAllToEveryone = () => {
     const allIds = members.map((member) => member.id)
     setAssignments(
-      Object.fromEntries(editedItems.map((item) => [item.id, allIds]))
+      Object.fromEntries(editedItems.map((item) => [item.id, allIds])),
     )
   }
 
   const clearAll = () => {
-    setAssignments(
-      Object.fromEntries(editedItems.map((item) => [item.id, []]))
-    )
+    setAssignments(Object.fromEntries(editedItems.map((item) => [item.id, []])))
   }
 
   // Build per-borrower debts: each item is split equally across its assignees
   const buildAssignments = (): ReceiptItemAssignment[] => {
-    const debtByBorrower = new Map<string, { amount: number; items: string[] }>()
+    const debtByBorrower = new Map<
+      string,
+      { amount: number; items: string[] }
+    >()
 
     for (const item of editedItems) {
       const assignees = assignments[item.id] || []
@@ -106,13 +113,11 @@ export function ReceiptAssignmentPanel({
       }
     }
 
-    return Array.from(debtByBorrower.entries()).map(
-      ([borrowerId, debt]) => ({
-        borrowerId,
-        amount: debt.amount,
-        description: debt.items.join(', '),
-      })
-    )
+    return Array.from(debtByBorrower.entries()).map(([borrowerId, debt]) => ({
+      borrowerId,
+      amount: debt.amount,
+      description: debt.items.join(', '),
+    }))
   }
 
   const perBorrowerTotals = useMemo(() => {
@@ -129,26 +134,30 @@ export function ReceiptAssignmentPanel({
   }, [editedItems, assignments])
 
   const unassignedCount = editedItems.filter(
-    (item) => !assignments[item.id] || assignments[item.id].length === 0
+    (item) => !assignments[item.id] || assignments[item.id].length === 0,
   ).length
 
   const hasInvalidItem = editedItems.some(
-    (item) => !item.name.trim() || isNaN(item.price) || item.price < 0
+    (item) => !item.name.trim() || isNaN(item.price) || item.price < 0,
   )
 
   const debts = buildAssignments()
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border bg-background/50 p-3 sm:p-4">
+    <Card className="w-full min-w-0 shadow-none">
+      <CardHeader className="gap-2 p-4">
+        <CardTitle>Review & split</CardTitle>
+        <CardDescription>
+          Edit anything the scan missed, then choose who had each item.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Badge variant="secondary">
             {editedItems.length} item{editedItems.length > 1 ? 's' : ''} parsed
           </Badge>
           {unassignedCount > 0 && (
-            <Badge variant="outline">
-              {unassignedCount} unassigned
-            </Badge>
+            <Badge variant="outline">{unassignedCount} unassigned</Badge>
           )}
           <div className="ml-auto flex gap-2">
             <Button
@@ -173,28 +182,37 @@ export function ReceiptAssignmentPanel({
           </div>
         </div>
 
-        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-3">
           {editedItems.map((item) => {
             const assignees = assignments[item.id] || []
-            const share = assignees.length > 0
-              ? round2(item.price / assignees.length)
-              : null
+            const share =
+              assignees.length > 0
+                ? round2(item.price / assignees.length)
+                : null
             return (
-              <div
-                key={item.id}
-                className="rounded-md border bg-muted/30 p-2"
-              >
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={item.name}
-                    onChange={(e) => editItem(item.id, { name: e.target.value })}
-                    className="h-8 flex-1"
-                    disabled={isCreating}
-                    aria-label="Item name"
-                  />
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm text-muted-foreground">$</span>
+              <div key={item.id} className="min-w-0 rounded-lg border p-3">
+                <FieldGroup className="flex-row items-end gap-2">
+                  <Field className="min-w-0 flex-1">
+                    <FieldLabel htmlFor={`item-name-${item.id}`}>
+                      Item
+                    </FieldLabel>
                     <Input
+                      id={`item-name-${item.id}`}
+                      value={item.name}
+                      onChange={(e) =>
+                        editItem(item.id, { name: e.target.value })
+                      }
+                      className="h-8 flex-1"
+                      disabled={isCreating}
+                      aria-label="Item name"
+                    />
+                  </Field>
+                  <Field className="w-24 shrink-0">
+                    <FieldLabel htmlFor={`item-price-${item.id}`}>
+                      Price ($)
+                    </FieldLabel>
+                    <Input
+                      id={`item-price-${item.id}`}
                       type="number"
                       step="0.01"
                       min="0"
@@ -202,26 +220,30 @@ export function ReceiptAssignmentPanel({
                       onChange={(e) =>
                         editItem(item.id, { price: parseFloat(e.target.value) })
                       }
-                      className="h-8 w-20"
+                      className="h-8 w-full"
                       disabled={isCreating}
                       aria-label="Item price"
                     />
-                  </div>
-                </div>
-                <div className="mt-2 flex items-center gap-2">
+                  </Field>
+                </FieldGroup>
+                <fieldset
+                  disabled={isCreating}
+                  className="mt-3 flex min-w-0 flex-wrap items-center gap-2"
+                >
+                  <legend className="sr-only">Who had {item.name}?</legend>
                   <MultiSelect
                     options={memberOptions}
                     selected={assignees}
                     onChange={(memberIds) => setItemMembers(item.id, memberIds)}
                     placeholder="Who had this?"
-                    className={isCreating ? 'pointer-events-none opacity-50' : 'flex-1'}
+                    className="min-w-0 flex-1"
                   />
                   {share !== null && (
                     <span className="whitespace-nowrap text-xs text-muted-foreground">
                       ${share.toFixed(2)} each
                     </span>
                   )}
-                </div>
+                </fieldset>
               </div>
             )
           })}
@@ -230,10 +252,8 @@ export function ReceiptAssignmentPanel({
         {perBorrowerTotals.size > 0 && (
           <>
             <Separator className="my-3" />
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">
-                Totals per person
-              </Label>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground">Totals per person</p>
               <div className="flex flex-wrap gap-2">
                 {Array.from(perBorrowerTotals.entries()).map(
                   ([memberId, total]) => (
@@ -241,31 +261,40 @@ export function ReceiptAssignmentPanel({
                       {memberNameById.get(memberId) || 'Unknown'}: $
                       {total.toFixed(2)}
                     </Badge>
-                  )
+                  ),
                 )}
               </div>
             </div>
           </>
         )}
-      </div>
+        {unassignedCount > 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {unassignedCount} unassigned item{unassignedCount === 1 ? '' : 's'}{' '}
+            will not be included in the debts.
+          </p>
+        )}
+      </CardContent>
 
-      <div className="flex gap-2">
+      <CardFooter className="flex flex-wrap gap-2 px-4 pb-4">
         <Button
           size="sm"
           onClick={() => onCreate(debts)}
-          disabled={
-            isCreating || debts.length === 0 || hasInvalidItem
-          }
+          disabled={isCreating || debts.length === 0 || hasInvalidItem}
         >
           {isCreating && <Spinner />}
           {isCreating
             ? 'Creating…'
             : `Create ${debts.length} debt${debts.length > 1 ? 's' : ''}`}
         </Button>
-        <Button size="sm" variant="outline" onClick={onCancel} disabled={isCreating}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isCreating}
+        >
           Cancel
         </Button>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   )
 }

@@ -62,7 +62,7 @@ export const DebtDeletionRequestEmail = ({
         </Section>
 
         <Text style={footer}>
-          If you don't approve this deletion, no action is needed - the debt will remain active.
+          If you don&apos;t approve this deletion, no action is needed - the debt will remain active.
         </Text>
 
         <Text style={footerCopyright}>

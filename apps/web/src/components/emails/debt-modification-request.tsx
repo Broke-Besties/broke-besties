@@ -108,7 +108,7 @@ export const DebtModificationRequestEmail = ({
           </Section>
 
           <Text style={footer}>
-            If you don't approve this {actionText === "modify" ? "modification" : "deletion"},
+            If you don&apos;t approve this {actionText === "modify" ? "modification" : "deletion"},
             you can reject it on the debt details page. The debt will remain unchanged unless both parties approve.
           </Text>
 

@@ -20,7 +20,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { chartColor } from "@/lib/chart-colors";
 import type { Debt } from "./types";
 
@@ -84,20 +84,22 @@ export function DebtBreakdown({
     <Card className="flex flex-col">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle>Debt breakdown</CardTitle>
-        <Tabs
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          aria-label="Debt breakdown view"
           value={view}
-          onValueChange={(value) => setView(value as View)}
+          onValueChange={(value) => value && setView(value as View)}
           className="w-auto"
         >
-          <TabsList className="h-8">
-            <TabsTrigger value="owed" className="text-xs">
-              Owed to you
-            </TabsTrigger>
-            <TabsTrigger value="owing" className="text-xs">
-              You owe
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+          <ToggleGroupItem value="owed" className="text-xs">
+            Owed to you
+          </ToggleGroupItem>
+          <ToggleGroupItem value="owing" className="text-xs">
+            You owe
+          </ToggleGroupItem>
+        </ToggleGroup>
       </CardHeader>
       <CardContent className="flex-1">
         {chartData.length === 0 ? (

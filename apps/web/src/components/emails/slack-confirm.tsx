@@ -42,7 +42,7 @@ export const SlackConfirmEmail = ({
           </Heading>
           <Text className="text-xl mb-7.5">
             Your confirmation code is below - enter it in your open browser
-            window and we'll help you get signed in.
+            window and we&apos;ll help you get signed in.
           </Text>
 
           <Section className="bg-[rgb(245,244,245)] rounded mb-[30px] py-10 px-[10px]">
@@ -52,7 +52,7 @@ export const SlackConfirmEmail = ({
           </Section>
 
           <Text className="text-black text-sm leading-6">
-            If you didn't request this email, there's nothing to worry about,
+            If you didn&apos;t request this email, there&apos;s nothing to worry about,
             you can safely ignore it.
           </Text>
 

@@ -2,13 +2,54 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { CircleAlert, ImageIcon, Plus, Sparkles, Users, X } from 'lucide-react'
+import {
+  ArrowUp,
+  CircleAlert,
+  ImagePlus,
+  Plus,
+  ReceiptText,
+  ScanLine,
+  Users,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Attachment,
+  AttachmentAction,
+  AttachmentActions,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentMedia,
+  AttachmentTitle,
+} from '@/components/ui/attachment'
+import { Field, FieldLabel } from '@/components/ui/field'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from '@/components/ui/input-group'
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/components/ui/message-scroller'
 import {
   Empty,
   EmptyContent,
@@ -17,26 +58,30 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectGroup,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { PageHeader } from '@/components/page-header'
 import { createDebt } from '@/app/(app)/groups/[id]/actions'
-import { ChatMessageBubble, ThinkingBubble, type ChatMessage } from './chat-message'
+import {
+  ChatMessageBubble,
+  ThinkingBubble,
+  type ChatMessage,
+} from './chat-message'
 import {
   ReceiptAssignmentPanel,
   type AssignableItem,
   type GroupMemberOption,
   type ReceiptItemAssignment,
 } from './receipt-assignment-panel'
+import { buildAgentRequest } from './agent-request'
 
 type Group = {
   id: number
@@ -44,8 +89,7 @@ type Group = {
 }
 
 const SUGGESTED_PROMPTS = [
-  'Split a $60 dinner evenly between everyone',
-  'Add a $15 debt for movie tickets',
+  'How do I split a shared dinner?',
   'What can you help me with?',
 ]
 
@@ -58,7 +102,10 @@ export default function AIPageClient() {
   const [groupId, setGroupId] = useState('')
   const [groups, setGroups] = useState<Group[]>([])
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
-  const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
+  const [pendingImage, setPendingImage] = useState<{
+    url: string
+    file: File
+  } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [currentReceiptId, setCurrentReceiptId] = useState<string | null>(null)
   const [parsedItems, setParsedItems] = useState<AssignableItem[] | null>(null)
@@ -66,10 +113,12 @@ export default function AIPageClient() {
   const [members, setMembers] = useState<GroupMemberOption[]>([])
   const [isCreatingDebts, setIsCreatingDebts] = useState(false)
   const [isParsing, setIsParsing] = useState(false)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
+  const isBusy = isLoading || isUploading || isParsing || isCreatingDebts
+  const isReviewing = parsedItems !== null
+  const composerDisabled = isBusy || isReviewing || !groupId
 
   // Fetch user's groups on mount
   useEffect(() => {
@@ -100,16 +149,6 @@ export default function AIPageClient() {
     fetchGroups()
   }, [searchParams])
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector(
-      '[data-slot="scroll-area-viewport"]'
-    )
-    if (viewport) {
-      viewport.scrollTop = viewport.scrollHeight
-    }
-  }, [messages, isLoading])
-
   // Fetch group members whenever the selected group changes
   useEffect(() => {
     if (!groupId) {
@@ -130,8 +169,8 @@ export default function AIPageClient() {
               (member: { user: { id: string; name: string } }) => ({
                 id: member.user.id,
                 name: member.user.name,
-              })
-            )
+              }),
+            ),
           )
         }
       } catch (err) {
@@ -147,7 +186,7 @@ export default function AIPageClient() {
   // Handle paste events for images
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
-      if (!groupId) {
+      if (composerDisabled) {
         return
       }
 
@@ -160,9 +199,17 @@ export default function AIPageClient() {
           const file = item.getAsFile()
           if (file) {
             // Inline the validation logic to avoid adding handleImageFile to dependencies
-            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+            const validTypes = [
+              'image/jpeg',
+              'image/jpg',
+              'image/png',
+              'image/webp',
+              'image/gif',
+            ]
             if (!validTypes.includes(file.type)) {
-              setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
+              setError(
+                'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed',
+              )
               return
             }
 
@@ -182,7 +229,7 @@ export default function AIPageClient() {
 
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
-  }, [groupId])
+  }, [composerDisabled])
 
   const handleImageFile = (file: File) => {
     if (!groupId) {
@@ -191,7 +238,13 @@ export default function AIPageClient() {
     }
 
     // Validate file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    const validTypes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+    ]
     if (!validTypes.includes(file.type)) {
       setError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed')
       return
@@ -218,7 +271,9 @@ export default function AIPageClient() {
     e.target.value = ''
   }
 
-  const uploadImage = async (file: File): Promise<{ signedUrl: string; receiptId: string }> => {
+  const uploadImage = async (
+    file: File,
+  ): Promise<{ signedUrl: string; receiptId: string }> => {
     const formData = new FormData()
     formData.append('file', file)
     // No debtIds - creating a pending receipt for AI analysis
@@ -274,7 +329,7 @@ export default function AIPageClient() {
   }
 
   const parseReceiptItems = async (
-    receiptId: string
+    receiptId: string,
   ): Promise<AssignableItem[]> => {
     const response = await fetch(`/api/receipts/${receiptId}/parse`, {
       method: 'POST',
@@ -330,17 +385,22 @@ export default function AIPageClient() {
         }
       }
 
-      const groupName = groups.find(group => group.id.toString() === groupId)?.name
+      const groupName = groups.find(
+        (group) => group.id.toString() === groupId,
+      )?.name
       const debtCount = `${assignments.length} debt${assignments.length > 1 ? 's' : ''}`
       toast.success(`Created ${debtCount}`)
 
       // Add confirmation message with a link onward to the group
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Successfully created ${debtCount}${groupName ? ` in ${groupName}` : ''}!`,
-        id: Date.now().toString(),
-        groupHref: `/groups/${groupId}`,
-      }])
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Successfully created ${debtCount}${groupName ? ` in ${groupName}` : ''}!`,
+          id: crypto.randomUUID(),
+          groupHref: `/groups/${groupId}`,
+        },
+      ])
 
       // Clear parsed items and receipt ID
       setParsedItems(null)
@@ -364,6 +424,8 @@ export default function AIPageClient() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (composerDisabled) return
+
     // Allow submit if there's text OR a pending image
     if (!input.trim() && !pendingImage) return
     if (!groupId) {
@@ -383,7 +445,8 @@ export default function AIPageClient() {
         receiptId = result.receiptId
         setCurrentReceiptId(receiptId)
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to upload image'
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to upload image'
         setError(errorMessage)
         setIsUploading(false)
         return
@@ -394,11 +457,11 @@ export default function AIPageClient() {
     const userMessage: ChatMessage = {
       role: 'user',
       content: input.trim() || 'Analyze this receipt',
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       imageUrl: uploadedImageUrl || undefined,
     }
 
-    setMessages(prev => [...prev, userMessage])
+    setMessages((prev) => [...prev, userMessage])
     setInput('')
     clearPendingImage()
     setError('')
@@ -409,16 +472,17 @@ export default function AIPageClient() {
       try {
         const items = await parseReceiptItems(receiptId)
         setParsedItems(items)
-        setParsedKey(prev => prev + 1)
+        setParsedKey((prev) => prev + 1)
 
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: `I found ${items.length} item${items.length > 1 ? 's' : ''} on the receipt. Assign them to group members below and I'll create the debts:`,
-          id: Date.now().toString(),
+          id: crypto.randomUUID(),
         }
-        setMessages(prev => [...prev, assistantMessage])
+        setMessages((prev) => [...prev, assistantMessage])
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to parse receipt'
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to parse receipt'
         setError(errorMessage)
         // Clean up the receipt we can't parse
         try {
@@ -437,21 +501,18 @@ export default function AIPageClient() {
     setIsLoading(true)
 
     try {
-      // Convert our message format to LangChain format
-      const langchainMessages = [...messages, userMessage].map(msg => ({
-        type: msg.role === 'user' ? 'human' : 'ai',
-        content: msg.content,
-      }))
-
       const response = await fetch('/api/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: langchainMessages,
-          groupId: parseInt(groupId),
-        }),
+        body: JSON.stringify(
+          buildAgentRequest(
+            [...messages, userMessage],
+            groupId,
+            receiptId || currentReceiptId,
+          ),
+        ),
       })
 
       if (!response.ok) {
@@ -462,17 +523,19 @@ export default function AIPageClient() {
       const data = await response.json()
 
       const lastMessage = data.messages[data.messages.length - 1]
-      const content = lastMessage.content || lastMessage.kwargs?.content || 'No response'
+      const content =
+        lastMessage.content || lastMessage.kwargs?.content || 'No response'
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content,
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
       }
 
-      setMessages(prev => [...prev, assistantMessage])
+      setMessages((prev) => [...prev, assistantMessage])
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      const errorMessage =
+        err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
       console.error('Error:', err)
     } finally {
@@ -484,32 +547,36 @@ export default function AIPageClient() {
   const showZeroGroups = !isLoadingGroups && !hasGroups
 
   return (
-    <div className="flex h-[calc(100svh-var(--header-height)-4rem)] flex-col gap-6">
+    <div className="flex h-[calc(100svh-var(--header-height)-4rem)] min-h-[34rem] flex-col gap-5">
       <PageHeader
         title="AI Assistant"
-        description="Describe an expense or paste a receipt and turn it into debts for your group."
+        description="A little less math. A little more time with your besties."
         actions={
           !showZeroGroups && (
             <div className="flex items-center gap-2">
-              <Label htmlFor="ai-group-picker" className="text-muted-foreground">
-                Group
-              </Label>
+              <Label htmlFor="ai-group-picker">Split with</Label>
               <Select
                 value={groupId}
                 onValueChange={setGroupId}
-                disabled={isLoadingGroups}
+                disabled={
+                  isLoadingGroups || isBusy || isReviewing || !!pendingImage
+                }
               >
-                <SelectTrigger id="ai-group-picker" className="w-44">
+                <SelectTrigger id="ai-group-picker" className="w-48 sm:w-56">
                   <SelectValue
-                    placeholder={isLoadingGroups ? 'Loading groups…' : 'Select a group'}
+                    placeholder={
+                      isLoadingGroups ? 'Loading groups…' : 'Select a group'
+                    }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {groups.map((group) => (
-                    <SelectItem key={group.id} value={group.id.toString()}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id.toString()}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -525,82 +592,150 @@ export default function AIPageClient() {
             </EmptyMedia>
             <EmptyTitle>You need a group first</EmptyTitle>
             <EmptyDescription>
-              The AI assistant creates debts inside one of your groups. Create a
-              group and invite your friends to get started.
+              Create a group and invite your friends before splitting a receipt.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild>
               <Link href="/groups">
-                <Plus />
+                <Plus data-icon="inline-start" />
                 Create a group
               </Link>
             </Button>
           </EmptyContent>
+          {error && (
+            <Alert variant="destructive">
+              <CircleAlert />
+              <AlertTitle>Could not load groups</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
         </Empty>
       ) : (
-        <Card className="flex min-h-0 flex-1 flex-col">
-          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6">
+        <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
+          <CardHeader className="gap-3 border-b px-4 py-4 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <ScanLine className="size-4" />
+                Receipt studio
+              </CardTitle>
+              <Badge variant="secondary" role="status">
+                {isUploading
+                  ? 'Uploading receipt'
+                  : isParsing
+                    ? 'Reading receipt'
+                    : isCreatingDebts
+                      ? 'Creating debts'
+                      : isReviewing
+                        ? 'Ready to review'
+                        : isLoading
+                          ? 'Thinking'
+                          : 'Ready when you are'}
+              </Badge>
+            </div>
+            <CardDescription>
+              Upload a receipt. Check the items. Choose who owes what.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
             {messages.length === 0 && !isLoading ? (
-              <Empty className="min-h-0 flex-1 border border-dashed">
+              <Empty className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:py-10">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
-                    <Sparkles />
+                    <ReceiptText />
                   </EmptyMedia>
-                  <EmptyTitle>Start a conversation</EmptyTitle>
+                  <EmptyTitle>One receipt. Everyone’s share.</EmptyTitle>
                   <EmptyDescription>
-                    Ask about splitting an expense, or paste a receipt image to
-                    extract debts automatically.
+                    Upload or paste a receipt and we’ll read the items for you.
+                    You review the prices and assign each item before creating
+                    debts.
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {SUGGESTED_PROMPTS.map((prompt) => (
-                      <Button
-                        key={prompt}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setInput(prompt)
-                          inputRef.current?.focus()
-                        }}
-                      >
-                        {prompt}
-                      </Button>
-                    ))}
-                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={composerDisabled}
+                  >
+                    <ImagePlus data-icon="inline-start" />
+                    Upload a receipt
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    JPEG, PNG, WebP or GIF · Up to 10 MB
+                  </p>
                 </EmptyContent>
               </Empty>
             ) : (
-              <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1">
-                <div className="space-y-4 pr-3">
-                  {messages.map((message, index) => (
-                    <ChatMessageBubble
-                      key={message.id || index}
-                      message={message}
-                      reviewPanel={
-                        parsedItems &&
-                        members.length > 0 &&
-                        currentReceiptId &&
-                        index === messages.length - 1 ? (
-                          <ReceiptAssignmentPanel
-                            key={parsedKey}
-                            items={parsedItems}
-                            members={members}
-                            isCreating={isCreatingDebts}
-                            onCreate={handleCreateDebts}
-                            onCancel={handleCancelAssignment}
+              <MessageScrollerProvider autoScroll>
+                <MessageScroller>
+                  <MessageScrollerViewport aria-label="Conversation">
+                    <MessageScrollerContent className="gap-6 px-4 py-6 sm:px-6">
+                      {messages.map((message, index) => (
+                        <MessageScrollerItem
+                          key={message.id || index}
+                          messageId={message.id || String(index)}
+                          scrollAnchor={message.role === 'user'}
+                        >
+                          <ChatMessageBubble
+                            message={message}
+                            reviewPanel={
+                              parsedItems &&
+                              currentReceiptId &&
+                              index === messages.length - 1 ? (
+                                members.length > 0 ? (
+                                  <ReceiptAssignmentPanel
+                                    key={parsedKey}
+                                    items={parsedItems}
+                                    members={members}
+                                    isCreating={isCreatingDebts}
+                                    onCreate={handleCreateDebts}
+                                    onCancel={handleCancelAssignment}
+                                  />
+                                ) : (
+                                  <Alert>
+                                    <Users />
+                                    <AlertTitle>
+                                      Group members aren’t available yet
+                                    </AlertTitle>
+                                    <AlertDescription>
+                                      Wait for the group to load, or cancel and
+                                      try again.
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleCancelAssignment}
+                                      >
+                                        Cancel review
+                                      </Button>
+                                    </AlertDescription>
+                                  </Alert>
+                                )
+                              ) : undefined
+                            }
                           />
-                        ) : undefined
-                      }
-                    />
-                  ))}
-                  {(isLoading || isParsing) && <ThinkingBubble label={isParsing ? 'Parsing receipt…' : undefined} />}
-                </div>
-              </ScrollArea>
+                        </MessageScrollerItem>
+                      ))}
+                      {(isLoading || isParsing) && (
+                        <MessageScrollerItem messageId="pending">
+                          <ThinkingBubble
+                            label={
+                              isParsing
+                                ? 'Reading items and prices from your receipt…'
+                                : undefined
+                            }
+                          />
+                        </MessageScrollerItem>
+                      )}
+                    </MessageScrollerContent>
+                  </MessageScrollerViewport>
+                  <MessageScrollerButton />
+                </MessageScroller>
+              </MessageScrollerProvider>
             )}
+          </CardContent>
 
+          <CardFooter className="flex shrink-0 flex-col items-stretch gap-3 border-t px-4 py-4 sm:px-6">
             {error && (
               <Alert variant="destructive">
                 <CircleAlert />
@@ -608,65 +743,148 @@ export default function AIPageClient() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-
-            {pendingImage && (
-              <div className="flex items-center gap-3 rounded-md border p-2">
-                <img
-                  src={pendingImage.url}
-                  alt="Image ready to send"
-                  className="size-12 rounded-md object-cover"
-                />
-                <Badge variant="secondary">Image attached</Badge>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="ml-auto"
-                  onClick={clearPendingImage}
-                  aria-label="Remove image"
-                >
-                  <X />
-                </Button>
+            {messages.length === 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Or ask a question
+                </span>
+                {SUGGESTED_PROMPTS.map((prompt) => (
+                  <Button
+                    key={prompt}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={composerDisabled}
+                    onClick={() => {
+                      setInput(prompt)
+                      inputRef.current?.focus()
+                    }}
+                  >
+                    {prompt}
+                  </Button>
+                ))}
               </div>
             )}
-
-            {/* Hidden file input */}
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
               onChange={handleFileSelect}
               className="hidden"
+              disabled={composerDisabled}
+              aria-label="Choose receipt image"
             />
-
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading || isUploading || !groupId}
-                aria-label="Upload image"
-              >
-                <ImageIcon />
-              </Button>
-              <Input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={pendingImage ? "Add a message (optional)..." : "Type your message or paste an image..."}
-                disabled={isLoading || isUploading || !groupId}
-                className="flex-1"
-              />
-              <Button
-                type="submit"
-                disabled={isLoading || isUploading || isParsing || !groupId || (!input.trim() && !pendingImage)}
-              >
-                {isUploading && <Spinner />}
-                {isUploading ? 'Uploading…' : 'Send'}
-              </Button>
+            <form onSubmit={handleSubmit}>
+              <Field>
+                <FieldLabel htmlFor="ai-message" className="sr-only">
+                  Message or receipt instructions
+                </FieldLabel>
+                <InputGroup>
+                  <InputGroupTextarea
+                    id="ai-message"
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === 'Enter' &&
+                        !e.shiftKey &&
+                        !e.nativeEvent.isComposing
+                      ) {
+                        e.preventDefault()
+                        e.currentTarget.form?.requestSubmit()
+                      }
+                    }}
+                    placeholder={
+                      isReviewing
+                        ? 'Review your receipt above to continue'
+                        : pendingImage
+                          ? 'Add instructions (optional)…'
+                          : 'Ask about an expense, or paste a receipt…'
+                    }
+                    disabled={composerDisabled}
+                    className="max-h-32 min-h-16"
+                  />
+                  {pendingImage && (
+                    <InputGroupAddon align="block-start">
+                      <Attachment
+                        state={isUploading ? 'uploading' : 'idle'}
+                        className="w-full sm:max-w-sm"
+                      >
+                        <AttachmentMedia variant="image">
+                          <Image
+                            src={pendingImage.url}
+                            alt="Receipt ready to scan"
+                            width={40}
+                            height={40}
+                            unoptimized
+                          />
+                        </AttachmentMedia>
+                        <AttachmentContent>
+                          <AttachmentTitle>
+                            {pendingImage.file.name}
+                          </AttachmentTitle>
+                          <AttachmentDescription>
+                            {isUploading ? 'Uploading…' : 'Ready to scan'}
+                          </AttachmentDescription>
+                        </AttachmentContent>
+                        <AttachmentActions>
+                          <AttachmentAction
+                            type="button"
+                            onClick={clearPendingImage}
+                            disabled={isBusy}
+                            aria-label="Remove receipt"
+                          >
+                            <X />
+                          </AttachmentAction>
+                        </AttachmentActions>
+                      </Attachment>
+                    </InputGroupAddon>
+                  )}
+                  <InputGroupAddon
+                    align="block-end"
+                    className="justify-between"
+                  >
+                    <InputGroupButton
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={composerDisabled}
+                      aria-label="Attach receipt"
+                    >
+                      <ImagePlus data-icon="inline-start" />
+                      Attach receipt
+                    </InputGroupButton>
+                    <InputGroupButton
+                      type="submit"
+                      variant="default"
+                      size="sm"
+                      disabled={
+                        composerDisabled || (!input.trim() && !pendingImage)
+                      }
+                    >
+                      {isUploading ? (
+                        <Spinner />
+                      ) : pendingImage ? (
+                        <ScanLine data-icon="inline-start" />
+                      ) : (
+                        <ArrowUp data-icon="inline-start" />
+                      )}
+                      {isUploading
+                        ? 'Uploading…'
+                        : pendingImage
+                          ? 'Scan receipt'
+                          : 'Send'}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              </Field>
             </form>
-          </CardContent>
+            <p className="text-center text-xs text-muted-foreground">
+              {isReviewing
+                ? 'Check the scan for mistakes before creating debts.'
+                : 'AI can make mistakes. Check receipt items and amounts before confirming.'}
+            </p>
+          </CardFooter>
         </Card>
       )}
     </div>

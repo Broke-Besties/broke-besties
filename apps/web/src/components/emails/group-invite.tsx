@@ -24,9 +24,9 @@ export const GroupInviteEmail = ({
   <Html>
     <Head />
     <Body style={main}>
-      <Preview>You've been invited to join {groupName} on BrokeBesties</Preview>
+      <Preview>You&apos;ve been invited to join {groupName} on BrokeBesties</Preview>
       <Container style={container}>
-        <Heading style={h1}>You've been invited!</Heading>
+        <Heading style={h1}>You&apos;ve been invited!</Heading>
 
         <Text style={text}>
           <strong>{inviterName}</strong> has invited you to join{" "}
@@ -45,7 +45,7 @@ export const GroupInviteEmail = ({
         </Section>
 
         <Text style={footer}>
-          If you didn't expect this invitation, you can safely ignore this
+          If you didn&apos;t expect this invitation, you can safely ignore this
           email.
         </Text>
 
