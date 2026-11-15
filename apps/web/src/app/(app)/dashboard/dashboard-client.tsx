@@ -23,6 +23,7 @@ import type {
 } from "./types";
 
 type DashboardPageClientProps = {
+  asOf: number;
   initialDebts: Debt[];
   initialGroups: Group[];
   currentUser: DashboardUser;
@@ -33,6 +34,7 @@ type DashboardPageClientProps = {
 };
 
 export default function DashboardPageClient({
+  asOf,
   initialDebts,
   initialGroups,
   currentUser,
@@ -45,10 +47,10 @@ export default function DashboardPageClient({
   const [showCreateDebt, setShowCreateDebt] = useState(false);
 
   const lendingDebts = initialDebts.filter(
-    (debt) => debt.lender.id === currentUser.id
+    (debt) => debt.lender.id === currentUser.id,
   );
   const borrowingDebts = initialDebts.filter(
-    (debt) => debt.borrower.id === currentUser.id
+    (debt) => debt.borrower.id === currentUser.id,
   );
 
   const upcomingPayments = useMemo(
@@ -60,11 +62,11 @@ export default function DashboardPageClient({
         }))
         .filter((payment) => payment.daysUntil >= 0 && payment.daysUntil <= 7)
         .sort((a, b) => a.daysUntil - b.daysUntil),
-    [initialRecurringPayments]
+    [initialRecurringPayments],
   );
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title={`Welcome back, ${userName}`}
         description="An overview of your debts and recurring payments"
@@ -76,32 +78,39 @@ export default function DashboardPageClient({
         }
       />
 
-      <NeedsAttention
-        pendingTransactions={initialPendingTransactions}
-        alerts={initialAlerts}
-      />
-
-      <StatCards
-        lendingTotal={lendingDebts.reduce((sum, debt) => sum + debt.amount, 0)}
-        borrowingTotal={borrowingDebts.reduce(
-          (sum, debt) => sum + debt.amount,
-          0
-        )}
-        recurringPayments={initialRecurringPayments}
-      />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <DebtBreakdown
-          lendingDebts={lendingDebts}
-          borrowingDebts={borrowingDebts}
-        />
-        <UpcomingPaymentsCard payments={upcomingPayments} />
-      </div>
-
-      <ActivityChart debts={initialDebts} currentUserId={currentUser.id} />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <GroupsCard groups={initialGroups} />
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <StatCards
+            lendingTotal={lendingDebts.reduce(
+              (sum, debt) => sum + debt.amount,
+              0,
+            )}
+            borrowingTotal={borrowingDebts.reduce(
+              (sum, debt) => sum + debt.amount,
+              0,
+            )}
+          />
+          <ActivityChart debts={initialDebts} currentUserId={currentUser.id} />
+          <DebtBreakdown
+            lendingDebts={lendingDebts}
+            borrowingDebts={borrowingDebts}
+          />
+          <UpcomingPaymentsCard
+            payments={upcomingPayments}
+            activeCount={initialRecurringPayments.length}
+          />
+        </div>
+        <aside
+          aria-label="Requests and groups"
+          className="flex min-w-0 flex-col gap-6"
+        >
+          <NeedsAttention
+            asOf={asOf}
+            pendingTransactions={initialPendingTransactions}
+            alerts={initialAlerts}
+          />
+          <GroupsCard groups={initialGroups} />
+        </aside>
       </div>
 
       <CreateDebtModal

@@ -2,8 +2,11 @@ import { getUser } from "@/lib/supabase";
 import { alertService } from "@/services/alert.service";
 import { debtTransactionService } from "@/services/debt-transaction.service";
 import { NotificationsDropdown } from "./notifications-dropdown";
+import type { NavCounts } from "@/lib/nav";
 
-export async function NotificationsWrapper() {
+export async function NotificationsWrapper({
+  counts,
+}: { counts?: NavCounts } = {}) {
   const user = await getUser();
 
   if (!user) {
@@ -15,18 +18,27 @@ export async function NotificationsWrapper() {
     debtTransactionService.getUserPendingTransactions(user.id),
   ]);
 
-  // Filter pending transactions where current user is the lender (needs to approve)
   const pendingApprovals = pendingTransactions.filter(
     (transaction) =>
-      transaction.debt.lenderId === user.id && !transaction.lenderApproved
+      (transaction.debt.lenderId === user.id && !transaction.lenderApproved) ||
+      (transaction.debt.borrowerId === user.id &&
+        !transaction.borrowerApproved),
+  );
+  const now = new Date().getTime();
+  const overdueAlerts = alerts.filter(
+    (alert) =>
+      alert.isActive &&
+      alert.debt?.status === "pending" &&
+      alert.deadline !== null &&
+      new Date(alert.deadline).getTime() < now,
   );
 
   return (
     <NotificationsDropdown
-      alerts={alerts}
+      alerts={overdueAlerts}
       pendingTransactions={pendingApprovals}
-      currentUserId={user.id}
+      friendRequests={counts?.friendRequests ?? 0}
+      groupInvites={counts?.invites ?? 0}
     />
   );
 }
-

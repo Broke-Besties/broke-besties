@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +27,7 @@ import {
 import {
   Item,
   ItemContent,
+  ItemDescription,
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
@@ -60,17 +63,44 @@ export function PendingRequestCard({
 
   const isLender = debt.lender.id === currentUserId;
   const isBorrower = debt.borrower.id === currentUserId;
+  const isPending = transaction.status === "pending";
   const needsMyApproval =
-    (isLender && !transaction.lenderApproved) ||
-    (isBorrower && !transaction.borrowerApproved);
+    isPending &&
+    ((isLender && !transaction.lenderApproved) ||
+      (isBorrower && !transaction.borrowerApproved));
   const isRequester = transaction.requester.id === currentUserId;
   const otherPerson = isLender ? debt.borrower : debt.lender;
+
+  const amount = `$${debt.amount.toFixed(2)}`;
+  const approveLabel =
+    transaction.type === "confirm_paid"
+      ? "Mark as paid"
+      : transaction.type === "drop"
+        ? "Delete debt"
+        : transaction.type === "modify"
+          ? "Accept changes"
+          : "Approve request";
+  const question =
+    transaction.type === "confirm_paid"
+      ? `Has the ${amount} debt been paid?`
+      : transaction.type === "drop"
+        ? `Delete the ${amount} debt?`
+        : "Review the proposed changes";
 
   const respond = async (approve: boolean) => {
     setPending(approve ? "approve" : "reject");
     const result = await respondToDebtTransaction(transaction.id, approve);
     if (result.success) {
       toast.success(approve ? "Request approved" : "Request rejected");
+      if (
+        approve &&
+        transaction.type === "drop" &&
+        "debtUpdated" in result &&
+        result.debtUpdated
+      ) {
+        router.replace("/debts/requests");
+        return;
+      }
       router.refresh();
     } else {
       const message =
@@ -83,7 +113,7 @@ export function PendingRequestCard({
   };
 
   const handleApprove = () => {
-    // Approving a deletion is destructive — confirm first.
+    // Approving a deletion is destructive - confirm first.
     if (transaction.type === "drop") {
       setConfirmAction("approve");
       return;
@@ -114,125 +144,162 @@ export function PendingRequestCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{transactionTypeLabel(transaction.type)} pending</CardTitle>
+        <StatusBadge
+          status={transaction.status}
+          label={
+            isPending
+              ? needsMyApproval
+                ? "Needs your review"
+                : "Waiting on the other person"
+              : transaction.status
+          }
+          className="w-fit"
+        />
+        <CardTitle>
+          {isPending ? question : transactionTypeLabel(transaction.type)}
+        </CardTitle>
         <CardDescription>
-          Requested by {displayName(transaction.requester)} · both parties must
-          approve before it takes effect.
+          Requested by {displayName(transaction.requester)} on{" "}
+          {new Date(transaction.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}
+          .
+          {transaction.resolvedAt &&
+            ` Resolved on ${new Date(transaction.resolvedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <ItemGroup className="gap-0 rounded-lg border">
+      <CardContent className="flex flex-col gap-4">
+        <ItemGroup className="gap-3">
+          <Item variant="muted">
+            <ItemContent className="min-w-0">
+              <ItemTitle>{debt.description || "Debt"}</ItemTitle>
+              <ItemDescription className="line-clamp-none break-words">
+                {isLender
+                  ? `${displayName(otherPerson)} borrowed ${amount} from you.`
+                  : `You borrowed ${amount} from ${displayName(otherPerson)}.`}
+                {debt.group && ` Group: ${debt.group.name}.`}
+              </ItemDescription>
+            </ItemContent>
+          </Item>
           {transaction.type === "modify" &&
             transaction.proposedAmount !== null && (
-              <Item size="sm">
-                <ItemContent>
-                  <ItemTitle className="font-normal text-muted-foreground">
-                    Amount
+              <Item variant="outline">
+                <ItemContent className="min-w-0">
+                  <ItemTitle>
+                    {isPending ? "Amount change" : "Requested amount"}
                   </ItemTitle>
+                  <p className="text-sm tabular-nums">
+                    {isPending && (
+                      <>
+                        Current: {amount}
+                        <br />
+                      </>
+                    )}
+                    Requested: ${transaction.proposedAmount.toFixed(2)}
+                  </p>
                 </ItemContent>
-                <span className="text-sm font-medium tabular-nums">
-                  ${debt.amount.toFixed(2)} → $
-                  {transaction.proposedAmount.toFixed(2)}
-                </span>
               </Item>
             )}
           {transaction.type === "modify" &&
             transaction.proposedDescription !== null && (
-              <Item size="sm">
-                <ItemContent>
-                  <ItemTitle className="font-normal text-muted-foreground">
-                    Description
+              <Item variant="outline">
+                <ItemContent className="min-w-0">
+                  <ItemTitle>
+                    {isPending ? "Description change" : "Requested description"}
                   </ItemTitle>
+                  <p className="break-words text-sm">
+                    {isPending && (
+                      <>
+                        Current: {debt.description || "(none)"}
+                        <br />
+                      </>
+                    )}
+                    Requested: {transaction.proposedDescription || "(none)"}
+                  </p>
                 </ItemContent>
-                <span className="text-sm">
-                  {debt.description || "(none)"} →{" "}
-                  {transaction.proposedDescription || "(none)"}
-                </span>
               </Item>
             )}
-          {transaction.type === "drop" && (
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle className="font-normal text-muted-foreground">
-                  Proposal
-                </ItemTitle>
-              </ItemContent>
-              <span className="text-sm">
-                Delete this ${debt.amount.toFixed(2)} debt
-              </span>
-            </Item>
-          )}
-          {transaction.type === "confirm_paid" && (
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle className="font-normal text-muted-foreground">
-                  Proposal
-                </ItemTitle>
-              </ItemContent>
-              <span className="text-sm">
-                Mark this ${debt.amount.toFixed(2)} debt as paid
-              </span>
-            </Item>
-          )}
           {transaction.reason && (
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle className="font-normal text-muted-foreground">
-                  Reason
+            <Item variant="outline">
+              <ItemContent className="min-w-0">
+                <ItemTitle>
+                  {isRequester
+                    ? "Your reason"
+                    : `${displayName(transaction.requester)}’s reason`}
                 </ItemTitle>
+                <p className="break-words text-sm">{transaction.reason}</p>
               </ItemContent>
-              <span className="text-sm">{transaction.reason}</span>
             </Item>
           )}
         </ItemGroup>
-
-        <div className="flex flex-wrap gap-1.5">
-          <StatusBadge
-            status={transaction.lenderApproved ? "approved" : "pending"}
-            label={transaction.lenderApproved ? "Lender ✓" : "Lender pending"}
-          />
-          <StatusBadge
-            status={transaction.borrowerApproved ? "approved" : "pending"}
-            label={
-              transaction.borrowerApproved ? "Borrower ✓" : "Borrower pending"
-            }
-          />
-        </div>
+        {isPending && (
+          <Alert>
+            {transaction.type === "drop" ? (
+              <Trash2 />
+            ) : transaction.type === "confirm_paid" ? (
+              <CheckCircle2 />
+            ) : (
+              <AlertCircle />
+            )}
+            <AlertTitle>
+              {transaction.type === "drop"
+                ? "Deleting is permanent"
+                : "What accepting means"}
+            </AlertTitle>
+            <AlertDescription>
+              {transaction.type === "drop"
+                ? "The debt and its request history will be permanently removed. This cannot be undone."
+                : transaction.type === "confirm_paid"
+                  ? "The debt will be marked as paid. This records a payment; it does not transfer money."
+                  : "The requested changes will replace the current debt details once both people approve."}
+            </AlertDescription>
+          </Alert>
+        )}
       </CardContent>
-      <CardFooter className="justify-between gap-2">
-        <div className="text-sm text-muted-foreground">
-          {!needsMyApproval &&
-            `Waiting for ${displayName(otherPerson)} to respond.`}
-        </div>
-        <div className="flex items-center gap-2">
-          {isRequester && (
-            <Button
-              variant="ghost"
-              onClick={handleCancel}
-              disabled={pending !== null}
-            >
-              {pending === "cancel" && <Spinner />}
-              Cancel request
-            </Button>
-          )}
-          {needsMyApproval && (
-            <>
+      {isPending && (
+        <CardFooter className="flex-wrap justify-between gap-2">
+          <div className="text-sm text-muted-foreground">
+            {!needsMyApproval &&
+              `You approved. Waiting for ${displayName(otherPerson)} to respond.`}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isRequester && (
               <Button
-                variant="outline"
-                onClick={handleReject}
+                variant="ghost"
+                onClick={handleCancel}
                 disabled={pending !== null}
               >
-                {pending === "reject" && <Spinner />}
-                Reject
+                {pending === "cancel" && <Spinner />}
+                Cancel request
               </Button>
-              <Button onClick={handleApprove} disabled={pending !== null}>
-                {pending === "approve" && <Spinner />}
-                Approve
-              </Button>
-            </>
-          )}
-        </div>
-      </CardFooter>
+            )}
+            {needsMyApproval && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleReject}
+                  disabled={pending !== null}
+                >
+                  {pending === "reject" && <Spinner />}
+                  Decline request
+                </Button>
+                <Button
+                  variant={
+                    transaction.type === "drop" ? "destructive" : "default"
+                  }
+                  onClick={handleApprove}
+                  disabled={pending !== null}
+                >
+                  {pending === "approve" && <Spinner />}
+                  {approveLabel}
+                </Button>
+              </>
+            )}
+          </div>
+        </CardFooter>
+      )}
 
       <AlertDialog
         open={confirmAction !== null}
@@ -244,8 +311,8 @@ export function PendingRequestCard({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {confirmAction === "approve"
-                ? "Approve this deletion?"
-                : "Reject this request?"}
+                ? "Delete this debt?"
+                : "Decline this request?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction === "approve"
@@ -261,9 +328,7 @@ export function PendingRequestCard({
                 setConfirmAction(null);
               }}
             >
-              {confirmAction === "approve"
-                ? "Approve deletion"
-                : "Reject request"}
+              {confirmAction === "approve" ? "Delete debt" : "Decline request"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

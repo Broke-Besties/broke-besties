@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, FileClock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
+  CardFooter,
   CardTitle,
 } from "@/components/ui/card";
 import {
@@ -17,7 +18,6 @@ import {
   ItemContent,
   ItemDescription,
   ItemGroup,
-  ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
 import type { OverdueAlert, PendingTransaction } from "./types";
@@ -36,21 +36,37 @@ function getTypeLabel(type: string): string {
 }
 
 /**
- * Actionable replacement for the old dismissible banners: one card listing
- * transactions awaiting the user's approval and overdue payment alerts,
- * each row linking to where the user can act. Renders nothing when empty.
+ * A bounded preview of approval requests and overdue debts, with room for both.
  */
 export function NeedsAttention({
+  asOf,
   pendingTransactions,
   alerts,
 }: {
+  asOf: number;
   pendingTransactions: PendingTransaction[];
   alerts: OverdueAlert[];
 }) {
   const overdueAlerts = alerts.filter(
-    (alert): alert is OverdueAlert & { debt: NonNullable<OverdueAlert["debt"]> } =>
-      alert.debt !== null
+    (
+      alert,
+    ): alert is OverdueAlert & { debt: NonNullable<OverdueAlert["debt"]> } =>
+      alert.isActive &&
+      alert.debt !== null &&
+      alert.debt.status === "pending" &&
+      alert.deadline !== null &&
+      new Date(alert.deadline).getTime() < asOf,
   );
+  const shownAlerts = overdueAlerts.slice(
+    0,
+    pendingTransactions.length ? 2 : 4,
+  );
+  const shownTransactions = pendingTransactions.slice(
+    0,
+    4 - shownAlerts.length,
+  );
+  const total = pendingTransactions.length + overdueAlerts.length;
+  const shown = shownTransactions.length + shownAlerts.length;
 
   if (pendingTransactions.length === 0 && overdueAlerts.length === 0) {
     return null;
@@ -59,14 +75,16 @@ export function NeedsAttention({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Needs attention</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Needs attention <Badge variant="secondary">{total}</Badge>
+        </CardTitle>
         <CardDescription>
           Requests waiting on your approval and overdue payments
         </CardDescription>
       </CardHeader>
       <CardContent>
         <ItemGroup className="gap-2">
-          {pendingTransactions.map((transaction) => {
+          {shownTransactions.map((transaction) => {
             const requesterName =
               transaction.requester.name || transaction.requester.email;
             return (
@@ -75,9 +93,6 @@ export function NeedsAttention({
                 variant="outline"
                 size="sm"
               >
-                <ItemMedia variant="icon">
-                  <FileClock />
-                </ItemMedia>
                 <ItemContent>
                   <ItemTitle className="tabular-nums">
                     {getTypeLabel(transaction.type)} · $
@@ -95,20 +110,21 @@ export function NeedsAttention({
                 </ItemContent>
                 <ItemActions>
                   <Button variant="outline" size="sm" asChild>
-                    <Link href="/debts/requests">Review</Link>
+                    <Link
+                      href={`/debts/${transaction.debt.id}/requests/${transaction.id}`}
+                    >
+                      Review
+                    </Link>
                   </Button>
                 </ItemActions>
               </Item>
             );
           })}
 
-          {overdueAlerts.map((alert) => {
+          {shownAlerts.map((alert) => {
             const lenderName = alert.lender.name || alert.lender.email;
             return (
               <Item key={`alert-${alert.id}`} variant="outline" size="sm">
-                <ItemMedia variant="icon">
-                  <AlertTriangle />
-                </ItemMedia>
                 <ItemContent>
                   <ItemTitle className="tabular-nums">
                     Overdue payment · ${alert.debt.amount.toFixed(2)}
@@ -131,6 +147,25 @@ export function NeedsAttention({
           })}
         </ItemGroup>
       </CardContent>
+      <CardFooter className="flex flex-wrap justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Showing {shown} of {total} items
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {pendingTransactions.length > 0 && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/debts/requests">
+                All requests ({pendingTransactions.length})
+              </Link>
+            </Button>
+          )}
+          {overdueAlerts.length > 0 && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/debts">All debts</Link>
+            </Button>
+          )}
+        </div>
+      </CardFooter>
     </Card>
   );
 }

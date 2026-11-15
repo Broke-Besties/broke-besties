@@ -40,9 +40,9 @@ export function DebtBreakdown({
   const [view, setView] = useState<View>("owed");
 
   const { chartData, chartConfig, chartTotal } = useMemo(() => {
-    const relevantDebts = (view === "owed" ? lendingDebts : borrowingDebts).filter(
-      (debt) => debt.status === "pending"
-    );
+    const relevantDebts = (
+      view === "owed" ? lendingDebts : borrowingDebts
+    ).filter((debt) => debt.status === "pending");
 
     const personData = new Map<string, number>();
     for (const debt of relevantDebts) {
@@ -51,7 +51,9 @@ export function DebtBreakdown({
       personData.set(person, (personData.get(person) ?? 0) + debt.amount);
     }
 
-    const entries = Array.from(personData.entries()).sort((a, b) => b[1] - a[1]);
+    const entries = Array.from(personData.entries()).sort(
+      (a, b) => b[1] - a[1],
+    );
     const shown = entries.slice(0, MAX_PEOPLE);
     const rest = entries.slice(MAX_PEOPLE);
     if (rest.length > 0) {
@@ -80,7 +82,7 @@ export function DebtBreakdown({
 
   return (
     <Card className="flex flex-col">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle>Debt breakdown</CardTitle>
         <Tabs
           value={view}
@@ -107,7 +109,9 @@ export function DebtBreakdown({
               <EmptyTitle>
                 {view === "owed" ? "No one owes you" : "You owe no one"}
               </EmptyTitle>
-              <EmptyDescription>Pending debts will appear here.</EmptyDescription>
+              <EmptyDescription>
+                Pending debts will appear here.
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -142,7 +146,6 @@ export function DebtBreakdown({
                 outerRadius={84}
                 strokeWidth={5}
                 labelLine={false}
-                label={({ payload }) => `$${Number(payload.amount).toFixed(0)}`}
               >
                 <Label
                   content={({ viewBox }) => {
@@ -159,7 +162,11 @@ export function DebtBreakdown({
                             y={(viewBox.cy || 0) - 8}
                             className="fill-foreground text-2xl font-bold tabular-nums"
                           >
-                            ${chartTotal.toFixed(0)}
+                            {chartTotal.toLocaleString("en-US", {
+                              style: "currency",
+                              currency: "USD",
+                              maximumFractionDigits: 0,
+                            })}
                           </tspan>
                           <tspan
                             x={viewBox.cx}

@@ -1,17 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Bell, AlertTriangle, FileEdit } from "lucide-react";
+import { useEffect } from "react";
+import Link from "next/link";
+import { Bell, AlertTriangle, FileEdit, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Alert = {
   id: number;
@@ -63,17 +66,36 @@ type DebtTransaction = {
 type NotificationsDropdownProps = {
   alerts: Alert[];
   pendingTransactions: DebtTransaction[];
-  currentUserId: string;
+  friendRequests: number;
+  groupInvites: number;
 };
 
 export function NotificationsDropdown({
   alerts,
   pendingTransactions,
+  friendRequests,
+  groupInvites,
 }: NotificationsDropdownProps) {
   const router = useRouter();
 
-  const overduePayments = alerts.filter((a) => a.debt !== null);
-  const totalNotifications = overduePayments.length + pendingTransactions.length;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const interval = setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [router]);
+
+  const overduePayments = alerts;
+  const totalNotifications =
+    overduePayments.length +
+    pendingTransactions.length +
+    friendRequests +
+    groupInvites;
 
   const formatDate = (date: Date | string) => {
     return new Date(date).toLocaleDateString(undefined, {
@@ -90,19 +112,27 @@ export function NotificationsDropdown({
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) router.refresh();
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
           className="relative size-8"
-          aria-label="Notifications"
+          aria-label={`Notifications${totalNotifications ? ` (${totalNotifications} need attention)` : ""}`}
         >
           <Bell className="size-5" />
           {totalNotifications > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-white tabular-nums">
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] tabular-nums"
+              aria-hidden="true"
+            >
               {totalNotifications > 9 ? "9+" : totalNotifications}
-            </span>
+            </Badge>
           )}
         </Button>
       </DropdownMenuTrigger>
@@ -110,17 +140,19 @@ export function NotificationsDropdown({
         align="end"
         className="w-96 max-w-[calc(100vw-2rem)] p-0"
       >
-        <div className="px-3 py-2.5 text-sm font-semibold">Notifications</div>
+        <div className="px-3 py-2.5 text-sm font-semibold">
+          Needs your attention
+        </div>
         <DropdownMenuSeparator className="my-0" />
 
         {totalNotifications === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No notifications
+            You&apos;re all caught up
           </div>
         ) : (
-          <ScrollArea className="max-h-[60vh]">
+          <div className="max-h-[60vh] overflow-y-auto">
             {overduePayments.length > 0 && (
-              <>
+              <DropdownMenuGroup>
                 <DropdownMenuLabel className="text-xs text-muted-foreground">
                   Overdue payments
                 </DropdownMenuLabel>
@@ -128,31 +160,31 @@ export function NotificationsDropdown({
                   <DropdownMenuItem
                     key={alert.id}
                     className="flex items-start gap-3 px-3 py-2.5"
-                    onSelect={() => {
-                      if (alert.debt) router.push(`/debts/${alert.debt.id}`);
-                    }}
+                    asChild
                   >
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-sm font-medium">
-                        {alert.message || "Payment overdue"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {alert.debt?.description || "No description"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {alert.deadline
-                          ? `Due ${formatDate(alert.deadline)}`
-                          : "No deadline"}{" "}
-                        · From {alert.lender.name || alert.lender.email}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">
-                      ${alert.debt?.amount.toFixed(2)}
-                    </span>
+                    <Link href={`/debts/${alert.debt!.id}`}>
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <p className="text-sm font-medium">
+                          {alert.message || "Payment overdue"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {alert.debt?.description || "No description"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {alert.deadline
+                            ? `Due ${formatDate(alert.deadline)}`
+                            : "No deadline"}{" "}
+                          · From {alert.lender.name || alert.lender.email}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">
+                        ${alert.debt?.amount.toFixed(2)}
+                      </span>
+                    </Link>
                   </DropdownMenuItem>
                 ))}
-              </>
+              </DropdownMenuGroup>
             )}
 
             {overduePayments.length > 0 && pendingTransactions.length > 0 && (
@@ -160,7 +192,7 @@ export function NotificationsDropdown({
             )}
 
             {pendingTransactions.length > 0 && (
-              <>
+              <DropdownMenuGroup>
                 <DropdownMenuLabel className="text-xs text-muted-foreground">
                   Pending approvals
                 </DropdownMenuLabel>
@@ -168,39 +200,70 @@ export function NotificationsDropdown({
                   <DropdownMenuItem
                     key={transaction.id}
                     className="flex items-start gap-3 px-3 py-2.5"
-                    onSelect={() => router.push(`/debts/${transaction.debt.id}`)}
+                    asChild
                   >
-                    <FileEdit className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-sm font-medium">
-                        {getTransactionLabel(transaction)}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {transaction.debt.description || "No description"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        From{" "}
-                        {transaction.requester.name ||
-                          transaction.requester.email}{" "}
-                        · {formatDate(transaction.createdAt)}
-                      </p>
-                      {transaction.reason && (
-                        <p className="truncate text-xs italic text-muted-foreground">
-                          &quot;{transaction.reason}&quot;
+                    <Link
+                      href={`/debts/${transaction.debt.id}/requests/${transaction.id}`}
+                    >
+                      <FileEdit className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <p className="text-sm font-medium">
+                          {getTransactionLabel(transaction)}
                         </p>
-                      )}
-                    </div>
-                    {transaction.type === "modify" &&
-                      transaction.proposedAmount && (
-                        <span className="shrink-0 text-sm font-semibold tabular-nums">
-                          ${transaction.proposedAmount.toFixed(2)}
-                        </span>
-                      )}
+                        <p className="truncate text-xs text-muted-foreground">
+                          {transaction.debt.description || "No description"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          From{" "}
+                          {transaction.requester.name ||
+                            transaction.requester.email}{" "}
+                          · {formatDate(transaction.createdAt)}
+                        </p>
+                        {transaction.reason && (
+                          <p className="truncate text-xs italic text-muted-foreground">
+                            &quot;{transaction.reason}&quot;
+                          </p>
+                        )}
+                      </div>
+                      {transaction.type === "modify" &&
+                        transaction.proposedAmount !== null && (
+                          <span className="shrink-0 text-sm font-semibold tabular-nums">
+                            ${transaction.proposedAmount.toFixed(2)}
+                          </span>
+                        )}
+                    </Link>
                   </DropdownMenuItem>
                 ))}
-              </>
+              </DropdownMenuGroup>
             )}
-          </ScrollArea>
+            {(friendRequests > 0 || groupInvites > 0) && (
+              <DropdownMenuGroup>
+                {(overduePayments.length > 0 ||
+                  pendingTransactions.length > 0) && <DropdownMenuSeparator />}
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Invitations
+                </DropdownMenuLabel>
+                {friendRequests > 0 && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/friends?tab=requests">
+                      <UserPlus />
+                      {friendRequests} friend{" "}
+                      {friendRequests === 1 ? "request" : "requests"}
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {groupInvites > 0 && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/invites">
+                      <Users />
+                      {groupInvites} group{" "}
+                      {groupInvites === 1 ? "invite" : "invites"}
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuGroup>
+            )}
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
