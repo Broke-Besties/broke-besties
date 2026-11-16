@@ -7,7 +7,7 @@ import { RequestsList } from "./requests-list";
 import { acceptFriendRequest, sendFriendRequestByEmail } from "./actions";
 import type { Friend } from "./types";
 
-const navigation = vi.hoisted(() => ({ query: "", replace: vi.fn() }));
+const navigation = vi.hoisted(() => ({ query: "", replaceState: vi.fn() }));
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
 vi.mock("react", async (original) => ({
   ...(await original<typeof React>()),
@@ -29,7 +29,6 @@ vi.mock("react", async (original) => ({
   useEffect: () => {},
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: navigation.replace }),
   usePathname: () => "/friends",
   useSearchParams: () => new URLSearchParams(navigation.query),
 }));
@@ -42,6 +41,7 @@ vi.mock("./actions", () => ({
   cancelFriendRequest: vi.fn(),
 }));
 vi.stubGlobal("React", React);
+vi.stubGlobal("window", { history: { replaceState: navigation.replaceState } });
 afterAll(() => vi.unstubAllGlobals());
 const dates = {
   createdAt: new Date("2026-11-15"),
@@ -261,14 +261,16 @@ describe("Friends URL navigation", () => {
     navigation.query = "tab=requests&new=1&source=dashboard";
     expect(find(render(), Tabs).value).toBe("requests");
     find(render(), Tabs).onValueChange!("friends");
-    expect(navigation.replace).toHaveBeenLastCalledWith(
+    expect(navigation.replaceState).toHaveBeenLastCalledWith(
+      null,
+      "",
       "/friends?new=1&source=dashboard",
-      { scroll: false },
     );
     find(render(), AddFriendDialog).onOpenChange(false);
-    expect(navigation.replace).toHaveBeenLastCalledWith(
+    expect(navigation.replaceState).toHaveBeenLastCalledWith(
+      null,
+      "",
       "/friends?tab=requests&source=dashboard",
-      { scroll: false },
     );
   });
   it("restores focus to the header when the original opener is unavailable", async () => {
