@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { UserPlus } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/page-header";
@@ -51,7 +51,6 @@ export default function FriendsPageClient({
     openingButton.current = event.currentTarget;
     setAddOpen(true);
   };
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -70,9 +69,11 @@ export default function FriendsPageClient({
     const params = new URLSearchParams(searchParams.toString());
     mutate(params);
     const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {
-      scroll: false,
-    });
+    window.history.replaceState(
+      null,
+      "",
+      query ? `${pathname}?${query}` : pathname,
+    );
   };
 
   const handleTabChange = (value: string) => {
