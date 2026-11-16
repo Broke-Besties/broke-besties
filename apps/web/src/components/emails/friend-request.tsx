@@ -26,7 +26,7 @@ export const FriendRequestEmail = ({
     <Body style={main}>
       <Preview>{requesterName} sent you a friend request on BrokeBesties</Preview>
       <Container style={container}>
-        <Heading style={h1}>You've received a friend request!</Heading>
+        <Heading style={h1}>You&apos;ve received a friend request!</Heading>
 
         <Text style={text}>
           Hi <strong>{recipientName}</strong>,
@@ -44,7 +44,7 @@ export const FriendRequestEmail = ({
         </Section>
 
         <Text style={footer}>
-          If you didn't expect this request, you can safely ignore this email.
+          If you didn&apos;t expect this request, you can safely ignore this email.
         </Text>
 
         <Text style={footerCopyright}>

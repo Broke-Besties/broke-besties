@@ -68,7 +68,7 @@ export const DebtCreatedEmail = ({
 
         <Text style={footer}>
           If you disagree with this debt, you can discuss it with {lenderName}
-          {groupName && " in your group"} or update the status to "not paying".
+          {groupName && " in your group"} or update the status to &quot;not paying&quot;.
         </Text>
 
         <Text style={footerCopyright}>

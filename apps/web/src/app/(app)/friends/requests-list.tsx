@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import {
   AlertDialog,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -28,6 +28,7 @@ import {
   ItemDescription,
   ItemGroup,
   ItemMedia,
+  ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
@@ -52,8 +53,8 @@ export function RequestsList({
   onCancel,
 }: RequestsListProps) {
   return (
-    <div className="space-y-6">
-      <section className="space-y-3">
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-3">
         <SectionHeader
           title="Needs your response"
           count={pendingRequests.length}
@@ -64,21 +65,23 @@ export function RequestsList({
             description="Friend requests sent to you will show up here."
           />
         ) : (
-          <ItemGroup className="gap-3">
-            {pendingRequests.map((request) => (
-              <IncomingRequestRow
-                key={request.id}
-                request={request}
-                pending={pending}
-                onAccept={() => onAccept(request.id)}
-                onReject={() => onReject(request.id)}
-              />
+          <ItemGroup className="overflow-hidden rounded-lg border">
+            {pendingRequests.map((request, index) => (
+              <Fragment key={request.id}>
+                {index > 0 && <ItemSeparator />}
+                <IncomingRequestRow
+                  request={request}
+                  pending={pending}
+                  onAccept={() => onAccept(request.id)}
+                  onReject={() => onReject(request.id)}
+                />
+              </Fragment>
             ))}
           </ItemGroup>
         )}
       </section>
 
-      <section className="space-y-3">
+      <section className="flex flex-col gap-3">
         <SectionHeader title="Sent" count={sentRequests.length} />
         {sentRequests.length === 0 ? (
           <CompactEmpty
@@ -86,35 +89,46 @@ export function RequestsList({
             description="Requests you send will wait here until they are accepted."
           />
         ) : (
-          <ItemGroup className="gap-3">
-            {sentRequests.map((request) => {
+          <ItemGroup className="overflow-hidden rounded-lg border">
+            {sentRequests.map((request, index) => {
               const cancelling =
                 pending?.action === "cancel" && pending.id === request.id;
               return (
-                <Item key={request.id} variant="outline">
-                  <ItemMedia>
-                    <Avatar className="size-10">
-                      <AvatarFallback>
-                        {initials(request.recipient.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                  </ItemMedia>
-                  <ItemContent>
-                    <ItemTitle>{request.recipient.name}</ItemTitle>
-                    <ItemDescription>{request.recipient.email}</ItemDescription>
-                  </ItemContent>
-                  <ItemActions>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onCancel(request.id)}
-                      disabled={cancelling}
-                    >
-                      {cancelling && <Spinner />}
-                      Cancel
-                    </Button>
-                  </ItemActions>
-                </Item>
+                <Fragment key={request.id}>
+                  {index > 0 && <ItemSeparator />}
+                  <Item
+                    size="sm"
+                    role="listitem"
+                    className="flex-nowrap rounded-none"
+                  >
+                    <ItemMedia>
+                      <Avatar className="size-10">
+                        <AvatarFallback>
+                          {initials(request.recipient.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </ItemMedia>
+                    <ItemContent className="min-w-0">
+                      <ItemTitle className="max-w-full [overflow-wrap:anywhere]">
+                        {request.recipient.name}
+                      </ItemTitle>
+                      <ItemDescription className="line-clamp-none [overflow-wrap:anywhere]">
+                        {request.recipient.email}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onCancel(request.id)}
+                        disabled={pending !== null}
+                      >
+                        {cancelling && <Spinner />}
+                        Cancel
+                      </Button>
+                    </ItemActions>
+                  </Item>
+                </Fragment>
               );
             })}
           </ItemGroup>
@@ -164,21 +178,29 @@ function IncomingRequestRow({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const accepting = pending?.action === "accept" && pending.id === request.id;
   const rejecting = pending?.action === "reject" && pending.id === request.id;
-  const busy = accepting || rejecting;
+  const busy = pending !== null;
 
   return (
     <>
-      <Item variant="outline">
+      <Item
+        size="sm"
+        role="listitem"
+        className="grid grid-cols-[auto_minmax(0,1fr)] rounded-none sm:flex sm:flex-nowrap"
+      >
         <ItemMedia>
           <Avatar className="size-10">
             <AvatarFallback>{initials(request.requester.name)}</AvatarFallback>
           </Avatar>
         </ItemMedia>
-        <ItemContent>
-          <ItemTitle>{request.requester.name}</ItemTitle>
-          <ItemDescription>{request.requester.email}</ItemDescription>
+        <ItemContent className="min-w-0">
+          <ItemTitle className="max-w-full [overflow-wrap:anywhere]">
+            {request.requester.name}
+          </ItemTitle>
+          <ItemDescription className="line-clamp-none [overflow-wrap:anywhere]">
+            {request.requester.email}
+          </ItemDescription>
         </ItemContent>
-        <ItemActions>
+        <ItemActions className="col-span-2 justify-end sm:shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -207,7 +229,8 @@ function IncomingRequestRow({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className={buttonVariants({ variant: "destructive" })}
+              variant="destructive"
+              disabled={busy}
               onClick={onReject}
             >
               Reject request

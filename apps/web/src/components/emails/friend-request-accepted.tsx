@@ -24,9 +24,9 @@ export const FriendRequestAcceptedEmail = ({
   <Html>
     <Head />
     <Body style={main}>
-      <Preview>You're now friends with {friendName} on BrokeBesties!</Preview>
+      <Preview>You&apos;re now friends with {friendName} on BrokeBesties!</Preview>
       <Container style={container}>
-        <Heading style={h1}>You're now friends!</Heading>
+        <Heading style={h1}>You&apos;re now friends!</Heading>
 
         <Text style={text}>
           Hi <strong>{recipientName}</strong>,

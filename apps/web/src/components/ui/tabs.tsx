@@ -1,110 +1,67 @@
 "use client";
 
 import * as React from "react";
+import { Tabs as TabsPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
-interface TabsContextValue {
-  value: string;
-  onValueChange: (value: string) => void;
-}
-
-const TabsContext = React.createContext<TabsContextValue | undefined>(
-  undefined
-);
-
-function useTabs() {
-  const context = React.useContext(TabsContext);
-  if (!context) {
-    throw new Error("Tabs components must be used within a Tabs provider");
-  }
-  return context;
-}
-
-interface TabsProps {
-  value: string;
-  onValueChange: (value: string) => void;
-  children: React.ReactNode;
-  className?: string;
-}
-
-function Tabs({ value, onValueChange, children, className }: TabsProps) {
+function Tabs({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Root>) {
   return (
-    <TabsContext.Provider value={{ value, onValueChange }}>
-      <div className={cn("w-full", className)}>{children}</div>
-    </TabsContext.Provider>
+    <TabsPrimitive.Root
+      data-slot="tabs"
+      className={cn("w-full", className)}
+      {...props}
+    />
   );
 }
 
-interface TabsListProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-function TabsList({ children, className }: TabsListProps) {
+function TabsList({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
-    <div
+    <TabsPrimitive.List
+      data-slot="tabs-list"
       className={cn(
         "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
-        className
+        className,
       )}
-    >
-      {children}
-    </div>
+      {...props}
+    />
   );
 }
 
-interface TabsTriggerProps {
-  value: string;
-  children: React.ReactNode;
-  className?: string;
-}
-
-function TabsTrigger({ value, children, className }: TabsTriggerProps) {
-  const { value: selectedValue, onValueChange } = useTabs();
-  const isSelected = selectedValue === value;
-
+function TabsTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={isSelected}
-      onClick={() => onValueChange(value)}
+    <TabsPrimitive.Trigger
+      data-slot="tabs-trigger"
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-        isSelected
-          ? "bg-background text-foreground shadow-sm"
-          : "hover:bg-background/50 hover:text-foreground",
-        className
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
+        className,
       )}
-    >
-      {children}
-    </button>
+      {...props}
+    />
   );
 }
 
-interface TabsContentProps {
-  value: string;
-  children: React.ReactNode;
-  className?: string;
-}
-
-function TabsContent({ value, children, className }: TabsContentProps) {
-  const { value: selectedValue } = useTabs();
-
-  if (selectedValue !== value) {
-    return null;
-  }
-
+function TabsContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
-    <div
-      role="tabpanel"
+    <TabsPrimitive.Content
+      data-slot="tabs-content"
       className={cn(
         "mt-4 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        className
+        className,
       )}
-    >
-      {children}
-    </div>
+      {...props}
+    />
   );
 }
 

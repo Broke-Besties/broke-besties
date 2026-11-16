@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserPlus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ import {
   removeFriend,
   cancelFriendRequest,
 } from "./actions";
-import { AddFriendDialog } from "./add-friend-dialog";
+import { AddFriendDialog, type AddFriendResult } from "./add-friend-dialog";
 import { FriendsList } from "./friends-list";
 import { RequestsList } from "./requests-list";
 import type { Friend, FriendRequest, PendingAction } from "./types";
@@ -37,12 +37,20 @@ export default function FriendsPageClient({
   initialSentRequests,
 }: FriendsPageClientProps) {
   const [friends, setFriends] = useState<Friend[]>(initialFriends);
-  const [pendingRequests, setPendingRequests] =
-    useState<FriendRequest[]>(initialPendingRequests);
+  const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>(
+    initialPendingRequests,
+  );
   const [sentRequests, setSentRequests] =
     useState<FriendRequest[]>(initialSentRequests);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const mutationPending = useRef(false);
+  const headerButton = useRef<HTMLButtonElement>(null);
+  const openingButton = useRef<HTMLElement | null>(null);
+  const openAddFriend = (event: React.MouseEvent<HTMLButtonElement>) => {
+    openingButton.current = event.currentTarget;
+    setAddOpen(true);
+  };
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -53,6 +61,7 @@ export default function FriendsPageClient({
   // /friends?new=1 (command palette, empty-state deep links) opens the dialog.
   useEffect(() => {
     if (searchParams.get("new") === "1") {
+      openingButton.current = null;
       setAddOpen(true);
     }
   }, [searchParams]);
@@ -84,6 +93,8 @@ export default function FriendsPageClient({
   };
 
   const handleAccept = async (requestId: number) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setPending({ id: requestId, action: "accept" });
     try {
       const result = await acceptFriendRequest(requestId);
@@ -93,20 +104,30 @@ export default function FriendsPageClient({
       }
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
       if (result.friend) {
+        const accepted = result.friend;
         setFriends((prev) => [
-          ...prev,
-          { ...result.friend, friend: result.friend.requester },
+          {
+            ...accepted,
+            friend:
+              accepted.requesterId === currentUserId
+                ? accepted.recipient
+                : accepted.requester,
+          },
+          ...prev.filter((f) => f.id !== accepted.id),
         ]);
       }
       toast.success("Friend request accepted");
     } catch {
       toast.error("An error occurred");
     } finally {
+      mutationPending.current = false;
       setPending(null);
     }
   };
 
   const handleReject = async (requestId: number) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setPending({ id: requestId, action: "reject" });
     try {
       const result = await rejectFriendRequest(requestId);
@@ -119,11 +140,14 @@ export default function FriendsPageClient({
     } catch {
       toast.error("An error occurred");
     } finally {
+      mutationPending.current = false;
       setPending(null);
     }
   };
 
   const handleCancel = async (requestId: number) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setPending({ id: requestId, action: "cancel" });
     try {
       const result = await cancelFriendRequest(requestId);
@@ -136,11 +160,14 @@ export default function FriendsPageClient({
     } catch {
       toast.error("An error occurred");
     } finally {
+      mutationPending.current = false;
       setPending(null);
     }
   };
 
   const handleRemove = async (friendshipId: number) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setPending({ id: friendshipId, action: "remove" });
     try {
       const result = await removeFriend(friendshipId);
@@ -153,16 +180,25 @@ export default function FriendsPageClient({
     } catch {
       toast.error("An error occurred");
     } finally {
+      mutationPending.current = false;
       setPending(null);
     }
   };
 
-  const handleAddFriend = async (email: string): Promise<boolean> => {
+  const handleAddFriend = async (email: string): Promise<AddFriendResult> => {
+    if (mutationPending.current)
+      return {
+        success: false,
+        error: "Please wait for the current action to finish.",
+      };
+    mutationPending.current = true;
     try {
       const result = await sendFriendRequestByEmail(email);
       if (!result.success) {
-        toast.error(result.error || "Failed to add friend");
-        return false;
+        return {
+          success: false,
+          error: result.error || "Failed to add friend",
+        };
       }
       if (result.friend) {
         if (result.autoAccepted) {
@@ -170,34 +206,47 @@ export default function FriendsPageClient({
             result.friend.requesterId === currentUserId
               ? result.friend.recipient
               : result.friend.requester;
+          const accepted = result.friend;
+          setPendingRequests((prev) =>
+            prev.filter((r) => r.id !== accepted.id),
+          );
+          setSentRequests((prev) => prev.filter((r) => r.id !== accepted.id));
           setFriends((prev) => [
-            ...prev,
-            { ...result.friend, friend: otherUser },
+            { ...accepted, friend: otherUser },
+            ...prev.filter((f) => f.id !== accepted.id),
           ]);
           toast.success(
             result.notSignedUp
-              ? "Friend added — they'll be connected once they sign up"
-              : "You are now friends"
+              ? "Friend added - they'll be connected once they sign up"
+              : "You are now friends",
           );
         } else {
-          setSentRequests((prev) => [result.friend, ...prev]);
+          setSentRequests((prev) => [
+            result.friend,
+            ...prev.filter((r) => r.id !== result.friend.id),
+          ]);
           toast.success("Friend request sent");
         }
       }
-      return true;
+      return { success: true };
     } catch {
-      toast.error("An error occurred");
-      return false;
+      return { success: false, error: "An error occurred. Please try again." };
+    } finally {
+      mutationPending.current = false;
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="Friends"
         description="Manage your friends and friend requests."
         actions={
-          <Button onClick={() => setAddOpen(true)}>
+          <Button
+            ref={headerButton}
+            disabled={pending !== null}
+            onClick={openAddFriend}
+          >
             <UserPlus />
             Add friend
           </Button>
@@ -205,7 +254,7 @@ export default function FriendsPageClient({
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
+        <TabsList aria-label="Friends and requests">
           <TabsTrigger value="friends">
             Friends
             {friends.length > 0 && (
@@ -225,7 +274,7 @@ export default function FriendsPageClient({
             friends={friends}
             pending={pending}
             onRemove={handleRemove}
-            onAddFriend={() => setAddOpen(true)}
+            onAddFriend={openAddFriend}
           />
         </TabsContent>
 
@@ -245,6 +294,14 @@ export default function FriendsPageClient({
         open={addOpen}
         onOpenChange={handleAddOpenChange}
         onSubmit={handleAddFriend}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          const target = openingButton.current;
+          (target?.isConnected && !target.matches(":disabled")
+            ? target
+            : headerButton.current
+          )?.focus();
+        }}
       />
     </div>
   );

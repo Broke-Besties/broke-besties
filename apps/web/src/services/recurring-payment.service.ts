@@ -143,6 +143,7 @@ export class RecurringPaymentService {
     const recurringPayments = await prisma.recurringPayment.findMany({
       where,
       include: {
+        group: { select: { id: true, name: true } },
         lender: true,
         borrowers: {
           include: {
