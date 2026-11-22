@@ -82,6 +82,8 @@ import {
   type ReceiptItemAssignment,
 } from './receipt-assignment-panel'
 import { buildAgentRequest } from './agent-request'
+import { McpConnectDialog } from './mcp-connect-dialog'
+import type { AgentMode } from '@/mcp/mode'
 
 type Group = {
   id: number
@@ -93,7 +95,13 @@ const SUGGESTED_PROMPTS = [
   'What can you help me with?',
 ]
 
-export default function AIPageClient() {
+export default function AIPageClient({
+  agentMode = 'v1',
+  mcpUrl = '',
+}: {
+  agentMode?: AgentMode
+  mcpUrl?: string
+} = {}) {
   const searchParams = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -118,7 +126,8 @@ export default function AIPageClient() {
   const router = useRouter()
   const isBusy = isLoading || isUploading || isParsing || isCreatingDebts
   const isReviewing = parsedItems !== null
-  const composerDisabled = isBusy || isReviewing || !groupId
+  const composerDisabled =
+    isBusy || isReviewing || (agentMode === 'v1' && !groupId)
 
   // Fetch user's groups on mount
   useEffect(() => {
@@ -135,8 +144,8 @@ export default function AIPageClient() {
         const groupParam = searchParams.get('group')
         if (groupParam) {
           setGroupId(groupParam)
-        } else if (data.groups.length > 0) {
-          // Auto-select first group if no param and groups available
+        } else if (agentMode === 'v1' && data.groups.length > 0) {
+          // Auto-select first group for the legacy flow, which needs one.
           setGroupId(data.groups[0].id.toString())
         }
       } catch (err) {
@@ -147,7 +156,7 @@ export default function AIPageClient() {
       }
     }
     fetchGroups()
-  }, [searchParams])
+  }, [searchParams, agentMode])
 
   // Fetch group members whenever the selected group changes
   useEffect(() => {
@@ -428,7 +437,7 @@ export default function AIPageClient() {
 
     // Allow submit if there's text OR a pending image
     if (!input.trim() && !pendingImage) return
-    if (!groupId) {
+    if ((agentMode === 'v1' || pendingImage) && !groupId) {
       setError('Please select a group first')
       return
     }
@@ -509,7 +518,7 @@ export default function AIPageClient() {
         body: JSON.stringify(
           buildAgentRequest(
             [...messages, userMessage],
-            groupId,
+            groupId || null,
             receiptId || currentReceiptId,
           ),
         ),
@@ -544,7 +553,7 @@ export default function AIPageClient() {
   }
 
   const hasGroups = groups.length > 0
-  const showZeroGroups = !isLoadingGroups && !hasGroups
+  const showZeroGroups = agentMode === 'v1' && !isLoadingGroups && !hasGroups
 
   return (
     <div className="flex h-[calc(100svh-var(--header-height)-4rem)] min-h-[34rem] flex-col gap-5">
@@ -552,35 +561,40 @@ export default function AIPageClient() {
         title="AI Assistant"
         description="A little less math. A little more time with your besties."
         actions={
-          !showZeroGroups && (
-            <div className="flex items-center gap-2">
-              <Label htmlFor="ai-group-picker">Split with</Label>
-              <Select
-                value={groupId}
-                onValueChange={setGroupId}
-                disabled={
-                  isLoadingGroups || isBusy || isReviewing || !!pendingImage
-                }
-              >
-                <SelectTrigger id="ai-group-picker" className="w-48 sm:w-56">
-                  <SelectValue
-                    placeholder={
-                      isLoadingGroups ? 'Loading groups…' : 'Select a group'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {groups.map((group) => (
-                      <SelectItem key={group.id} value={group.id.toString()}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          )
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <McpConnectDialog mcpUrl={mcpUrl} />
+            {hasGroups && (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="ai-group-picker">
+                  Split with{agentMode === 'v2' ? ' (optional)' : ''}
+                </Label>
+                <Select
+                  value={groupId}
+                  onValueChange={setGroupId}
+                  disabled={
+                    isLoadingGroups || isBusy || isReviewing || !!pendingImage
+                  }
+                >
+                  <SelectTrigger id="ai-group-picker" className="w-48 sm:w-56">
+                    <SelectValue
+                      placeholder={
+                        isLoadingGroups ? 'Loading groups…' : 'Select a group'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {groups.map((group) => (
+                        <SelectItem key={group.id} value={group.id.toString()}>
+                          {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         }
       />
 

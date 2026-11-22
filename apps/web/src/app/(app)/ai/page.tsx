@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { getUser } from '@/lib/supabase'
 import { redirect } from 'next/navigation'
 import { Spinner } from '@/components/ui/spinner'
+import { getAgentMode } from '@/mcp/mode'
 import AIPageClient from './ai-client'
 
 export default async function AIPage() {
@@ -19,7 +20,10 @@ export default async function AIPage() {
         </div>
       }
     >
-      <AIPageClient />
+      <AIPageClient
+        agentMode={getAgentMode()}
+        mcpUrl={`${process.env.NEXT_PUBLIC_APP_URL ?? ''}/api/mcp`}
+      />
     </Suspense>
   )
 }

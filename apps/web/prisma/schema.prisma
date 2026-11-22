@@ -34,6 +34,20 @@ model User {
   wallet                    Wallet?
   premium                   Boolean                    @default(false)
   signedUp                  Boolean                    @default(true)
+  mcpTokens                 McpToken[]
+}
+
+model McpToken {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  tokenHash  String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Wallet {
