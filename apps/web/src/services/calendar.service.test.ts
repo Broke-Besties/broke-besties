@@ -78,10 +78,7 @@ describe("calendarService", () => {
       db.groupMember.findMany.mockResolvedValueOnce([{ groupId: 4 }]);
       db.calendarEvent.create.mockResolvedValueOnce(created);
       db.calendarEvent.findFirst.mockResolvedValueOnce(created);
-      db.user.findUnique.mockResolvedValueOnce({
-        timezone: null,
-        calendarColor: null,
-      });
+      db.user.findUnique.mockResolvedValueOnce({ preferences: null });
 
       const event = await calendarService.createEvent(LENDER_ID, {
         title: "Dinner",
@@ -316,11 +313,27 @@ describe("calendarService", () => {
       expect(db.user.update).not.toHaveBeenCalled();
     });
 
-    it("saves a valid timezone", async () => {
+    it("saves a valid timezone in preferences", async () => {
       db.user.update.mockResolvedValueOnce({});
       db.user.findUnique.mockResolvedValueOnce({
-        timezone: "America/Toronto",
-        calendarColor: null,
+        preferences: {
+          theme: "dark",
+          calendar: {
+            timezone: null,
+            personalColor: "#ef4444",
+            groupColors: {},
+          },
+        },
+      });
+      db.user.findUnique.mockResolvedValueOnce({
+        preferences: {
+          theme: "dark",
+          calendar: {
+            timezone: "America/Toronto",
+            personalColor: "#ef4444",
+            groupColors: {},
+          },
+        },
       });
 
       const settings = await calendarService.setTimezone(
@@ -330,19 +343,27 @@ describe("calendarService", () => {
 
       expect(db.user.update).toHaveBeenCalledWith({
         where: { id: LENDER_ID },
-        data: { timezone: "America/Toronto" },
+        data: {
+          preferences: expect.objectContaining({
+            theme: "dark",
+            calendar: expect.objectContaining({
+              timezone: "America/Toronto",
+              personalColor: "#ef4444",
+            }),
+          }),
+        },
       });
       expect(settings.timezone).toBe("America/Toronto");
-      expect(settings.personalColor).toMatch(/^#/);
+      expect(settings.personalColor).toBe("#ef4444");
     });
 
     it("falls back to a stable default color per group", async () => {
+      db.user.findUnique.mockResolvedValueOnce({ preferences: null });
       db.group.findMany.mockResolvedValueOnce([
         {
           id: 7,
           name: "Roommates",
           _count: { members: 2 },
-          members: [{ color: null }],
         },
       ]);
 
@@ -352,18 +373,35 @@ describe("calendarService", () => {
       expect(group.color).toMatch(/^#[0-9a-f]{6}$/);
     });
 
-    it("saves personal and per-group colors", async () => {
+    it("saves personal and per-group colors in preferences", async () => {
+      const saved = {
+        theme: "system",
+        calendar: {
+          timezone: "America/Toronto",
+          personalColor: "#10b981",
+          groupColors: { "4": "#ef4444" },
+        },
+      };
       db.groupMember.findMany.mockResolvedValueOnce([{ groupId: 4 }]);
-      db.user.findUnique.mockResolvedValueOnce({
-        timezone: "America/Toronto",
-        calendarColor: "#10b981",
+      db.user.findUnique.mockResolvedValue({
+        preferences: saved,
       });
+      db.user.findUnique.mockResolvedValueOnce({
+        preferences: {
+          theme: "system",
+          calendar: {
+            timezone: "America/Toronto",
+            personalColor: "#6366f1",
+            groupColors: {},
+          },
+        },
+      });
+      db.user.update.mockResolvedValueOnce({});
       db.group.findMany.mockResolvedValueOnce([
         {
           id: 4,
           name: "Besties",
           _count: { members: 3 },
-          members: [{ color: "#ef4444" }],
         },
       ]);
 
@@ -372,7 +410,17 @@ describe("calendarService", () => {
         groups: [{ groupId: 4, color: "#ef4444" }],
       });
 
-      expect(db.$transaction).toHaveBeenCalled();
+      expect(db.user.update).toHaveBeenCalledWith({
+        where: { id: LENDER_ID },
+        data: {
+          preferences: expect.objectContaining({
+            calendar: expect.objectContaining({
+              personalColor: "#10b981",
+              groupColors: { "4": "#ef4444" },
+            }),
+          }),
+        },
+      });
       expect(result.settings.personalColor).toBe("#10b981");
       expect(result.groups[0].color).toBe("#ef4444");
     });

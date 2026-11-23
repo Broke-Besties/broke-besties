@@ -9,7 +9,9 @@ import {
   normalizeColor,
 } from "@/lib/calendar-colors";
 import { prisma } from "@/lib/prisma";
+import type { UserPreferences } from "@/lib/user-preferences";
 import { CalendarPolicy } from "@/policies";
+import { preferencesService } from "@/services/preferences.service";
 
 export type CalendarVisibility = "details" | "busy";
 export type RsvpResponse = "yes" | "no";
@@ -96,7 +98,7 @@ type EventShareRecord = {
   group: {
     id: number;
     name: string;
-    members?: Array<{ color?: string | null; user?: Person }>;
+    members?: Array<{ user?: Person }>;
   };
 };
 
@@ -151,12 +153,7 @@ const ownerInclude = {
         select: {
           id: true,
           name: true,
-          members: {
-            select: {
-              color: true,
-              user: { select: personSelect },
-            },
-          },
+          members: { select: { user: { select: personSelect } } },
         },
       },
     },
@@ -170,16 +167,7 @@ function sharedInclude(userId: string) {
     shares: {
       where: { group: { members: { some: { userId } } } },
       include: {
-        group: {
-          select: {
-            id: true,
-            name: true,
-            members: {
-              where: { userId },
-              select: { color: true },
-            },
-          },
-        },
+        group: { select: { id: true, name: true } },
       },
     },
     rsvps: {
@@ -267,23 +255,26 @@ function shareAllowsRsvp(share: EventShareRecord): boolean {
   );
 }
 
-function shareColor(share: EventShareRecord, userId: string): string {
-  const member = share.group.members?.find(
-    (entry) => !entry.user || entry.user.id === userId,
+function shareColor(
+  share: EventShareRecord,
+  groupColors: Record<string, string>,
+): string {
+  return (
+    normalizeColor(groupColors[String(share.group.id)]) ??
+    defaultGroupColor(share.group.id)
   );
-  return normalizeColor(member?.color) ?? defaultGroupColor(share.group.id);
 }
 
 function sharesToView(
   shares: EventShareRecord[],
-  userId: string,
+  groupColors: Record<string, string>,
 ): CalendarShareView[] {
   return shares.map((share) => ({
     groupId: share.group.id,
     groupName: share.group.name,
     visibility: normalizeVisibility(share.visibility),
     allowRsvp: shareAllowsRsvp(share),
-    color: shareColor(share, userId),
+    color: shareColor(share, groupColors),
   }));
 }
 
@@ -291,17 +282,19 @@ function canRsvpFrom(shares: EventShareRecord[]): boolean {
   return shares.some(shareAllowsRsvp);
 }
 
-function eventColorFrom(shares: EventShareRecord[], userId: string): string {
+function eventColorFrom(
+  shares: EventShareRecord[],
+  groupColors: Record<string, string>,
+): string {
   const preferred =
     shares.find(
       (share) =>
-        normalizeVisibility(share.visibility) === "details" && shareAllowsRsvp(share),
+        normalizeVisibility(share.visibility) === "details" &&
+        shareAllowsRsvp(share),
     ) ??
     shares.find((share) => normalizeVisibility(share.visibility) === "details") ??
     shares[0];
-  return preferred
-    ? shareColor(preferred, userId)
-    : DEFAULT_PERSONAL_COLOR;
+  return preferred ? shareColor(preferred, groupColors) : DEFAULT_PERSONAL_COLOR;
 }
 
 function inviteesFrom(event: EventRecord): CalendarEventView["invitees"] {
@@ -340,12 +333,14 @@ function toEventView(
   event: EventRecord,
   userId: string,
   visibility: "owner" | CalendarVisibility,
-  personalColor?: string | null,
+  preferences: UserPreferences,
 ): CalendarEventView {
   const isOwner = visibility === "owner";
+  const groupColors = preferences.calendar.groupColors;
   const color = isOwner
-    ? (normalizeColor(personalColor) ?? DEFAULT_PERSONAL_COLOR)
-    : eventColorFrom(event.shares, userId);
+    ? (normalizeColor(preferences.calendar.personalColor) ??
+      DEFAULT_PERSONAL_COLOR)
+    : eventColorFrom(event.shares, groupColors);
   const base = {
     id: event.id,
     startsAt: event.startsAt.toISOString(),
@@ -358,7 +353,7 @@ function toEventView(
     isOwner,
     visibility,
     color,
-    shares: sharesToView(event.shares, userId),
+    shares: sharesToView(event.shares, groupColors),
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };
@@ -577,7 +572,7 @@ export class CalendarService {
     userId: string,
     range: { from: Date; to: Date },
   ): Promise<CalendarEventView[]> {
-    const [events, settings] = await Promise.all([
+    const [events, preferences] = await Promise.all([
       prisma.calendarEvent.findMany({
         where: {
           ownerId: userId,
@@ -587,11 +582,11 @@ export class CalendarService {
         include: ownerInclude,
         orderBy: { startsAt: "asc" },
       }),
-      this.getSettings(userId),
+      preferencesService.get(userId),
     ]);
 
     return (events as unknown as EventRecord[]).map((event) =>
-      toEventView(event, userId, "owner", settings.personalColor),
+      toEventView(event, userId, "owner", preferences),
     );
   }
 
@@ -602,19 +597,22 @@ export class CalendarService {
     userId: string,
     range: { from: Date; to: Date },
   ): Promise<CalendarEventView[]> {
-    const events = await prisma.calendarEvent.findMany({
-      where: {
-        ownerId: { not: userId },
-        status: { not: "cancelled" },
-        startsAt: { lt: range.to },
-        endsAt: { gte: range.from },
-        shares: {
-          some: { group: { members: { some: { userId } } } },
+    const [events, preferences] = await Promise.all([
+      prisma.calendarEvent.findMany({
+        where: {
+          ownerId: { not: userId },
+          status: { not: "cancelled" },
+          startsAt: { lt: range.to },
+          endsAt: { gte: range.from },
+          shares: {
+            some: { group: { members: { some: { userId } } } },
+          },
         },
-      },
-      include: sharedInclude(userId),
-      orderBy: { startsAt: "asc" },
-    });
+        include: sharedInclude(userId),
+        orderBy: { startsAt: "asc" },
+      }),
+      preferencesService.get(userId),
+    ]);
 
     return (events as unknown as EventRecord[])
       .map((event) => {
@@ -622,7 +620,7 @@ export class CalendarService {
         if (!visibility) return null;
         // A free event shared as "busy" should not appear at all.
         if (visibility === "busy" && !event.busy) return null;
-        return toEventView(event, userId, visibility);
+        return toEventView(event, userId, visibility, preferences);
       })
       .filter((event): event is CalendarEventView => event !== null);
   }
@@ -654,13 +652,16 @@ export class CalendarService {
       return this.getOwnerEvent(eventId, userId);
     }
 
-    const event = await prisma.calendarEvent.findFirst({
-      where: {
-        id: eventId,
-        shares: { some: { group: { members: { some: { userId } } } } },
-      },
-      include: sharedInclude(userId),
-    });
+    const [event, preferences] = await Promise.all([
+      prisma.calendarEvent.findFirst({
+        where: {
+          id: eventId,
+          shares: { some: { group: { members: { some: { userId } } } } },
+        },
+        include: sharedInclude(userId),
+      }),
+      preferencesService.get(userId),
+    ]);
     if (!event) throw new Error("Event not found or not shared with you");
 
     const record = event as unknown as EventRecord;
@@ -668,26 +669,26 @@ export class CalendarService {
     if (!visibility || (visibility === "busy" && !record.busy)) {
       throw new Error("Event not found or not shared with you");
     }
-    return toEventView(record, userId, visibility);
+    return toEventView(record, userId, visibility, preferences);
   }
 
   private async getOwnerEvent(
     eventId: string,
     userId: string,
   ): Promise<CalendarEventView> {
-    const [event, settings] = await Promise.all([
+    const [event, preferences] = await Promise.all([
       prisma.calendarEvent.findFirst({
         where: { id: eventId, ownerId: userId },
         include: ownerInclude,
       }),
-      this.getSettings(userId),
+      preferencesService.get(userId),
     ]);
     if (!event) throw new Error("Event not found");
     return toEventView(
       event as unknown as EventRecord,
       userId,
       "owner",
-      settings.personalColor,
+      preferences,
     );
   }
 
@@ -1148,14 +1149,10 @@ export class CalendarService {
   }
 
   async getSettings(userId: string): Promise<CalendarSettings> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { timezone: true, calendarColor: true },
-    });
+    const preferences = await preferencesService.get(userId);
     return {
-      timezone: user?.timezone ?? null,
-      personalColor:
-        normalizeColor(user?.calendarColor) ?? DEFAULT_PERSONAL_COLOR,
+      timezone: preferences.calendar.timezone,
+      personalColor: preferences.calendar.personalColor,
     };
   }
 
@@ -1164,31 +1161,31 @@ export class CalendarService {
     timezone: string,
   ): Promise<CalendarSettings> {
     const normalized = assertTimezone(timezone);
-    await prisma.user.update({
-      where: { id: userId },
-      data: { timezone: normalized },
-    });
+    await preferencesService.updateCalendar(userId, { timezone: normalized });
     return this.getSettings(userId);
   }
 
   async listGroupOptions(userId: string): Promise<CalendarGroupOption[]> {
-    const groups = await prisma.group.findMany({
-      where: { members: { some: { userId } } },
-      select: {
-        id: true,
-        name: true,
-        _count: { select: { members: true } },
-        members: { where: { userId }, select: { color: true } },
-      },
-      orderBy: { name: "asc" },
-    });
+    const [groups, preferences] = await Promise.all([
+      prisma.group.findMany({
+        where: { members: { some: { userId } } },
+        select: {
+          id: true,
+          name: true,
+          _count: { select: { members: true } },
+        },
+        orderBy: { name: "asc" },
+      }),
+      preferencesService.get(userId),
+    ]);
 
     return groups.map((group) => ({
       id: group.id,
       name: group.name,
       memberCount: group._count.members,
       color:
-        normalizeColor(group.members[0]?.color) ?? defaultGroupColor(group.id),
+        normalizeColor(preferences.calendar.groupColors[String(group.id)]) ??
+        defaultGroupColor(group.id),
     }));
   }
 
@@ -1203,44 +1200,36 @@ export class CalendarService {
     groups: CalendarGroupOption[];
   }> {
     const groupColors = input.groups ?? [];
-    let personalColor: string | null | undefined;
+    const personalColor =
+      input.personalColor === undefined
+        ? undefined
+        : (this.parseColor(input.personalColor) ?? DEFAULT_PERSONAL_COLOR);
 
-    if (input.personalColor !== undefined) {
-      personalColor = this.parseColor(input.personalColor);
-    }
-
-    const unique = new Map<number, string | null>();
+    const groupColorPatch: Record<string, string | null> = {};
     for (const entry of groupColors) {
       if (!Number.isInteger(entry.groupId) || entry.groupId <= 0) {
         throw new Error("Each color entry needs a valid group id");
       }
-      unique.set(entry.groupId, this.parseColor(entry.color));
+      groupColorPatch[String(entry.groupId)] = this.parseColor(entry.color);
     }
 
-    if (unique.size > 0) {
+    if (Object.keys(groupColorPatch).length > 0) {
+      const groupIds = Object.keys(groupColorPatch).map(Number);
       const memberships = await prisma.groupMember.findMany({
-        where: { userId, groupId: { in: [...unique.keys()] } },
+        where: { userId, groupId: { in: groupIds } },
         select: { groupId: true },
       });
       const memberOf = new Set(memberships.map((row) => row.groupId));
-      if ([...unique.keys()].some((groupId) => !memberOf.has(groupId))) {
+      if (groupIds.some((groupId) => !memberOf.has(groupId))) {
         throw new Error("You can only customize your own groups");
       }
     }
 
-    await prisma.$transaction(async (tx) => {
-      if (personalColor !== undefined) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { calendarColor: personalColor },
-        });
-      }
-      for (const [groupId, color] of unique) {
-        await tx.groupMember.updateMany({
-          where: { userId, groupId },
-          data: { color },
-        });
-      }
+    await preferencesService.updateCalendar(userId, {
+      ...(personalColor !== undefined && { personalColor }),
+      ...(Object.keys(groupColorPatch).length > 0 && {
+        groupColors: groupColorPatch,
+      }),
     });
 
     return {
