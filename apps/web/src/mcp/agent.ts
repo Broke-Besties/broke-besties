@@ -116,6 +116,9 @@ function buildSystemPrompt(input: RunMcpAgentInput): string {
     "- Before creating a debt, make sure you know the amount, who borrowed from whom, and optionally the group. Ask one short clarifying question when something is missing.",
     "- The signed-in user is always the lender for create_debt. Use list_friends to find a borrower's id, or ask for their email.",
     "- Use get_balance_summary or list_debts for money questions so answers reflect real records.",
+    "- Calendar events are private by default. Before sharing an event, look up group ids with list_groups and confirm which groups should see it.",
+    "- When sharing a calendar event, choose visibility 'details' to show the event or 'busy' to hide its title and just block the time.",
+    "- Use list_calendar_events for schedule questions and rsvp_calendar_event when the user says they will or will not attend.",
     "- When you take an action, briefly confirm what changed and include the relevant ids.",
     "- Be concise and conversational. Do not output JSON unless the user asks for it.",
   ];

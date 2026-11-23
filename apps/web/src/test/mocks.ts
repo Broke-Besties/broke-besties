@@ -7,6 +7,7 @@ export type MockModel = {
   create: Mock;
   createMany: Mock;
   update: Mock;
+  upsert: Mock;
   delete: Mock;
   deleteMany: Mock;
 };
@@ -19,6 +20,7 @@ function model(): MockModel {
     create: vi.fn(),
     createMany: vi.fn(),
     update: vi.fn(),
+    upsert: vi.fn(),
     delete: vi.fn(),
     deleteMany: vi.fn(),
   };
@@ -38,6 +40,10 @@ export type MockPrisma = {
   recurringPaymentBorrower: MockModel;
   debtTransaction: MockModel;
   mcpToken: MockModel;
+  calendarEvent: MockModel;
+  calendarEventShare: MockModel;
+  eventRsvp: MockModel;
+  calendarSubscription: MockModel;
 };
 
 /**
@@ -73,6 +79,10 @@ export function createMockPrisma(): MockPrisma {
       recurringPaymentBorrower: model(),
       debtTransaction: model(),
       mcpToken: model(),
+      calendarEvent: model(),
+      calendarEventShare: model(),
+      eventRsvp: model(),
+      calendarSubscription: model(),
     }) as MockPrisma;
 
   return build();
