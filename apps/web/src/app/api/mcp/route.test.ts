@@ -35,6 +35,25 @@ vi.mock("@/services/friend.service", () => ({
     removeFriend: vi.fn(),
   },
 }));
+vi.mock("@/services/calendar.service", () => ({
+  calendarService: {
+    listCalendar: vi.fn(),
+    listMyEvents: vi.fn(),
+    listSharedWithMe: vi.fn(),
+    getEventForUser: vi.fn(),
+    createEvent: vi.fn(),
+    updateEvent: vi.fn(),
+    deleteEvent: vi.fn(),
+    setShares: vi.fn(),
+    rsvpEvent: vi.fn(),
+    listRsvps: vi.fn(),
+    importIcs: vi.fn(),
+    listSubscriptions: vi.fn(),
+    addSubscription: vi.fn(),
+    syncSubscription: vi.fn(),
+    removeSubscription: vi.fn(),
+  },
+}));
 
 import { NextRequest } from "next/server";
 import { mcpTokenService } from "@/services/mcp-token.service";
