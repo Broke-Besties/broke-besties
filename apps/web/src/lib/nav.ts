@@ -1,4 +1,5 @@
 import {
+  CalendarDays,
   CreditCard,
   LayoutDashboard,
   RefreshCw,
@@ -29,7 +30,10 @@ export type NavGroup = { label: string; items: NavItem[] };
 export const navGroups: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    ],
   },
   {
     label: "Money",

@@ -28,6 +28,23 @@ const mocks = vi.hoisted(() => ({
     getUserById: vi.fn(),
     findOrCreatePlaceholderByEmail: vi.fn(),
   },
+  calendarService: {
+    listCalendar: vi.fn(),
+    listMyEvents: vi.fn(),
+    listSharedWithMe: vi.fn(),
+    getEventForUser: vi.fn(),
+    createEvent: vi.fn(),
+    updateEvent: vi.fn(),
+    deleteEvent: vi.fn(),
+    setShares: vi.fn(),
+    rsvpEvent: vi.fn(),
+    listRsvps: vi.fn(),
+    importIcs: vi.fn(),
+    listSubscriptions: vi.fn(),
+    addSubscription: vi.fn(),
+    syncSubscription: vi.fn(),
+    removeSubscription: vi.fn(),
+  },
 }));
 
 vi.mock("@/services/debt.service", () => ({
@@ -41,6 +58,9 @@ vi.mock("@/services/group.service", () => ({
 }));
 vi.mock("@/services/user.service", () => ({
   userService: mocks.userService,
+}));
+vi.mock("@/services/calendar.service", () => ({
+  calendarService: mocks.calendarService,
 }));
 
 import { createLinkedMcpClient } from "./client";
@@ -123,6 +143,11 @@ describe("Broke Besties MCP tools", () => {
           "update_debt",
           "create_group",
           "send_friend_request",
+          "list_calendar_events",
+          "create_calendar_event",
+          "rsvp_calendar_event",
+          "set_calendar_event_shares",
+          "import_calendar_ics",
         ]),
       );
 
@@ -236,6 +261,52 @@ describe("Broke Besties MCP tools", () => {
         net: 5.25,
         pendingDebts: 2,
       });
+    });
+  });
+
+  it("creates calendar events and RSVPs as the authenticated user", async () => {
+    const event = {
+      id: "evt-1",
+      title: "Dinner",
+      startsAt: "2026-09-01T18:00:00.000Z",
+      endsAt: "2026-09-01T19:00:00.000Z",
+      shares: [{ groupId: 4, groupName: "Besties", visibility: "busy" }],
+    };
+    mocks.calendarService.createEvent.mockResolvedValue(event);
+    mocks.calendarService.rsvpEvent.mockResolvedValue({
+      ...event,
+      rsvp: "yes",
+    });
+
+    await withClient(async ({ client }) => {
+      const created = await client.callTool({
+        name: "create_calendar_event",
+        arguments: {
+          title: "Dinner",
+          startsAt: "2026-09-01T18:00:00.000Z",
+          endsAt: "2026-09-01T19:00:00.000Z",
+          shares: [{ groupId: 4, visibility: "busy" }],
+        },
+      });
+
+      expect(mocks.calendarService.createEvent).toHaveBeenCalledWith(me.id, {
+        title: "Dinner",
+        startsAt: "2026-09-01T18:00:00.000Z",
+        endsAt: "2026-09-01T19:00:00.000Z",
+        shares: [{ groupId: 4, visibility: "busy" }],
+      });
+      expect(created.isError).toBeFalsy();
+
+      const rsvp = await client.callTool({
+        name: "rsvp_calendar_event",
+        arguments: { eventId: "evt-1", response: "yes" },
+      });
+      expect(mocks.calendarService.rsvpEvent).toHaveBeenCalledWith(
+        "evt-1",
+        me.id,
+        "yes",
+      );
+      expect(rsvp.isError).toBeFalsy();
     });
   });
 });

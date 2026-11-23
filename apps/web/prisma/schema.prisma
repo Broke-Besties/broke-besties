@@ -35,6 +35,9 @@ model User {
   premium                   Boolean                    @default(false)
   signedUp                  Boolean                    @default(true)
   mcpTokens                 McpToken[]
+  calendarEvents            CalendarEvent[]            @relation("CalendarEventOwner")
+  eventRsvps                EventRsvp[]                @relation("EventRsvpUser")
+  calendarSubscriptions     CalendarSubscription[]     @relation("CalendarSubscriptionUser")
 }
 
 model McpToken {
@@ -93,6 +96,7 @@ model Group {
   debts             Debt[]
   recurringPayments RecurringPayment[]
   alerts            Alert[]
+  calendarShares    CalendarEventShare[]
 }
 
 model GroupMember {
@@ -282,4 +286,86 @@ model Friend {
   @@index([requesterId])
   @@index([recipientId])
   @@index([status])
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  ownerId     String
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime
+  endsAt      DateTime
+  allDay      Boolean  @default(false)
+  // "app" for events planned in Broke Besties, otherwise the import source.
+  source      String   @default("app")
+  // Stable identifier from the imported calendar (UID or UID+occurrence).
+  externalId  String?
+  // When false the event shows as free instead of busy.
+  busy        Boolean  @default(true)
+  // "confirmed" or "cancelled"
+  status      String   @default("confirmed")
+  subscriptionId Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner        User                 @relation("CalendarEventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  shares       CalendarEventShare[]
+  rsvps        EventRsvp[]
+  subscription CalendarSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, source, externalId])
+  @@index([ownerId, startsAt])
+  @@index([startsAt, endsAt])
+  @@index([subscriptionId])
+}
+
+model CalendarEventShare {
+  id         Int      @id @default(autoincrement())
+  eventId    String
+  groupId    Int
+  // "details" shares the title/location; "busy" only blocks the time.
+  visibility String   @default("details")
+  createdAt  DateTime @default(now())
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, groupId])
+  @@index([eventId])
+  @@index([groupId])
+}
+
+model EventRsvp {
+  id        Int      @id @default(autoincrement())
+  eventId   String
+  userId    String
+  // "pending", "yes", or "no"
+  response  String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User          @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model CalendarSubscription {
+  id           Int       @id @default(autoincrement())
+  userId       String
+  name         String
+  url          String
+  lastSyncedAt DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user   User            @relation("CalendarSubscriptionUser", fields: [userId], references: [id], onDelete: Cascade)
+  events CalendarEvent[]
+
+  @@unique([userId, url])
+  @@index([userId])
 }

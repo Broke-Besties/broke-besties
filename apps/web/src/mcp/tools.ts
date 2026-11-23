@@ -1,10 +1,31 @@
 import { z } from "zod";
 
+import { calendarService } from "@/services/calendar.service";
 import { debtService } from "@/services/debt.service";
 import { friendService } from "@/services/friend.service";
 import { groupService } from "@/services/group.service";
 import { userService } from "@/services/user.service";
 import { defineTool, type McpToolDefinition } from "./types";
+
+const eventShareSchema = z.object({
+  groupId: z.number().int().positive().describe("The group id"),
+  visibility: z
+    .enum(["details", "busy"])
+    .describe(
+      'Use "details" to show the title and place, or "busy" to block the time only',
+    ),
+});
+
+function calendarRange(from?: string, to?: string) {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const start = from ? new Date(from) : new Date(now - 30 * day);
+  const end = to ? new Date(to) : new Date(now + 90 * day);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new Error("from and to must be valid ISO dates");
+  }
+  return { from: start, to: end };
+}
 
 type Party = {
   id: string;
@@ -480,6 +501,229 @@ export const toolDefinitions: McpToolDefinition[] = [
     handler: async ({ friendshipId }, { userId }) => {
       await friendService.removeFriend(friendshipId, userId);
       return { success: true, friendshipId };
+    },
+  }),
+
+  defineTool({
+    name: "list_calendar_events",
+    title: "List calendar events",
+    description:
+      "Lists calendar events in a date range. Includes the user's own events and events other people shared with groups the user belongs to. Busy-only shares hide the title and details. Defaults to the last 30 days through the next 90 days.",
+    schema: {
+      from: z
+        .string()
+        .optional()
+        .describe("ISO start of the range (inclusive)"),
+      to: z.string().optional().describe("ISO end of the range (inclusive)"),
+      scope: z
+        .enum(["all", "mine", "shared"])
+        .optional()
+        .describe("all (default), mine, or shared"),
+    },
+    handler: async ({ from, to, scope }, { userId }) => {
+      const range = calendarRange(from, to);
+      if (scope === "mine") {
+        return calendarService.listMyEvents(userId, range);
+      }
+      if (scope === "shared") {
+        return calendarService.listSharedWithMe(userId, range);
+      }
+      return calendarService.listCalendar(userId, range);
+    },
+  }),
+
+  defineTool({
+    name: "get_calendar_event",
+    title: "Get calendar event",
+    description:
+      "Returns one event the user owns or that is shared with them, including RSVP status and (for the owner) the invitee list.",
+    schema: {
+      eventId: z.string().min(1).describe("The calendar event id"),
+    },
+    handler: async ({ eventId }, { userId }) => {
+      return calendarService.getEventForUser(eventId, userId);
+    },
+  }),
+
+  defineTool({
+    name: "create_calendar_event",
+    title: "Create calendar event",
+    description:
+      "Creates an event on the user's calendar. Optionally share it with groups: visibility 'details' shows the event, 'busy' only blocks the time. Use list_groups to find group ids.",
+    schema: {
+      title: z.string().min(1).max(200).describe("Event title"),
+      startsAt: z.string().describe("ISO start date/time"),
+      endsAt: z.string().describe("ISO end date/time"),
+      description: z.string().optional(),
+      location: z.string().optional(),
+      allDay: z.boolean().optional(),
+      busy: z
+        .boolean()
+        .optional()
+        .describe("Whether the time counts as busy (default true)"),
+      shares: z.array(eventShareSchema).optional(),
+    },
+    handler: async (args, { userId }) => {
+      return calendarService.createEvent(userId, args);
+    },
+  }),
+
+  defineTool({
+    name: "update_calendar_event",
+    title: "Update calendar event",
+    description:
+      "Updates an event the user owns. Supplying shares replaces the full share list, so include every group that should still see it.",
+    schema: {
+      eventId: z.string().min(1).describe("The calendar event id"),
+      title: z.string().min(1).max(200).optional(),
+      startsAt: z.string().optional(),
+      endsAt: z.string().optional(),
+      description: z.string().optional(),
+      location: z.string().optional(),
+      allDay: z.boolean().optional(),
+      busy: z.boolean().optional(),
+      shares: z.array(eventShareSchema).optional(),
+    },
+    handler: async ({ eventId, ...input }, { userId }) => {
+      return calendarService.updateEvent(eventId, userId, input);
+    },
+  }),
+
+  defineTool({
+    name: "delete_calendar_event",
+    title: "Delete calendar event",
+    description: "Permanently deletes an event the user owns.",
+    schema: {
+      eventId: z.string().min(1).describe("The calendar event id"),
+    },
+    handler: async ({ eventId }, { userId }) => {
+      return calendarService.deleteEvent(eventId, userId);
+    },
+  }),
+
+  defineTool({
+    name: "set_calendar_event_shares",
+    title: "Set calendar event visibility",
+    description:
+      "Replaces who can see an event. Each entry grants a group either full details or busy-only visibility. Pass an empty list to stop sharing the event.",
+    schema: {
+      eventId: z.string().min(1).describe("The calendar event id"),
+      shares: z
+        .array(eventShareSchema)
+        .describe("The complete list of groups that should see this event"),
+    },
+    handler: async ({ eventId, shares }, { userId }) => {
+      return calendarService.setShares(eventId, userId, shares);
+    },
+  }),
+
+  defineTool({
+    name: "rsvp_calendar_event",
+    title: "RSVP to calendar event",
+    description:
+      "Accepts or declines an event shared with the user's group. Only events shared with full details can be RSVP'd to; busy-only shares cannot.",
+    schema: {
+      eventId: z.string().min(1).describe("The calendar event id"),
+      response: z.enum(["yes", "no"]).describe("yes to attend, no to decline"),
+    },
+    handler: async ({ eventId, response }, { userId }) => {
+      return calendarService.rsvpEvent(eventId, userId, response);
+    },
+  }),
+
+  defineTool({
+    name: "list_event_rsvps",
+    title: "List event RSVPs",
+    description:
+      "Lists who was invited to an event and how they responded. The event owner sees everyone; invitees see their own response.",
+    schema: {
+      eventId: z.string().min(1).describe("The calendar event id"),
+    },
+    handler: async ({ eventId }, { userId }) => {
+      return calendarService.listRsvps(eventId, userId);
+    },
+  }),
+
+  defineTool({
+    name: "import_calendar_ics",
+    title: "Import calendar (ICS)",
+    description:
+      "Imports events from iCalendar (.ics) text, such as an export from Google Calendar or Apple Calendar. Re-importing the same calendar updates existing events instead of duplicating them.",
+    schema: {
+      icsText: z
+        .string()
+        .min(1)
+        .describe("The raw contents of an .ics calendar file"),
+      source: z
+        .string()
+        .optional()
+        .describe("Label for this import, defaults to ics"),
+    },
+    handler: async ({ icsText, source }, { userId }) => {
+      return calendarService.importIcs(userId, { icsText, source });
+    },
+  }),
+
+  defineTool({
+    name: "list_calendar_subscriptions",
+    title: "List calendar subscriptions",
+    description:
+      "Lists the user's imported calendar subscriptions (private ICS URLs) and their last sync status.",
+    schema: {},
+    handler: async (_args, { userId }) => {
+      return calendarService.listSubscriptions(userId);
+    },
+  }),
+
+  defineTool({
+    name: "add_calendar_subscription",
+    title: "Subscribe to a calendar",
+    description:
+      "Adds a private ICS calendar URL (Google Calendar or Apple Calendar) and syncs it immediately. The URL must be publicly reachable.",
+    schema: {
+      name: z.string().min(1).max(80).describe("A name for this calendar"),
+      url: z.string().url().describe("The private ICS URL"),
+      sync: z
+        .boolean()
+        .optional()
+        .describe("Sync immediately, defaults to true"),
+    },
+    handler: async (args, { userId }) => {
+      return calendarService.addSubscription(userId, args);
+    },
+  }),
+
+  defineTool({
+    name: "sync_calendar_subscription",
+    title: "Sync a calendar subscription",
+    description:
+      "Re-fetches a subscribed calendar and updates its events, removing events that no longer appear in the feed.",
+    schema: {
+      subscriptionId: z
+        .number()
+        .int()
+        .positive()
+        .describe("The subscription id"),
+    },
+    handler: async ({ subscriptionId }, { userId }) => {
+      return calendarService.syncSubscription(subscriptionId, userId);
+    },
+  }),
+
+  defineTool({
+    name: "remove_calendar_subscription",
+    title: "Remove a calendar subscription",
+    description:
+      "Deletes a calendar subscription and all events imported from it.",
+    schema: {
+      subscriptionId: z
+        .number()
+        .int()
+        .positive()
+        .describe("The subscription id"),
+    },
+    handler: async ({ subscriptionId }, { userId }) => {
+      return calendarService.removeSubscription(subscriptionId, userId);
     },
   }),
 ];
