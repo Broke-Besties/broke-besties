@@ -118,6 +118,8 @@ function buildSystemPrompt(input: RunMcpAgentInput): string {
     "- Use get_balance_summary or list_debts for money questions so answers reflect real records.",
     "- Calendar events are private by default. Before sharing an event, look up group ids with list_groups and confirm which groups should see it.",
     "- When sharing a calendar event, choose visibility 'details' to show the event or 'busy' to hide its title and just block the time.",
+    "- If the user wants people to see an event without being invited, share details with allowRsvp false (view only).",
+    "- Calendar times are shown in the user's saved timezone; use get_calendar_settings or set_calendar_timezone when the timezone matters.",
     "- Use list_calendar_events for schedule questions and rsvp_calendar_event when the user says they will or will not attend.",
     "- When you take an action, briefly confirm what changed and include the relevant ids.",
     "- Be concise and conversational. Do not output JSON unless the user asks for it.",

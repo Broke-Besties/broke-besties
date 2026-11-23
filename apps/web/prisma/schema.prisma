@@ -34,6 +34,8 @@ model User {
   wallet                    Wallet?
   premium                   Boolean                    @default(false)
   signedUp                  Boolean                    @default(true)
+  timezone                  String?
+  calendarColor             String?
   mcpTokens                 McpToken[]
   calendarEvents            CalendarEvent[]            @relation("CalendarEventOwner")
   eventRsvps                EventRsvp[]                @relation("EventRsvpUser")
@@ -103,6 +105,8 @@ model GroupMember {
   id        Int      @id @default(autoincrement())
   userId    String
   groupId   Int
+  // Per-user color for this group on the calendar.
+  color     String?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -326,6 +330,8 @@ model CalendarEventShare {
   groupId    Int
   // "details" shares the title/location; "busy" only blocks the time.
   visibility String   @default("details")
+  // Whether people in this group may RSVP or only view the event.
+  allowRsvp  Boolean  @default(true)
   createdAt  DateTime @default(now())
 
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)

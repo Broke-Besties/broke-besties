@@ -32,11 +32,20 @@ export class CalendarPolicy {
   }
 
   /**
-   * RSVPs are only available to people who can see the event's details. A
-   * "busy" share hides the title and place, so there is nothing to RSVP to.
+   * RSVPs are only available to people whose group share includes full
+   * details and has RSVPs enabled. Busy and view-only shares cannot respond.
    */
   static async canRsvp(userId: string, eventId: string): Promise<boolean> {
-    return (await this.visibilityFor(userId, eventId)) === "details";
+    const share = await prisma.calendarEventShare.findFirst({
+      where: {
+        eventId,
+        visibility: "details",
+        allowRsvp: true,
+        group: { members: { some: { userId } } },
+      },
+      select: { id: true },
+    });
+    return !!share;
   }
 
   static async canViewRsvps(

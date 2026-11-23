@@ -35,6 +35,7 @@ import type {
   CalendarEventView,
   CalendarGroup,
   CalendarVisibility,
+  ShareMode,
   ShareSelection,
 } from "./types";
 
@@ -42,6 +43,7 @@ type EventFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   groups: CalendarGroup[];
+  timezone: string;
   event?: CalendarEventView | null;
   initialDay?: Date;
   onSaved: (event: CalendarEventView) => void;
@@ -65,15 +67,23 @@ function defaultShares(groups: CalendarGroup[]): ShareSelection {
   }, {});
 }
 
+function shareMode(
+  share: CalendarEventView["shares"][number],
+): ShareMode {
+  if (share.visibility === "busy") return "busy";
+  return share.allowRsvp ? "rsvp" : "view";
+}
+
 function buildFormState(
   event: CalendarEventView | null | undefined,
   groups: CalendarGroup[],
+  timezone: string,
   day?: Date,
 ): FormState {
   const shares = defaultShares(groups);
   if (event) {
     for (const share of event.shares) {
-      shares[share.groupId] = share.visibility;
+      shares[share.groupId] = shareMode(share);
     }
   }
 
@@ -85,11 +95,11 @@ function buildFormState(
       allDay: event.allDay,
       start: event.allDay
         ? allDayKey(event.startsAt)
-        : toDateTimeLocal(event.startsAt),
+        : toDateTimeLocal(event.startsAt, timezone),
       // All-day ends are exclusive on the server, so show the last included day.
       end: event.allDay
         ? shiftAllDayKey(allDayKey(event.endsAt), -1)
-        : toDateTimeLocal(event.endsAt),
+        : toDateTimeLocal(event.endsAt, timezone),
       busy: event.busy,
       shares,
     };
@@ -112,20 +122,21 @@ export function EventFormDialog({
   open,
   onOpenChange,
   groups,
+  timezone,
   event,
   initialDay,
   onSaved,
 }: EventFormDialogProps) {
   const [form, setForm] = useState<FormState>(() =>
-    buildFormState(event, groups, initialDay),
+    buildFormState(event, groups, timezone, initialDay),
   );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm(buildFormState(event, groups, initialDay));
+      setForm(buildFormState(event, groups, timezone, initialDay));
     }
-  }, [open, event, groups, initialDay]);
+  }, [open, event, groups, timezone, initialDay]);
 
   const editing = !!event;
   const shareCount = useMemo(
@@ -146,16 +157,20 @@ export function EventFormDialog({
     try {
       const startsAt = form.allDay
         ? fromDateInput(form.start)
-        : fromDateTimeLocal(form.start);
+        : fromDateTimeLocal(form.start, timezone);
       const endsAt = form.allDay
         ? fromDateInput(form.end, true)
-        : fromDateTimeLocal(form.end);
+        : fromDateTimeLocal(form.end, timezone);
 
       const shares = Object.entries(form.shares)
-        .filter(([, visibility]) => visibility !== "none")
-        .map(([groupId, visibility]) => ({
+        .filter(([, mode]) => mode !== "none")
+        .map(([groupId, mode]) => ({
           groupId: Number(groupId),
-          visibility: visibility as CalendarVisibility,
+          visibility:
+            mode === "busy"
+              ? ("busy" as CalendarVisibility)
+              : ("details" as CalendarVisibility),
+          allowRsvp: mode === "rsvp",
         }));
 
       const response = await fetch(
@@ -282,6 +297,9 @@ export function EventFormDialog({
               />
             </Field>
           </div>
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Times are in {timezone}.
+          </p>
 
           <Field>
             <FieldLabel htmlFor="event-location">Location</FieldLabel>
@@ -307,8 +325,9 @@ export function EventFormDialog({
             <div>
               <p className="text-sm font-medium">Who can see this?</p>
               <FieldDescription>
-                Nothing is shared until you pick a group. Busy hides the title
-                and location but blocks the time.
+                Nothing is shared until you pick a group. RSVP opens the event
+                for responses, view only shares the details without inviting
+                anyone, and busy hides the title while blocking the time.
               </FieldDescription>
             </div>
 
@@ -336,16 +355,17 @@ export function EventFormDialog({
                       onValueChange={(value) =>
                         update("shares", {
                           ...form.shares,
-                          [group.id]: value as CalendarVisibility | "none",
+                          [group.id]: value as ShareMode,
                         })
                       }
                     >
-                      <SelectTrigger className="w-[180px]">
+                      <SelectTrigger className="w-[200px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Not shared</SelectItem>
-                        <SelectItem value="details">Full details</SelectItem>
+                        <SelectItem value="rsvp">Details + RSVP</SelectItem>
+                        <SelectItem value="view">Details · view only</SelectItem>
                         <SelectItem value="busy">Busy only</SelectItem>
                       </SelectContent>
                     </Select>

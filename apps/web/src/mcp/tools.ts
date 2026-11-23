@@ -14,6 +14,12 @@ const eventShareSchema = z.object({
     .describe(
       'Use "details" to show the title and place, or "busy" to block the time only',
     ),
+  allowRsvp: z
+    .boolean()
+    .optional()
+    .describe(
+      "For details shares: true invites the group and collects RSVPs, false shares the details as view-only. Defaults to true.",
+    ),
 });
 
 function calendarRange(from?: string, to?: string) {
@@ -549,7 +555,7 @@ export const toolDefinitions: McpToolDefinition[] = [
     name: "create_calendar_event",
     title: "Create calendar event",
     description:
-      "Creates an event on the user's calendar. Optionally share it with groups: visibility 'details' shows the event, 'busy' only blocks the time. Use list_groups to find group ids.",
+      "Creates an event on the user's calendar. Optionally share it with groups: visibility 'details' shows the event, 'busy' only blocks the time. Set allowRsvp to false to share details without inviting people. Use list_groups to find group ids.",
     schema: {
       title: z.string().min(1).max(200).describe("Event title"),
       startsAt: z.string().describe("ISO start date/time"),
@@ -605,7 +611,7 @@ export const toolDefinitions: McpToolDefinition[] = [
     name: "set_calendar_event_shares",
     title: "Set calendar event visibility",
     description:
-      "Replaces who can see an event. Each entry grants a group either full details or busy-only visibility. Pass an empty list to stop sharing the event.",
+      "Replaces who can see an event. Each entry grants a group full details (optionally view-only via allowRsvp: false) or busy-only visibility. Pass an empty list to stop sharing the event.",
     schema: {
       eventId: z.string().min(1).describe("The calendar event id"),
       shares: z
@@ -621,7 +627,7 @@ export const toolDefinitions: McpToolDefinition[] = [
     name: "rsvp_calendar_event",
     title: "RSVP to calendar event",
     description:
-      "Accepts or declines an event shared with the user's group. Only events shared with full details can be RSVP'd to; busy-only shares cannot.",
+      "Accepts or declines an event shared with the user's group. Only events shared with full details and RSVPs enabled can be answered; view-only and busy shares cannot.",
     schema: {
       eventId: z.string().min(1).describe("The calendar event id"),
       response: z.enum(["yes", "no"]).describe("yes to attend, no to decline"),
@@ -724,6 +730,61 @@ export const toolDefinitions: McpToolDefinition[] = [
     },
     handler: async ({ subscriptionId }, { userId }) => {
       return calendarService.removeSubscription(subscriptionId, userId);
+    },
+  }),
+
+  defineTool({
+    name: "get_calendar_settings",
+    title: "Get calendar settings",
+    description:
+      "Returns the user's calendar timezone and personal event color.",
+    schema: {},
+    handler: async (_args, { userId }) => {
+      return calendarService.getSettings(userId);
+    },
+  }),
+
+  defineTool({
+    name: "set_calendar_timezone",
+    title: "Set calendar timezone",
+    description:
+      "Sets the IANA timezone used to display the user's calendar (for example America/Toronto).",
+    schema: {
+      timezone: z
+        .string()
+        .min(1)
+        .describe("IANA timezone name, e.g. America/Toronto"),
+    },
+    handler: async ({ timezone }, { userId }) => {
+      return calendarService.setTimezone(userId, timezone);
+    },
+  }),
+
+  defineTool({
+    name: "set_calendar_colors",
+    title: "Set calendar colors",
+    description:
+      "Sets the user's personal event color and the per-group colors shown on their calendar. Colors are hex values like #6366f1. Use list_groups to find group ids.",
+    schema: {
+      personalColor: z
+        .string()
+        .optional()
+        .describe("Hex color for the user's own events"),
+      groupColors: z
+        .array(
+          z.object({
+            groupId: z.number().int().positive(),
+            color: z.string().describe("Hex color like #6366f1"),
+          }),
+        )
+        .optional()
+        .describe("Colors to apply to specific groups"),
+    },
+    handler: async ({ personalColor, groupColors }, { userId }) => {
+      return calendarService.setColors(userId, {
+        personalColor,
+        groups: groupColors,
+      });
     },
   }),
 ];
