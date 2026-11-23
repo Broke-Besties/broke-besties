@@ -36,6 +36,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/(app)/groups/[id]/actions", () => ({
   createDebt: harness.createDebt,
 }));
+vi.mock("./mcp-actions", () => ({
+  listMcpTokens: vi.fn().mockResolvedValue([]),
+  createMcpToken: vi.fn(),
+  revokeMcpToken: vi.fn(),
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.stubGlobal("React", React);
 vi.stubGlobal("fetch", harness.fetch);

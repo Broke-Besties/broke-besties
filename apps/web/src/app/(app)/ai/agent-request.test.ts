@@ -46,4 +46,10 @@ describe('AI receipt requests', () => {
     expect(request.imageUrl).toBeNull()
     expect(request.receiptIds).toBeUndefined()
   })
+
+  it('omits the group when the MCP flow has none selected', () => {
+    const request = buildAgentRequest(clarification, null, null)
+
+    expect(request.groupId).toBeNull()
+  })
 })
