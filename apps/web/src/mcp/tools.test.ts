@@ -44,6 +44,10 @@ const mocks = vi.hoisted(() => ({
     addSubscription: vi.fn(),
     syncSubscription: vi.fn(),
     removeSubscription: vi.fn(),
+    getSettings: vi.fn(),
+    setTimezone: vi.fn(),
+    setColors: vi.fn(),
+    listGroupOptions: vi.fn(),
   },
 }));
 
@@ -148,6 +152,9 @@ describe("Broke Besties MCP tools", () => {
           "rsvp_calendar_event",
           "set_calendar_event_shares",
           "import_calendar_ics",
+          "get_calendar_settings",
+          "set_calendar_timezone",
+          "set_calendar_colors",
         ]),
       );
 

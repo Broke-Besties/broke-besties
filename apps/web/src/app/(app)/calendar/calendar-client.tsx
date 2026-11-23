@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Lock,
+  Palette,
   Plus,
   Upload,
 } from "lucide-react";
@@ -13,12 +14,21 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
+import { ColorSettingsDialog } from "./color-settings-dialog";
 import {
   addMonths,
   allDayKey,
+  browserTimeZone,
   dayKey,
   eachDay,
   endOfMonth,
@@ -30,6 +40,7 @@ import {
   startOfDay,
   startOfMonth,
   startOfWeek,
+  zonedDayRange,
 } from "./date-utils";
 import { EventDetailDialog } from "./event-detail-dialog";
 import { EventFormDialog } from "./event-form-dialog";
@@ -45,14 +56,46 @@ type CalendarPageClientProps = {
   initialEvents: CalendarEventView[];
   groups: CalendarGroup[];
   initialSubscriptions: CalendarSubscriptionView[];
+  initialTimezone: string | null;
+  initialPersonalColor: string;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function eventsOnDay(events: CalendarEventView[], day: Date) {
-  const dayStart = startOfDay(day).getTime();
-  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+const FALLBACK_TIMEZONES = [
+  "UTC",
+  "America/St_Johns",
+  "America/Halifax",
+  "America/Toronto",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Vancouver",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+function timezoneOptions(): string[] {
+  const intl = Intl as typeof Intl & {
+    supportedValuesOf?: (key: string) => string[];
+  };
+  try {
+    const supported = intl.supportedValuesOf?.("timeZone");
+    return supported?.length ? supported : FALLBACK_TIMEZONES;
+  } catch {
+    return FALLBACK_TIMEZONES;
+  }
+}
+
+function eventsOnDay(
+  events: CalendarEventView[],
+  day: Date,
+  timeZone: string,
+) {
   const key = dayKey(day);
+  const range = zonedDayRange(key, timeZone);
   return events
     .filter((event) => {
       if (event.allDay) {
@@ -62,26 +105,22 @@ function eventsOnDay(events: CalendarEventView[], day: Date) {
       }
       const start = new Date(event.startsAt).getTime();
       const end = new Date(event.endsAt).getTime();
-      return start < dayEnd && end > dayStart;
+      return start < range.end && end > range.start;
     })
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
-function eventClasses(event: CalendarEventView): string {
-  if (event.visibility === "owner") {
-    return "border-primary/30 bg-primary/10 text-primary";
-  }
-  if (event.visibility === "busy") {
-    return "border-border bg-muted text-muted-foreground";
-  }
-  return "border-border bg-accent text-accent-foreground";
+function tint(color: string, alpha: string): string {
+  return `${color}${alpha}`;
 }
 
 function EventChip({
   event,
+  timeZone,
   onClick,
 }: {
   event: CalendarEventView;
+  timeZone: string;
   onClick: () => void;
 }) {
   return (
@@ -90,13 +129,19 @@ function EventChip({
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-1 truncate rounded border px-1.5 py-0.5 text-left text-[11px] leading-4 hover:opacity-80",
-        eventClasses(event),
+        event.visibility === "busy" && "text-muted-foreground",
       )}
+      style={{
+        borderColor: tint(event.color, "66"),
+        backgroundColor: tint(event.color, "1a"),
+      }}
       title={event.title}
     >
       {event.visibility === "busy" && <Lock className="size-2.5 shrink-0" />}
       {!event.allDay && (
-        <span className="shrink-0 font-medium">{formatTime(event.startsAt)}</span>
+        <span className="shrink-0 font-medium">
+          {formatTime(event.startsAt, timeZone)}
+        </span>
       )}
       <span className="truncate">{event.title}</span>
     </button>
@@ -108,6 +153,8 @@ export function CalendarPageClient({
   initialEvents,
   groups,
   initialSubscriptions,
+  initialTimezone,
+  initialPersonalColor,
 }: CalendarPageClientProps) {
   const [month, setMonth] = useState(() => new Date(initialMonth));
   const [events, setEvents] = useState(initialEvents);
@@ -119,9 +166,24 @@ export function CalendarPageClient({
   const [editingEvent, setEditingEvent] =
     useState<CalendarEventView | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
   const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
+  const [groupOptions, setGroupOptions] = useState(groups);
+  const [personalColor, setPersonalColor] = useState(initialPersonalColor);
+  const [timezone, setTimezone] = useState(initialTimezone ?? "UTC");
+  const [showPersonal, setShowPersonal] = useState(true);
+  const [activeGroups, setActiveGroups] = useState<Set<number>>(
+    () => new Set(groups.map((group) => group.id)),
+  );
   const [loading, setLoading] = useState(false);
   const didMount = useRef(false);
+  const zones = useMemo(timezoneOptions, []);
+
+  useEffect(() => {
+    if (!initialTimezone) {
+      setTimezone(browserTimeZone());
+    }
+  }, [initialTimezone]);
 
   const fetchMonth = useCallback(async (target: Date) => {
     const from = startOfWeek(startOfMonth(target));
@@ -163,10 +225,46 @@ export function CalendarPageClient({
     void fetchMonth(month);
   }, [fetchMonth, month]);
 
+  async function changeTimezone(next: string) {
+    const previous = timezone;
+    setTimezone(next);
+    try {
+      const res = await fetch("/api/calendar/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ timezone: next }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload.error ?? "Could not save timezone");
+      }
+      toast.success(`Times now shown in ${next.replace(/_/g, " ")}`);
+    } catch (error) {
+      setTimezone(previous);
+      toast.error(
+        error instanceof Error ? error.message : "Could not save timezone",
+      );
+    }
+  }
+
+  function toggleGroup(groupId: number) {
+    setActiveGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }
+
+  const filteredEvents = events.filter((event) => {
+    if (event.isOwner) return showPersonal;
+    return event.shares.some((share) => activeGroups.has(share.groupId));
+  });
+
   const gridStart = startOfWeek(startOfMonth(month));
   const gridEnd = endOfWeek(endOfMonth(month));
   const days = eachDay(gridStart, gridEnd);
-  const dayEvents = eventsOnDay(events, selectedDay);
+  const dayEvents = eventsOnDay(filteredEvents, selectedDay, timezone);
   const today = new Date();
 
   function openEvent(event: CalendarEventView) {
@@ -208,6 +306,19 @@ export function CalendarPageClient({
     refresh();
   }
 
+  function handleColorsSaved(
+    nextGroups: CalendarGroup[],
+    nextPersonalColor: string,
+  ) {
+    setGroupOptions(nextGroups);
+    setPersonalColor(nextPersonalColor);
+    setActiveGroups(
+      (prev) =>
+        new Set(nextGroups.map((group) => group.id).filter((id) => prev.has(id))),
+    );
+    refresh();
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -215,6 +326,10 @@ export function CalendarPageClient({
         description="Plan events, RSVP, and choose which groups see your schedule."
         actions={
           <>
+            <Button variant="outline" onClick={() => setColorOpen(true)}>
+              <Palette />
+              Colors
+            </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Upload />
               Import
@@ -226,6 +341,63 @@ export function CalendarPageClient({
           </>
         }
       />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowPersonal((value) => !value)}
+          aria-pressed={showPersonal}
+          className={cn(
+            "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+            showPersonal
+              ? "bg-background"
+              : "bg-muted text-muted-foreground opacity-60",
+          )}
+          style={{ borderColor: tint(personalColor, "88") }}
+        >
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: personalColor }}
+          />
+          Personal
+        </button>
+
+        {groupOptions.map((group) => {
+          const active = activeGroups.has(group.id);
+          return (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => toggleGroup(group.id)}
+              aria-pressed={active}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                active
+                  ? "bg-background"
+                  : "bg-muted text-muted-foreground opacity-60",
+              )}
+              style={{ borderColor: tint(group.color, "88") }}
+            >
+              <span
+                className="size-2.5 rounded-full"
+                style={{ backgroundColor: group.color }}
+              />
+              {group.name}
+            </button>
+          );
+        })}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setShowPersonal(true);
+            setActiveGroups(new Set(groupOptions.map((group) => group.id)));
+          }}
+        >
+          Show all
+        </Button>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="rounded-xl border">
@@ -264,20 +436,26 @@ export function CalendarPageClient({
               >
                 Today
               </Button>
-              <div className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
-                <span className="flex items-center gap-1">
-                  <span className="size-2 rounded-full bg-primary" />
-                  Yours
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="size-2 rounded-full bg-accent-foreground/40" />
-                  Shared
-                </span>
-                <span className="flex items-center gap-1">
-                  <Lock className="size-3" />
-                  Busy
-                </span>
-              </div>
+              <Select value={timezone} onValueChange={changeTimezone}>
+                <SelectTrigger
+                  className="w-[190px]"
+                  aria-label="Calendar timezone"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-[320px]">
+                  {zones.map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone.replace(/_/g, " ")}
+                    </SelectItem>
+                  ))}
+                  {!zones.includes(timezone) && (
+                    <SelectItem value={timezone}>
+                      {timezone.replace(/_/g, " ")}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -294,7 +472,7 @@ export function CalendarPageClient({
               const inMonth = day.getMonth() === month.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = isSameDay(day, selectedDay);
-              const dayItems = eventsOnDay(events, day);
+              const dayItems = eventsOnDay(filteredEvents, day, timezone);
               return (
                 <button
                   key={dayKey(day)}
@@ -327,6 +505,7 @@ export function CalendarPageClient({
                       <EventChip
                         key={`${event.id}-${dayKey(day)}`}
                         event={event}
+                        timeZone={timezone}
                         onClick={() => openEvent(event)}
                       />
                     ))}
@@ -378,8 +557,12 @@ export function CalendarPageClient({
                     className="block w-full rounded-lg border p-3 text-left transition hover:bg-accent/40"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-sm font-medium">
-                        {event.title}
+                      <p className="flex min-w-0 items-center gap-2 truncate text-sm font-medium">
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: event.color }}
+                        />
+                        <span className="truncate">{event.title}</span>
                       </p>
                       {event.visibility === "busy" ? (
                         <Badge variant="outline">
@@ -397,6 +580,7 @@ export function CalendarPageClient({
                         event.startsAt,
                         event.endsAt,
                         event.allDay,
+                        timezone,
                       )}
                     </p>
                     {!event.isOwner && event.visibility === "details" && (
@@ -416,8 +600,10 @@ export function CalendarPageClient({
           <div className="rounded-xl border p-4 text-xs text-muted-foreground">
             <p className="mb-1 font-medium text-foreground">Visibility</p>
             <p>
-              Events are private until you share them. Share full details for
-              RSVPs, or busy only to block the time without revealing the plan.
+              Events are private until you share them. Use details + RSVP for
+              invitations, details · view only to share without inviting
+              anyone, or busy only to block the time without revealing the
+              plan.
             </p>
           </div>
         </aside>
@@ -426,7 +612,8 @@ export function CalendarPageClient({
       <EventFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        groups={groups}
+        groups={groupOptions}
+        timezone={timezone}
         event={editingEvent}
         initialDay={selectedDay}
         onSaved={handleSaved}
@@ -435,6 +622,7 @@ export function CalendarPageClient({
       <EventDetailDialog
         event={selectedEvent}
         open={detailOpen}
+        timezone={timezone}
         onOpenChange={setDetailOpen}
         onEdit={openEdit}
         onChanged={handleChanged}
@@ -447,6 +635,14 @@ export function CalendarPageClient({
         subscriptions={subscriptions}
         onImported={refresh}
         onSubscriptionsChanged={setSubscriptions}
+      />
+
+      <ColorSettingsDialog
+        open={colorOpen}
+        onOpenChange={setColorOpen}
+        groups={groupOptions}
+        personalColor={personalColor}
+        onSaved={handleColorsSaved}
       />
     </div>
   );

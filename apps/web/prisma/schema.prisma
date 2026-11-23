@@ -34,6 +34,8 @@ model User {
   wallet                    Wallet?
   premium                   Boolean                    @default(false)
   signedUp                  Boolean                    @default(true)
+  // User preferences JSON: theme, calendar timezone/colors, etc.
+  preferences               Json?
   mcpTokens                 McpToken[]
   calendarEvents            CalendarEvent[]            @relation("CalendarEventOwner")
   eventRsvps                EventRsvp[]                @relation("EventRsvpUser")
@@ -326,6 +328,8 @@ model CalendarEventShare {
   groupId    Int
   // "details" shares the title/location; "busy" only blocks the time.
   visibility String   @default("details")
+  // Whether people in this group may RSVP or only view the event.
+  allowRsvp  Boolean  @default(true)
   createdAt  DateTime @default(now())
 
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)

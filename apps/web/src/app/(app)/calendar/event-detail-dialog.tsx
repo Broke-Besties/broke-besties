@@ -31,6 +31,7 @@ import type { CalendarEventView } from "./types";
 type EventDetailDialogProps = {
   event: CalendarEventView | null;
   open: boolean;
+  timezone: string;
   onOpenChange: (open: boolean) => void;
   onEdit: (event: CalendarEventView) => void;
   onChanged: (event: CalendarEventView) => void;
@@ -46,6 +47,7 @@ const responseStyles: Record<string, string> = {
 export function EventDetailDialog({
   event,
   open,
+  timezone,
   onOpenChange,
   onEdit,
   onChanged,
@@ -133,7 +135,12 @@ export function EventDetailDialog({
           <DialogDescription className="space-y-1">
             <span className="flex items-center gap-2">
               <CalendarClock className="size-4" />
-              {formatEventRange(event.startsAt, event.endsAt, event.allDay)}
+              {formatEventRange(
+                event.startsAt,
+                event.endsAt,
+                event.allDay,
+                timezone,
+              )}
             </span>
             {event.location && (
               <span className="flex items-center gap-2">
@@ -156,7 +163,17 @@ export function EventDetailDialog({
           </p>
         )}
 
-        {!event.isOwner && event.visibility === "details" && (
+        {!event.isOwner &&
+          event.visibility === "details" &&
+          !event.canRsvp && (
+            <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+              This event was shared with you as view only, so RSVPs are closed.
+            </div>
+          )}
+
+        {!event.isOwner &&
+          event.visibility === "details" &&
+          event.canRsvp && (
           <div className="space-y-2 rounded-lg border p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -210,9 +227,21 @@ export function EventDetailDialog({
                 ) : (
                   <div className="mt-1 flex flex-wrap gap-2">
                     {event.shares.map((share) => (
-                      <Badge key={share.groupId} variant="outline">
+                      <Badge
+                        key={share.groupId}
+                        variant="outline"
+                        className="gap-1.5"
+                      >
+                        <span
+                          className="size-2 rounded-full"
+                          style={{ backgroundColor: share.color }}
+                        />
                         {share.groupName} ·{" "}
-                        {share.visibility === "details" ? "details" : "busy"}
+                        {share.visibility === "busy"
+                          ? "busy"
+                          : share.allowRsvp
+                            ? "RSVP"
+                            : "view only"}
                       </Badge>
                     ))}
                   </div>

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 
 import { getUser } from "@/lib/supabase";
 import { calendarService } from "@/services/calendar.service";
-import { groupService } from "@/services/group.service";
 import { endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "./date-utils";
 import { CalendarPageClient } from "./calendar-client";
 
@@ -14,22 +13,21 @@ export default async function CalendarPage() {
   const from = startOfWeek(startOfMonth(now));
   const to = endOfWeek(endOfMonth(now));
 
-  const [events, groups, subscriptions] = await Promise.all([
+  const [events, groups, subscriptions, settings] = await Promise.all([
     calendarService.listCalendar(user.id, { from, to }),
-    groupService.getUserGroups(user.id),
+    calendarService.listGroupOptions(user.id),
     calendarService.listSubscriptions(user.id),
+    calendarService.getSettings(user.id),
   ]);
 
   return (
     <CalendarPageClient
       initialMonth={now.toISOString()}
       initialEvents={events}
-      groups={groups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        memberCount: group._count.members,
-      }))}
+      groups={groups}
       initialSubscriptions={subscriptions}
+      initialTimezone={settings.timezone}
+      initialPersonalColor={settings.personalColor}
     />
   );
 }

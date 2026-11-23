@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { User } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 
 export class UserService {
   /**
@@ -81,7 +81,7 @@ export class UserService {
       },
     })
   }
-  async updateUser(userId: string, data: Partial<User>) {
+  async updateUser(userId: string, data: Prisma.UserUpdateInput) {
     const user = await prisma.user.update({
       where: { id: userId },
       data,

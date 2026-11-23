@@ -1,3 +1,102 @@
+export function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+type ZonedParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function zonedParts(date: Date, timeZone: string): ZonedParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+
+  return {
+    year: read("year"),
+    month: read("month"),
+    day: read("day"),
+    hour: read("hour"),
+    minute: read("minute"),
+    second: read("second"),
+  };
+}
+
+function offsetAt(date: Date, timeZone: string): number {
+  const parts = zonedParts(date, timeZone);
+  const asUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  return asUtc - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+/**
+ * Converts a wall-clock value (`YYYY-MM-DDTHH:mm`) in `timeZone` to an ISO
+ * instant. Handles DST by re-checking the offset at the resolved instant.
+ */
+export function zonedDateTimeToUtc(value: string, timeZone: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) throw new Error("Invalid date/time");
+
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const firstOffset = offsetAt(new Date(asUtc), timeZone);
+  let timestamp = asUtc - firstOffset;
+  const secondOffset = offsetAt(new Date(timestamp), timeZone);
+  if (secondOffset !== firstOffset) {
+    timestamp = asUtc - secondOffset;
+  }
+  return new Date(timestamp).toISOString();
+}
+
+export function isoToZonedDateTimeLocal(iso: string, timeZone: string): string {
+  const parts = zonedParts(new Date(iso), timeZone);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+export function zonedDayKey(iso: string, timeZone: string): string {
+  const parts = zonedParts(new Date(iso), timeZone);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+}
+
+export function zonedDayRange(
+  key: string,
+  timeZone: string,
+): { start: number; end: number } {
+  const start = Date.parse(
+    zonedDateTimeToUtc(`${key}T00:00`, timeZone),
+  );
+  const end = Date.parse(
+    zonedDateTimeToUtc(`${shiftAllDayKey(key, 1)}T00:00`, timeZone),
+  );
+  return { start, end };
+}
+
 export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -66,10 +165,19 @@ export function monthLabel(date: Date): string {
   });
 }
 
-export function formatTime(iso: string): string {
+export function formatTime(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleTimeString(undefined, {
+    timeZone,
     hour: "numeric",
     minute: "2-digit",
+  });
+}
+
+export function formatDateShort(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    timeZone,
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -87,9 +195,8 @@ export function formatEventRange(
   startsAt: string,
   endsAt: string,
   allDay: boolean,
+  timeZone: string,
 ): string {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
   if (allDay) {
     const days = Math.max(
       1,
@@ -101,26 +208,19 @@ export function formatEventRange(
     );
     return days === 1 ? "All day" : `All day · ${days} days`;
   }
-  const sameDay = isSameDay(start, end);
-  if (sameDay) {
-    return `${formatTime(startsAt)} – ${formatTime(endsAt)}`;
+
+  if (zonedDayKey(startsAt, timeZone) === zonedDayKey(endsAt, timeZone)) {
+    return `${formatTime(startsAt, timeZone)} – ${formatTime(endsAt, timeZone)}`;
   }
-  return `${start.toLocaleDateString()} ${formatTime(startsAt)} – ${end.toLocaleDateString()} ${formatTime(endsAt)}`;
+  return `${formatDateShort(startsAt, timeZone)} ${formatTime(startsAt, timeZone)} – ${formatDateShort(endsAt, timeZone)} ${formatTime(endsAt, timeZone)}`;
 }
 
-export function toDateTimeLocal(iso: string): string {
-  const date = new Date(iso);
-  const offset = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - offset * 60 * 1000);
-  return local.toISOString().slice(0, 16);
+export function toDateTimeLocal(iso: string, timeZone: string): string {
+  return isoToZonedDateTimeLocal(iso, timeZone);
 }
 
-export function toDateInput(iso: string): string {
-  return toDateTimeLocal(iso).slice(0, 10);
-}
-
-export function fromDateTimeLocal(value: string): string {
-  return new Date(value).toISOString();
+export function fromDateTimeLocal(value: string, timeZone: string): string {
+  return zonedDateTimeToUtc(value, timeZone);
 }
 
 export function fromDateInput(value: string, addDay = false): string {
@@ -130,12 +230,9 @@ export function fromDateInput(value: string, addDay = false): string {
 }
 
 export function defaultEventTimes(day: Date): { start: string; end: string } {
-  const start = new Date(day);
-  start.setHours(18, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(19, 0, 0, 0);
+  const key = dayKey(day);
   return {
-    start: toDateTimeLocal(start.toISOString()),
-    end: toDateTimeLocal(end.toISOString()),
+    start: `${key}T18:00`,
+    end: `${key}T19:00`,
   };
 }

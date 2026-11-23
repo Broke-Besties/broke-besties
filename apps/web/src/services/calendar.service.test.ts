@@ -66,17 +66,19 @@ describe("calendarService", () => {
     });
 
     it("creates an event with validated group shares", async () => {
+      const created = makeEvent({
+        shares: [
+          {
+            visibility: "busy",
+            allowRsvp: false,
+            group: { id: 4, name: "Besties", members: [] },
+          },
+        ],
+      });
       db.groupMember.findMany.mockResolvedValueOnce([{ groupId: 4 }]);
-      db.calendarEvent.create.mockResolvedValueOnce(
-        makeEvent({
-          shares: [
-            {
-              visibility: "busy",
-              group: { id: 4, name: "Besties", members: [] },
-            },
-          ],
-        }),
-      );
+      db.calendarEvent.create.mockResolvedValueOnce(created);
+      db.calendarEvent.findFirst.mockResolvedValueOnce(created);
+      db.user.findUnique.mockResolvedValueOnce({ preferences: null });
 
       const event = await calendarService.createEvent(LENDER_ID, {
         title: "Dinner",
@@ -93,7 +95,9 @@ describe("calendarService", () => {
             ownerId: LENDER_ID,
             title: "Dinner",
             source: "app",
-            shares: { create: [{ groupId: 4, visibility: "busy" }] },
+            shares: {
+              create: [{ groupId: 4, visibility: "busy", allowRsvp: false }],
+            },
           }),
         }),
       );
@@ -179,7 +183,7 @@ describe("calendarService", () => {
 
       await expect(
         calendarService.rsvpEvent("evt-1", LENDER_ID, "yes"),
-      ).rejects.toThrow("Only people invited with full details can RSVP");
+      ).rejects.toThrow("RSVPs are closed for this event");
     });
 
     it("upserts the response for a detail-shared invitee", async () => {
@@ -298,6 +302,133 @@ describe("calendarService", () => {
       await expect(
         calendarService.importIcs(LENDER_ID, { icsText: "   " }),
       ).rejects.toThrow("Calendar data is empty");
+    });
+  });
+
+  describe("timezone and colors", () => {
+    it("rejects unknown timezones", async () => {
+      await expect(
+        calendarService.setTimezone(LENDER_ID, "Mars/Olympus_Mons"),
+      ).rejects.toThrow("Unknown timezone");
+      expect(db.user.update).not.toHaveBeenCalled();
+    });
+
+    it("saves a valid timezone in preferences", async () => {
+      db.user.update.mockResolvedValueOnce({});
+      db.user.findUnique.mockResolvedValueOnce({
+        preferences: {
+          theme: "dark",
+          calendar: {
+            timezone: null,
+            personalColor: "#ef4444",
+            groupColors: {},
+          },
+        },
+      });
+      db.user.findUnique.mockResolvedValueOnce({
+        preferences: {
+          theme: "dark",
+          calendar: {
+            timezone: "America/Toronto",
+            personalColor: "#ef4444",
+            groupColors: {},
+          },
+        },
+      });
+
+      const settings = await calendarService.setTimezone(
+        LENDER_ID,
+        "America/Toronto",
+      );
+
+      expect(db.user.update).toHaveBeenCalledWith({
+        where: { id: LENDER_ID },
+        data: {
+          preferences: expect.objectContaining({
+            theme: "dark",
+            calendar: expect.objectContaining({
+              timezone: "America/Toronto",
+              personalColor: "#ef4444",
+            }),
+          }),
+        },
+      });
+      expect(settings.timezone).toBe("America/Toronto");
+      expect(settings.personalColor).toBe("#ef4444");
+    });
+
+    it("falls back to a stable default color per group", async () => {
+      db.user.findUnique.mockResolvedValueOnce({ preferences: null });
+      db.group.findMany.mockResolvedValueOnce([
+        {
+          id: 7,
+          name: "Roommates",
+          _count: { members: 2 },
+        },
+      ]);
+
+      const [group] = await calendarService.listGroupOptions(LENDER_ID);
+
+      expect(group).toMatchObject({ id: 7, name: "Roommates", memberCount: 2 });
+      expect(group.color).toMatch(/^#[0-9a-f]{6}$/);
+    });
+
+    it("saves personal and per-group colors in preferences", async () => {
+      const saved = {
+        theme: "system",
+        calendar: {
+          timezone: "America/Toronto",
+          personalColor: "#10b981",
+          groupColors: { "4": "#ef4444" },
+        },
+      };
+      db.groupMember.findMany.mockResolvedValueOnce([{ groupId: 4 }]);
+      db.user.findUnique.mockResolvedValue({
+        preferences: saved,
+      });
+      db.user.findUnique.mockResolvedValueOnce({
+        preferences: {
+          theme: "system",
+          calendar: {
+            timezone: "America/Toronto",
+            personalColor: "#6366f1",
+            groupColors: {},
+          },
+        },
+      });
+      db.user.update.mockResolvedValueOnce({});
+      db.group.findMany.mockResolvedValueOnce([
+        {
+          id: 4,
+          name: "Besties",
+          _count: { members: 3 },
+        },
+      ]);
+
+      const result = await calendarService.setColors(LENDER_ID, {
+        personalColor: "#10b981",
+        groups: [{ groupId: 4, color: "#ef4444" }],
+      });
+
+      expect(db.user.update).toHaveBeenCalledWith({
+        where: { id: LENDER_ID },
+        data: {
+          preferences: expect.objectContaining({
+            calendar: expect.objectContaining({
+              personalColor: "#10b981",
+              groupColors: { "4": "#ef4444" },
+            }),
+          }),
+        },
+      });
+      expect(result.settings.personalColor).toBe("#10b981");
+      expect(result.groups[0].color).toBe("#ef4444");
+    });
+
+    it("rejects invalid color values", async () => {
+      await expect(
+        calendarService.setColors(LENDER_ID, { personalColor: "red" }),
+      ).rejects.toThrow("Colors must be hex values");
     });
   });
 

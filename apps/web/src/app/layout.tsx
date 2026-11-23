@@ -4,6 +4,9 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { getUser } from "@/lib/supabase";
+import { DEFAULT_USER_PREFERENCES } from "@/lib/user-preferences";
+import { preferencesService } from "@/services/preferences.service";
 
 // Self-hosted so we can fix Overpass's vertical metrics: its oversized descent
 // reservation floats text ~0.1em above optical center in every badge/button.
@@ -33,11 +36,18 @@ export const metadata: Metadata = {
     "Split expenses with friends: groups, invites, debts, and balances.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getUser();
+  const preferences = user
+    ? await preferencesService
+        .get(user.id)
+        .catch(() => DEFAULT_USER_PREFERENCES)
+    : DEFAULT_USER_PREFERENCES;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -45,7 +55,7 @@ export default function RootLayout({
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme={preferences.theme}
           enableSystem
           disableTransitionOnChange
         >
