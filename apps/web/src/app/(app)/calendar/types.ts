@@ -4,6 +4,8 @@ export type CalendarShare = {
   groupId: number;
   groupName: string;
   visibility: CalendarVisibility;
+  allowRsvp: boolean;
+  color: string;
 };
 
 export type CalendarEventView = {
@@ -20,7 +22,9 @@ export type CalendarEventView = {
   owner: { id: string; name: string; email: string };
   isOwner: boolean;
   visibility: "owner" | CalendarVisibility;
+  canRsvp: boolean;
   rsvp: "yes" | "no" | "pending" | null;
+  color: string;
   shares: CalendarShare[];
   rsvps?: Array<{
     userId: string;
@@ -42,6 +46,12 @@ export type CalendarGroup = {
   id: number;
   name: string;
   memberCount: number;
+  color: string;
+};
+
+export type CalendarSettings = {
+  timezone: string | null;
+  personalColor: string;
 };
 
 export type CalendarSubscriptionView = {
@@ -54,4 +64,6 @@ export type CalendarSubscriptionView = {
   updatedAt: string;
 };
 
-export type ShareSelection = Record<number, CalendarVisibility | "none">;
+export type ShareMode = "none" | "rsvp" | "view" | "busy";
+
+export type ShareSelection = Record<number, ShareMode>;

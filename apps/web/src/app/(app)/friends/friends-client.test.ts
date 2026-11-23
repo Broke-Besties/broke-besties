@@ -48,6 +48,8 @@ const dates = {
   updatedAt: new Date("2026-11-15"),
   premium: false,
   signedUp: true,
+  timezone: null,
+  calendarColor: null,
 };
 const me = { ...dates, id: "me", name: "Me", email: "me@example.com" };
 const other = {

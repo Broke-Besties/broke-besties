@@ -52,6 +52,10 @@ vi.mock("@/services/calendar.service", () => ({
     addSubscription: vi.fn(),
     syncSubscription: vi.fn(),
     removeSubscription: vi.fn(),
+    getSettings: vi.fn(),
+    setTimezone: vi.fn(),
+    setColors: vi.fn(),
+    listGroupOptions: vi.fn(),
   },
 }));
 
